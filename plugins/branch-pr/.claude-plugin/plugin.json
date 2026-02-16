@@ -1,0 +1,7 @@
+{
+  "name": "branch-pr",
+  "description": "Automate branch creation, intelligent commit grouping, and PR generation from current changes",
+  "author": {
+    "name": "godsenal"
+  }
+}
