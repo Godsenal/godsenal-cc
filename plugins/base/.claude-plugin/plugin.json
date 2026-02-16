@@ -8,6 +8,5 @@
   },
   "repository": "https://github.com/Godsenal/godsenal-cc",
   "license": "MIT",
-  "keywords": ["skills", "discovery", "productivity", "git", "branch", "pull-request", "automation"],
-  "category": "productivity"
+  "keywords": ["skills", "discovery", "productivity", "git", "branch", "pull-request", "automation"]
 }
