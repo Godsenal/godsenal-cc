@@ -10,27 +10,26 @@ Inside Claude Code, run these slash commands:
 # 1. Add the marketplace
 /plugin marketplace add Godsenal/godsenal-cc
 
-# 2. Install individual plugins
-/plugin install find-skills@godsenal
-/plugin install branch-pr@godsenal
+# 2. Install the base plugin (includes all commands)
+/plugin install base@godsenal
 ```
 
 Or browse interactively with `/plugin` and go to the **Discover** tab.
 
 ## Plugins
 
-### find-skills
+### base
 
-Discover and install Claude Code skills matching your project's tech stack.
+Core productivity tools for Claude Code — skill discovery and automated branch/PR workflows.
+
+**find-skills** — Discover and install Claude Code skills matching your project's tech stack.
 
 - Auto-analyzes `package.json` and `CLAUDE.md` to detect your stack
 - Searches local skill repositories and online marketplace
 - Recommends skills ranked by relevance
 - Handles installation with proper agent scoping
 
-### branch-pr
-
-Automate branch creation, intelligent commit grouping, and PR generation from current changes.
+**branch-pr** — Automate branch creation, intelligent commit grouping, and PR generation from current changes.
 
 - Analyzes current git changes
 - Creates a properly named branch

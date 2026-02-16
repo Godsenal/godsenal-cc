@@ -1,0 +1,13 @@
+{
+  "name": "base",
+  "version": "1.0.0",
+  "description": "Core productivity tools for Claude Code — skill discovery and automated branch/PR workflows",
+  "author": {
+    "name": "godsenal",
+    "url": "https://github.com/Godsenal"
+  },
+  "repository": "https://github.com/Godsenal/godsenal-cc",
+  "license": "MIT",
+  "keywords": ["skills", "discovery", "productivity", "git", "branch", "pull-request", "automation"],
+  "category": "productivity"
+}
