@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Claude Code plugin marketplace (`godsenal`) containing the `base` plugin. No build step, no dependencies — plugins are pure markdown skill definitions.
+A Claude Code plugin marketplace (`godsenal`) containing the `gbase` plugin. No build step, no dependencies — plugins are pure markdown skill definitions.
+
+**Naming convention:** Plugin names use a `g` prefix (e.g. `gbase`, `gfe`), while directory names omit it (e.g. `plugins/base/`, `plugins/fe/`).
 
 ## Architecture
 
@@ -38,11 +40,11 @@ plugins/
 No automated tests. Validate manually:
 - JSON validity: `python3 -c "import json; json.load(open('<file>'))"` for each plugin.json and marketplace.json
 - Local install: `/plugin marketplace add ./` (inside Claude Code)
-- Plugin install: `/plugin install base@godsenal`
+- Plugin install: `/plugin install gbase@godsenal`
 - Commands: `/godsenal:find-skills`, `/godsenal:branch-pr`
 
 ## Current Plugins
 
-- **base**: Core productivity tools containing two commands:
+- **gbase**: Core productivity tools containing two commands:
   - **find-skills**: Analyzes project tech stack (package.json, CLAUDE.md) and recommends matching skills from local repos and online marketplace. Supports `--online` flag for npx skills search.
   - **branch-pr**: Analyzes git changes, creates branch, groups files into logical commits, pushes, and creates PR via `gh`. Has strict safety rules (no force push, no hard reset). Requires user confirmation at each step.

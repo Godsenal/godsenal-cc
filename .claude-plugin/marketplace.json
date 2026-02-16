@@ -8,8 +8,8 @@
   },
   "plugins": [
     {
-      "name": "base",
-      "description": "Core productivity tools — skill discovery and automated branch/PR workflows",
+      "name": "gbase",
+      "description": "Core productivity tools — base plugins",
       "version": "1.0.0",
       "author": { "name": "godsenal" },
       "source": "./plugins/base",

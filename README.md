@@ -10,15 +10,15 @@ Inside Claude Code, run these slash commands:
 # 1. Add the marketplace
 /plugin marketplace add Godsenal/godsenal-cc
 
-# 2. Install the base plugin (includes all commands)
-/plugin install base@godsenal
+# 2. Install the gbase plugin (includes all commands)
+/plugin install gbase@godsenal
 ```
 
 Or browse interactively with `/plugin` and go to the **Discover** tab.
 
 ## Plugins
 
-### base
+### gbase
 
 Core productivity tools for Claude Code — skill discovery and automated branch/PR workflows.
 

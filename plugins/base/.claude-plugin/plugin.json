@@ -1,5 +1,5 @@
 {
-  "name": "base",
+  "name": "gbase",
   "version": "1.0.0",
   "description": "Core productivity tools for Claude Code — skill discovery and automated branch/PR workflows",
   "author": {
@@ -8,5 +8,13 @@
   },
   "repository": "https://github.com/Godsenal/godsenal-cc",
   "license": "MIT",
-  "keywords": ["skills", "discovery", "productivity", "git", "branch", "pull-request", "automation"]
+  "keywords": [
+    "skills",
+    "discovery",
+    "productivity",
+    "git",
+    "branch",
+    "pull-request",
+    "automation"
+  ]
 }
