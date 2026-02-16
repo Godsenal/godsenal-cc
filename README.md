@@ -2,6 +2,21 @@
 
 Development productivity plugins for Claude Code.
 
+## Installation
+
+Inside Claude Code, run these slash commands:
+
+```
+# 1. Add the marketplace
+/plugin marketplace add Godsenal/godsenal-cc
+
+# 2. Install individual plugins
+/plugin install find-skills@godsenal
+/plugin install branch-pr@godsenal
+```
+
+Or browse interactively with `/plugin` and go to the **Discover** tab.
+
 ## Plugins
 
 ### find-skills
@@ -22,12 +37,6 @@ Automate branch creation, intelligent commit grouping, and PR generation from cu
 - Groups files into logical commits (by layer, feature, or change type)
 - Generates a PR with summary, changes, and test plan
 - Includes safety rails and backup/recovery at every step
-
-## Installation
-
-```bash
-claude plugin add godsenal/godsenal-cc
-```
 
 ## Usage
 

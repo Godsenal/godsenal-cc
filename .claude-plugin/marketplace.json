@@ -2,7 +2,10 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "godsenal",
   "description": "Development productivity tools for Claude Code by godsenal",
-  "owner": { "name": "godsenal" },
+  "owner": {
+    "name": "godsenal",
+    "url": "https://github.com/Godsenal"
+  },
   "plugins": [
     {
       "name": "find-skills",

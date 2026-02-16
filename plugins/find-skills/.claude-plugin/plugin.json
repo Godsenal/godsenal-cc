@@ -1,7 +1,13 @@
 {
   "name": "find-skills",
+  "version": "1.0.0",
   "description": "Discover and install Claude Code skills matching your project's tech stack",
   "author": {
-    "name": "godsenal"
-  }
+    "name": "godsenal",
+    "url": "https://github.com/Godsenal"
+  },
+  "repository": "https://github.com/Godsenal/godsenal-cc",
+  "license": "MIT",
+  "keywords": ["skills", "discovery", "productivity"],
+  "category": "productivity"
 }
