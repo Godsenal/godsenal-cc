@@ -15,14 +15,25 @@ A Claude Code plugin marketplace (`godsenal`) containing the `gbase` plugin. No 
 plugins/
   base/
     .claude-plugin/plugin.json     ← Plugin metadata (name, version, author, keywords)
-    commands/
-      find-skills.md               ← Skill discovery command
-      branch-pr.md                 ← Branch/PR automation command
+    commands/                      ← Legacy commands (still supported, but new work should go in skills/)
+      find-skills.md
+      branch-pr.md
+    skills/                        ← Skills (preferred — commands have been merged into skills per Claude Code docs)
+      go/
+        SKILL.md                   ← go skill: simplify → branch-pr one-shot
 ```
 
-**Marketplace JSON** at root registers plugins with `source` paths pointing to each plugin directory. Each plugin's `commands/*.md` files are the actual skills — markdown files with YAML frontmatter (`description`, `allowed-tools`) followed by the prompt template. A single plugin can contain multiple commands.
+**Marketplace JSON** at root registers plugins with `source` paths pointing to each plugin directory. Commands and skills both surface as `/gbase:<name>` invocations. Skills (`skills/<name>/SKILL.md`) support extra frontmatter that commands don't — notably `disable-model-invocation: true` to prevent Claude from auto-triggering them.
 
-## Adding a New Command to base
+## Adding a New Skill to base (preferred)
+
+1. Create `plugins/base/skills/<name>/SKILL.md` with frontmatter (`name`, `description`, optional `disable-model-invocation`, `allowed-tools`) and body
+2. Update `plugins/base/.claude-plugin/plugin.json` keywords if needed
+3. Update `README.md` with the skill description and usage
+
+## Adding a New Command to base (legacy)
+
+Use only when migrating existing files or for parity with older tooling. New work should go under `skills/`.
 
 1. Create `plugins/base/commands/<name>.md` with frontmatter and prompt
 2. Update `plugins/base/.claude-plugin/plugin.json` keywords if needed
@@ -45,6 +56,7 @@ No automated tests. Validate manually:
 
 ## Current Plugins
 
-- **gbase**: Core productivity tools containing two commands:
-  - **find-skills**: Analyzes project tech stack (package.json, CLAUDE.md) and recommends matching skills from local repos and online marketplace. Supports `--online` flag for npx skills search.
-  - **branch-pr**: Analyzes git changes, creates branch, groups files into logical commits, pushes, and creates PR via `gh`. Has strict safety rules (no force push, no hard reset). Requires user confirmation at each step.
+- **gbase**: Core productivity tools. Two commands and one skill:
+  - **find-skills** (command): Analyzes project tech stack (package.json, CLAUDE.md) and recommends matching skills from local repos and online marketplace. Supports `--online` flag for npx skills search.
+  - **branch-pr** (command): Analyzes git changes, creates branch, groups files into logical commits, pushes, and creates PR via `gh`. Has strict safety rules (no force push, no hard reset). Requires user confirmation at each step.
+  - **go** (skill, `disable-model-invocation: true`): One-shot "finish a change" workflow at `plugins/base/skills/go/SKILL.md`. Invokes the bundled `/simplify` skill on the current diff (or latest commit when the tree is clean), then invokes `/gbase:branch-pr` back-to-back. Only triggers on explicit `/gbase:go` — Claude will not auto-run it.
