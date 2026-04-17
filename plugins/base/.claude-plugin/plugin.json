@@ -1,6 +1,6 @@
 {
   "name": "gbase",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Core productivity tools for Claude Code — skill discovery, automated branch/PR workflows, and one-shot simplify+PR",
   "author": {
     "name": "godsenal",
