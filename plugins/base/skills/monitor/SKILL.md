@@ -1,7 +1,6 @@
 ---
 name: monitor
 description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), and run /simplify on every non-trivial auto-edit before committing. Ask on ambiguous ones. Invoke manually with /gbase:monitor or chained from /gbase:go; do not trigger automatically."
-disable-model-invocation: true
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
