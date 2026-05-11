@@ -1,6 +1,6 @@
 ---
 name: monitor
-description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), ask on ambiguous ones. Invoke manually with /gbase:monitor or chained from /gbase:go; do not trigger automatically."
+description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), and run /simplify on every non-trivial auto-edit before committing. Ask on ambiguous ones. Invoke manually with /gbase:monitor or chained from /gbase:go; do not trigger automatically."
 disable-model-invocation: true
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
@@ -204,6 +204,10 @@ After all conflicts are resolved:
 
 ```bash
 git rebase --continue
+# Run Post-fix simplify on any non-lockfile, non-whitespace-only files that were
+# resolved by merging logic from both sides (skip pure lockfile regens). If
+# simplify produces edits, amend them into the rebase head with `git add` +
+# `git commit --amend --no-edit` before pushing — keeps the rebased commit clean.
 git push --force-with-lease  # safe: refuses if remote moved
 ```
 
@@ -250,6 +254,27 @@ When asking, include in `AskUserQuestion`:
 
 If the user picks "merge manually," abort the rebase, restore from the stash, and stop the auto-resolution flow — the user takes over from there.
 
+### Post-fix simplify
+
+Whenever monitor produces a code edit (CI fix, review comment application, or non-trivial conflict resolution), run the bundled `simplify` skill on the touched files **before** staging the commit:
+
+```
+Skill(skill: "simplify", args: "<space-separated touched files>")
+```
+
+This mirrors `/gbase:go`'s pre-PR pass — automated edits drift into duplication, dead branches, or stringly-typed values just like hand-written ones do. Folding simplify into the same commit (rather than a follow-up commit) keeps PR history clean.
+
+**Skip simplify** when the edit is provably mechanical and re-running it would be a no-op:
+
+- Lint/format auto-fix output (the formatter already canonicalised the file).
+- Verbatim application of a fenced ` ```suggestion ` block — the reviewer asked for exactly that diff; "simplifying" it would surprise them.
+- Lockfile regeneration (it's not code).
+- Whitespace-only conflict resolution.
+
+**Run simplify** for everything else: typecheck fixes that added/removed code, missing-import additions, review comments that introduced new logic, conflict resolutions that merged logic from both sides.
+
+If simplify itself produces edits, fold them into the same `git add` + `git commit` as the original fix — one commit, not two.
+
 ### CI_FAIL handling
 
 ```bash
@@ -258,7 +283,7 @@ gh run view <run-id-from-link> --log-failed | tail -200
 
 Classify per [Classification](#classification-clear-vs-ambiguous):
 
-- **Clear** → fix in-place, commit, push.
+- **Clear** → fix in-place; run [Post-fix simplify](#post-fix-simplify) on the touched files (skip for pure lint/format auto-fix); commit; push.
 - **Ambiguous** → `AskUserQuestion` with the failing check, the error excerpt, and 2–3 candidate fixes.
 
 After pushing, do **not** manually re-poll — the Monitor will pick up the new run.
@@ -284,18 +309,54 @@ For non-suggestion comments, classify per [Classification](#classification-clear
 After applying:
 
 ```bash
+# Run Post-fix simplify on the touched files (skip if the edit was a verbatim
+# `suggestion` block application — see Post-fix simplify section).
+Skill(skill: "simplify", args: "<touched files>")
+
 git add <files>
 git commit -m "address review: <one-line summary>"
 git push
-gh api "repos/<owner>/<repo>/pulls/<pr>/comments/<id>/replies" \
-  -X POST -f body="Addressed in <short-sha>."
 ```
+
+Then post a reply (see [Always reply on the comment](#always-reply-on-the-comment)).
+
+### Always reply on the comment
+
+Every inline review comment monitor touches gets exactly one reply back, regardless of outcome — applied, declined, or deferred to the maintainer. Reviewers should never wonder whether their comment was seen.
+
+```bash
+gh api "repos/<owner>/<repo>/pulls/<pr>/comments/<id>/replies" \
+  -X POST -f body="<one-line reply per the table below>"
+```
+
+| Outcome | Reply template |
+|---|---|
+| Applied (auto) | `Addressed in <short-sha>.` |
+| Applied (after `AskUserQuestion` confirmed) | `Addressed in <short-sha>.` |
+| Declined (user picked "skip" via `AskUserQuestion`) | `Discussed with the maintainer — keeping current approach. <one-line reason>` |
+| Declined (clearly out of scope per Classification) | `Out of scope for this PR — tracking separately.` |
+| Deferred (waiting on maintainer decision, no answer yet) | `Surfaced to the maintainer; will follow up here once decided.` |
+| Question, not a request | `Answering inline: <one-line answer>` (or surface to maintainer if you don't know) |
+
+Tone rules:
+
+- One line. No apologies, no hedging, no "thanks for the feedback" filler.
+- If declining, name the reason concretely (e.g., *"this path is only hit during migration, behavior change would break v1 callers"*) — never a vague *"we decided not to"*.
+- Never reply twice to the same comment id. Before posting, scan the existing replies (`gh api repos/<owner>/<repo>/pulls/<pr>/comments` → filter where `in_reply_to_id == <id>` and `user.login == <bot/your account>`); if monitor already replied, skip.
+- Never auto-resolve the review thread. Reviewers resolve their own threads.
 
 ### REVIEW handling
 
-- `APPROVED` — log it for the user; no action.
-- `CHANGES_REQUESTED` — read the review body. Treat top-level summary points as a checklist; expand each against the inline comments already emitted.
-- `COMMENTED` — body may contain a summary; act on it the same way as inline comments.
+- `APPROVED` — log it for the user; no reply.
+- `CHANGES_REQUESTED` — read the review body. Treat top-level summary points as a checklist; expand each against the inline comments already emitted. Each individual inline comment gets its own reply via [Always reply on the comment](#always-reply-on-the-comment). When *all* points in the review have been resolved (applied or declined), post a single summary comment on the PR so the reviewer doesn't have to crawl every thread:
+  ```bash
+  gh api "repos/<owner>/<repo>/issues/<pr>/comments" -X POST -f body="\
+  @<reviewer> addressed your review:\n\
+  - Applied: <bullet list of applied comment links>\n\
+  - Declined: <bullet list with one-line reasons>\n\
+  - Deferred: <bullet list with status>"
+  ```
+- `COMMENTED` — body may contain a summary; act on it the same way as inline comments. If the body itself contains a request not tied to a specific line (i.e., not also present as an inline comment), reply with a PR-level issue comment instead.
 
 ## Classification: clear vs ambiguous
 
@@ -329,9 +390,9 @@ When asking, include in `AskUserQuestion`:
 
 When the Monitor emits `PR_STATE:MERGED` or `PR_STATE:CLOSED` it exits on its own. Print a one-line summary:
 
-- Number of CI failures auto-fixed.
-- Number of review comments addressed automatically.
-- Number of items deferred to the user.
+- CI failures auto-fixed.
+- Review comments: applied / declined / deferred (the same three buckets that drove the replies).
+- Merge conflicts resolved automatically vs aborted-and-surfaced.
 - Final PR state and URL.
 
 Then stop. Do not start a new Monitor.
