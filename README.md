@@ -37,13 +37,24 @@ Core productivity tools for Claude Code — skill discovery and automated branch
 - Generates a PR with summary, changes, and test plan
 - Includes safety rails and backup/recovery at every step
 
-**go** (skill) — Wrap up a working session in one shot: run `simplify` on recent code, then run `branch-pr` end-to-end.
+**go** (skill) — Wrap up a working session in one shot: `simplify` → `branch-pr` → `monitor`.
 
 - Packaged as a Skill (`plugins/base/skills/go/SKILL.md`), not a legacy command
 - `disable-model-invocation: true` — only triggers when you explicitly invoke `/gbase:go`; Claude won't auto-run it
 - Invokes the official bundled `/simplify` skill on the current diff (or the latest commit if the tree is clean)
 - Then invokes `/gbase:branch-pr` for the full flow (backup → branch → grouped commits → push → PR)
+- Then hands off to `/gbase:monitor` to babysit CI + reviews until the PR is merged or closed
 - Inherits all `branch-pr` safety rules — no force push, no hard reset, step-by-step confirmation
+
+**monitor** (skill) — Subscribe to the current branch's PR and keep it moving until merge/close.
+
+- Packaged as a Skill (`plugins/base/skills/monitor/SKILL.md`)
+- `disable-model-invocation: true` — only triggers via `/gbase:monitor` or as the tail of `/gbase:go`
+- Resolves the PR via `gh`, sweeps current CI + reviews, then starts a persistent `Monitor` polling every 30s
+- Auto-fixes clear CI failures (lint, format, type, unused imports) and applies clearly-required review comments (suggested diff blocks, typos, dead code)
+- Resolves safe merge conflicts (lockfile regeneration, pure-addition merges, whitespace-only) via rebase + `--force-with-lease`; aborts and surfaces anything semantic
+- Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
+- Stops automatically when the PR reaches `MERGED` or `CLOSED`
 
 ## Usage
 
@@ -52,7 +63,8 @@ After installation, the following are available:
 ```
 /gbase:find-skills             # Discover skills for your project (command)
 /gbase:branch-pr               # Branch + commit + PR from current changes (command)
-/gbase:go                      # Simplify recent code → then branch + commit + PR (skill)
+/gbase:go                      # Simplify → branch + commit + PR → monitor (skill)
+/gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
 ```
 
 ## License
