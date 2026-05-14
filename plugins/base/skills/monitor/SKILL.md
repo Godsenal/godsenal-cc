@@ -8,7 +8,9 @@ allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 
 Subscribes to the current branch's PR and keeps it moving. CI failures with an obvious cause (lint, format, type, missing import) get fixed and pushed automatically. Review comments that are clearly required (typo, suggested diff blocks, dead code the reviewer pointed at) get applied. Merge conflicts that are mechanically safe (lockfile regeneration, pure additions) get resolved. Anything subjective — architecture, behavior changes, semantic conflicts, design preference — gets surfaced to the user instead.
 
-`disable-model-invocation: true`: only triggers via `/gbase:monitor` or as the tail of `/gbase:go`.
+Reviewer-agnostic: treat human reviewers, code review bots, and CI assistants the same way. Identity matters for the *reply target*, not for whether to engage — every actionable comment goes through classification regardless of author.
+
+Invoke explicitly via `/gbase:monitor` or as the tail of `/gbase:go`.
 
 ## Flow
 
@@ -64,6 +66,14 @@ gh pr checks <pr-number> --json name,bucket,link,state,workflow
 
 ### 2b. Review snapshot
 
+Capture the current gh user up front — used to skip monitor's own replies in later polls so we don't react to ourselves:
+
+```bash
+ME=$(gh api user --jq '.login')
+```
+
+Pull every review surface — inline comments, top-level reviews, and issue-style conversation comments. Some reviewers (bots especially) post their main feedback as a single issue comment with the per-line items nested or linked; missing this surface is the most common cause of "monitor didn't react to my reviewer."
+
 ```bash
 # Inline review comments (per-file, with line + suggested diff if present)
 gh api "repos/<owner>/<repo>/pulls/<pr-number>/comments" \
@@ -73,12 +83,14 @@ gh api "repos/<owner>/<repo>/pulls/<pr-number>/comments" \
 gh api "repos/<owner>/<repo>/pulls/<pr-number>/reviews" \
   --jq '.[] | {id, state, user: .user.login, body, submitted_at}'
 
-# Conversation comments (issue-style)
+# Conversation comments (issue-style — walkthroughs, summaries, PR-level Q&A)
 gh api "repos/<owner>/<repo>/issues/<pr-number>/comments" \
   --jq '.[] | {id, user: .user.login, body, created_at}'
 ```
 
-For each unresolved comment, classify and act (see below). Record the largest comment IDs seen — the Monitor script uses these as the watermark.
+For every unresolved item across all three surfaces, run [Classification](#classification-clear-vs-ambiguous) and act before subscribing. Don't just record watermarks and move on — pre-existing reviews are the most likely thing to slip past the loop because they sit at or below the watermark forever. Skip items where `user.login == $ME` (those are replies monitor itself posted in an earlier session).
+
+Record the largest IDs seen on each surface as the watermarks for Step 3.
 
 ## Step 3 — Subscribe (persistent Monitor)
 
@@ -89,13 +101,15 @@ Monitor(
   description: "PR #<number> CI + reviews",
   persistent: true,
   timeout_ms: 3600000,
-  command: <<<bash-command-string — substitute the captured values for <owner>/<repo>, <pr-number>, and the watermarks before passing to Monitor>>>
+  command: <<<bash-command-string — substitute the captured values for <owner>/<repo>, <pr-number>, $ME, and the watermarks before passing to Monitor>>>
   OWNER_REPO="<owner>/<repo>"
   PR=<pr-number>
+  ME="<gh-user-from-Step-2b>"
   LAST_FAILS=""                       # space-joined "<name>|<link>" set
   LAST_OVERALL=""                     # "pass" | "mixed"
-  LAST_COMMENT_ID=<largest-comment-id-from-Step-2b-or-0>
+  LAST_COMMENT_ID=<largest-inline-comment-id-from-Step-2b-or-0>
   LAST_REVIEW_ID=<largest-review-id-from-Step-2b-or-0>
+  LAST_ISSUE_ID=<largest-issue-comment-id-from-Step-2b-or-0>
   LAST_MERGEABLE=""
 
   while true; do
@@ -133,26 +147,34 @@ Monitor(
     fi
     LAST_OVERALL="$overall"
 
-    # Inline review comments since watermark.
+    # Inline review comments since watermark. Skip self so our own replies don't re-emit.
     new_comment=$(gh api --paginate "repos/$OWNER_REPO/pulls/$PR/comments" 2>/dev/null \
-      | jq -c "[.[] | select(.id > $LAST_COMMENT_ID)] | sort_by(.id)" 2>/dev/null || echo "[]")
+      | jq -c --arg me "$ME" "[.[] | select(.id > $LAST_COMMENT_ID and .user.login != \$me)] | sort_by(.id)" 2>/dev/null || echo "[]")
     echo "$new_comment" | jq -r '.[] | "REVIEW_COMMENT:\(.id)|\(.user.login)|\(.path):\(.line)"'
     max_c=$(echo "$new_comment" | jq -r 'map(.id) | max // empty')
     [ -n "$max_c" ] && LAST_COMMENT_ID=$max_c
 
     # Top-level reviews since watermark.
     new_review=$(gh api --paginate "repos/$OWNER_REPO/pulls/$PR/reviews" 2>/dev/null \
-      | jq -c "[.[] | select(.id > $LAST_REVIEW_ID)] | sort_by(.id)" 2>/dev/null || echo "[]")
+      | jq -c --arg me "$ME" "[.[] | select(.id > $LAST_REVIEW_ID and .user.login != \$me)] | sort_by(.id)" 2>/dev/null || echo "[]")
     echo "$new_review" | jq -r '.[] | "REVIEW:\(.id)|\(.user.login)|\(.state)"'
     max_r=$(echo "$new_review" | jq -r 'map(.id) | max // empty')
     [ -n "$max_r" ] && LAST_REVIEW_ID=$max_r
+
+    # Issue-style PR conversation comments since watermark. Walkthroughs, summaries,
+    # and PR-level questions from reviewers (human or bot) land here, not on inline comments.
+    new_issue=$(gh api --paginate "repos/$OWNER_REPO/issues/$PR/comments" 2>/dev/null \
+      | jq -c --arg me "$ME" "[.[] | select(.id > $LAST_ISSUE_ID and .user.login != \$me)] | sort_by(.id)" 2>/dev/null || echo "[]")
+    echo "$new_issue" | jq -r '.[] | "ISSUE_COMMENT:\(.id)|\(.user.login)"'
+    max_i=$(echo "$new_issue" | jq -r 'map(.id) | max // empty')
+    [ -n "$max_i" ] && LAST_ISSUE_ID=$max_i
 
     sleep 30
   done
 )
 ```
 
-The `<<<...>>>` line is illustrative — the actual `Monitor` tool call passes the whole script as the `command` string argument; substitute `<owner>`, `<repo>`, `<pr-number>`, and the two watermark seeds with the values captured in Step 1 / Step 2b before invoking.
+The `<<<...>>>` line is illustrative — the actual `Monitor` tool call passes the whole script as the `command` string argument; substitute `<owner>`, `<repo>`, `<pr-number>`, `$ME`, and the three watermark seeds with the values captured in Step 1 / Step 2b before invoking.
 
 **Event contract.** Bare events have no payload; events with `:` carry payload fields separated by `|`:
 
@@ -162,9 +184,10 @@ The `<<<...>>>` line is illustrative — the actual `Monitor` tool call passes t
 - `CI_ALL_PASS` (bare) — emitted once on transition to all-green.
 - `REVIEW_COMMENT:<id>|<author>|<file>:<line>` — one per new inline comment.
 - `REVIEW:<id>|<author>|<state>` — one per new top-level review.
+- `ISSUE_COMMENT:<id>|<author>` — one per new PR conversation comment (walkthrough, summary, PR-level question).
 - `PR_STATE:MERGED` or `PR_STATE:CLOSED` — final event before the script exits.
 
-When you act on an event, fetch its full body with `gh api repos/$OWNER_REPO/pulls/comments/<id>` (inline) or `gh api repos/$OWNER_REPO/pulls/<pr>/reviews/<id>` (top-level).
+When you act on an event, fetch its full body with the matching endpoint: `gh api repos/$OWNER_REPO/pulls/comments/<id>` (inline), `gh api repos/$OWNER_REPO/pulls/<pr>/reviews/<id>` (top-level), or `gh api repos/$OWNER_REPO/issues/comments/<id>` (PR conversation).
 
 ## Step 4 — React to events
 
@@ -356,6 +379,27 @@ Tone rules:
   - Deferred: <bullet list with status>"
   ```
 - `COMMENTED` — body may contain a summary; act on it the same way as inline comments. If the body itself contains a request not tied to a specific line (i.e., not also present as an inline comment), reply with a PR-level issue comment instead.
+
+### ISSUE_COMMENT handling
+
+PR conversation comments — walkthroughs, summaries, PR-level questions, follow-ups. Same classification as inline comments; the only difference is the reply target.
+
+Fetch body:
+
+```bash
+gh api "repos/<owner>/<repo>/issues/comments/<id>"
+```
+
+Then:
+
+- If the body is a pure summary or status update (e.g., a walkthrough of the diff with no asks) — log it, no reply needed.
+- If it embeds actionable items not already covered by inline comments — run [Classification](#classification-clear-vs-ambiguous) on each item and act. Group all replies into one PR-level comment so the thread stays readable:
+  ```bash
+  gh api "repos/<owner>/<repo>/issues/<pr>/comments" -X POST -f body="<grouped reply>"
+  ```
+- If it's a question to the maintainer — surface via `AskUserQuestion` and post the answer back as a PR-level comment.
+
+Apply the same tone rules as inline replies: one line per item, concrete reason for declines, no apology filler.
 
 ## Classification: clear vs ambiguous
 
