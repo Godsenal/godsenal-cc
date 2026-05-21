@@ -1,7 +1,7 @@
 {
   "name": "gbase",
   "version": "1.4.0",
-  "description": "Core productivity tools for Claude Code — skill discovery, automated branch/PR workflows, one-shot simplify+PR+monitor, and CI/review monitoring",
+  "description": "Core productivity tools for Claude Code — skill discovery, automated branch/PR workflows, one-shot code-review+PR+monitor, and CI/review monitoring",
   "author": {
     "name": "godsenal",
     "url": "https://github.com/Godsenal"
@@ -16,7 +16,7 @@
     "branch",
     "pull-request",
     "automation",
-    "simplify",
+    "code-review",
     "refactor",
     "monitor",
     "ci",
