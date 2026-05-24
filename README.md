@@ -40,8 +40,9 @@ Core productivity tools for Claude Code — skill discovery and automated branch
 **polish** (skill) — Two-pass behavior-preserving polish on the current diff. Replaces `/simplify` and the bundled `/code-review` for the polish role.
 
 - Packaged as a Skill (`plugins/base/skills/polish/SKILL.md`); model-invocable
-- **Pass 1 — Deslop**: mechanical removal of AI-generated cruft (extra comments, defensive `try/catch`, `as any`, deep nesting, dead fallbacks, half-finished scaffolding). Applies directly.
+- **Pass 1 — Deslop (3-lens fan-out)**: large diffs (≥10 files or >300 lines) spawn three parallel sub-agents — Lens A (AI cruft & dead code), Lens B (code reuse & duplication, unused imports, redundant vars), Lens C (clarity & efficiency, deep nesting, complex conditionals, hot-path perf wins). A resolution step then dedupes overlapping proposals, filters false positives, and applies the survivors. Mirrors the original built-in `/simplify` design. Small diffs skip the fan-out and walk all three lenses sequentially.
 - **Pass 2 — Structural**: ambitious "code judo" pass — collapses single-caller helpers, removes premature abstractions, suggests file splits, flattens conditional growth. Small contained edits apply directly; anything large (file moves, public API renames, >~50 lines) surfaces via `AskUserQuestion` first.
+- **Verification**: after each pass, runs the lightest available correctness check (`tsc --noEmit`, focused tests) on touched files; reverts edits that break the check.
 - Both passes preserve behavior; surfaces real bugs to the user instead of silently patching them
 - Skips on pure renames, dependency bumps, generated code, prototype/throwaway diffs
 
