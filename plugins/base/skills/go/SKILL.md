@@ -1,20 +1,20 @@
 ---
 name: go
-description: "Finish code changes in one shot — run the bundled /code-review skill on the current diff, run /gbase:branch-pr end-to-end, then hand off to /gbase:monitor to watch CI and reviews until merge. Invoke manually with /gbase:go; do not trigger automatically."
+description: "Finish code changes in one shot — run the /gbase:polish skill (deslop + structural pass) on the current diff, run /gbase:branch-pr end-to-end, then hand off to /gbase:monitor to watch CI and reviews until merge. Invoke manually with /gbase:go; do not trigger automatically."
 disable-model-invocation: true
 allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Edit Write
 ---
 
 # /gbase:go
 
-Wraps up a working session by running **code-review** on recent code, **branch-pr** to ship it, and **monitor** to babysit CI + reviews until merge. The three steps run back-to-back without extra confirmation between them — each sub-skill's own confirmations still apply.
+Wraps up a working session by running **polish** on recent code (deslop + ambitious structural pass), **branch-pr** to ship it, and **monitor** to babysit CI + reviews until merge. The three steps run back-to-back without extra confirmation between them — each sub-skill's own confirmations still apply.
 
 This skill has `disable-model-invocation: true`: only the user can trigger it via `/gbase:go`, never the model on its own.
 
 ## Flow
 
-1. **Detect scope** — decide whether code-review targets the uncommitted diff or the latest commit.
-2. **Code review** — invoke the bundled `code-review` skill (Claude Code's official review pass) on the in-scope code.
+1. **Detect scope** — decide whether polish targets the uncommitted diff or the latest commit.
+2. **Polish** — invoke the `gbase:polish` skill (deslop pass → structural pass) on the in-scope code.
 3. **Branch & PR** — invoke the `gbase:branch-pr` skill to back up, branch, group commits, push, and open a PR.
 4. **Monitor** — invoke the `gbase:monitor` skill to watch CI, auto-fix clear failures, and address review comments until the PR is merged or closed.
 
@@ -32,24 +32,24 @@ git log --oneline -1
 
 Decide:
 
-- **Uncommitted changes present** → code-review targets those files; branch-pr runs afterward.
-- **Clean working tree** → code-review targets the most recent commit (`git show HEAD --name-only`). If code-review introduces new edits, branch-pr still runs on those; if it doesn't, skip branch-pr and tell the user there's nothing to PR.
+- **Uncommitted changes present** → polish targets those files; branch-pr runs afterward.
+- **Clean working tree** → polish targets the most recent commit (`git show HEAD --name-only`). If polish introduces new edits, branch-pr still runs on those; if it doesn't, skip branch-pr and tell the user there's nothing to PR.
 
 Report the detected scope to the user in one line, then proceed without waiting.
 
-### Step 2 — Invoke code-review
+### Step 2 — Invoke polish
 
 Use the `Skill` tool:
 
 ```
-Skill(skill: "code-review", args: "<list of in-scope files>")
+Skill(skill: "gbase:polish", args: "<list of in-scope files>")
 ```
 
-If the `code-review` skill supports free-form args, pass the file list; otherwise just invoke it and rely on its own "recently modified" detection. Wait for it to finish. Summarize what it changed in one or two sentences.
+The skill runs a deslop pass (mechanical AI-cruft removal) then a structural pass (ambitious behavior-preserving restructuring). Larger structural moves prompt the user via `AskUserQuestion` before touching code; smaller ones apply directly. Wait for it to finish. Summarize what landed in one or two sentences.
 
 ### Step 3 — Invoke branch-pr
 
-If Step 1 found uncommitted changes — or if code-review introduced new ones — immediately invoke:
+If Step 1 found uncommitted changes — or if polish introduced new ones — immediately invoke:
 
 ```
 Skill(skill: "gbase:branch-pr")
@@ -59,7 +59,7 @@ That skill owns the rest: status analysis, backup stash, branch suggestion (conf
 
 All safety rules from `gbase:branch-pr` apply unchanged — `go` is a pure wrapper.
 
-If Step 1 found no changes and code-review also produced no edits, stop after Step 2 and inform the user.
+If Step 1 found no changes and polish also produced no edits, stop after Step 2 and inform the user.
 
 ### Step 4 — Invoke monitor
 
@@ -77,8 +77,8 @@ If the user wants to ship without ongoing monitoring, they can stop the Monitor 
 
 ## Error handling
 
-- **Code-review produces no changes, tree was already clean** → stop, inform the user.
-- **Code-review fails** → surface the error; ask the user whether to continue to branch-pr with pre-existing changes or abort.
+- **Polish produces no changes, tree was already clean** → stop, inform the user.
+- **Polish fails** → surface the error; ask the user whether to continue to branch-pr with pre-existing changes or abort.
 - **Branch-pr fails at any step** → stop, print `git status`, give recovery instructions:
   - Restore from backup stash: `git stash pop`
   - Delete the created branch: `git checkout main && git branch -D <branch-name>`
@@ -101,10 +101,11 @@ Claude: Detected 4 uncommitted files:
   A  src/components/UserProfile.tsx
   A  src/components/UserProfile.test.tsx
 
-Running /code-review on these files…
-[code-review makes 2 fixes in UserProfile.tsx]
+Running /gbase:polish on these files…
+[deslop strips 3 redundant comments + one defensive try/catch in UserProfile.tsx]
+[structural pass inlines a single-caller helper in route.ts]
 
-Code-review done. Proceeding to /gbase:branch-pr.
+Polish done. Proceeding to /gbase:branch-pr.
 Suggested branch: feat/user-profile — confirm?
 …
 [branch-pr opens PR #142]

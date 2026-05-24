@@ -1,6 +1,6 @@
 ---
 name: monitor
-description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), and run /code-review on every non-trivial auto-edit before committing. Ask on ambiguous ones. Invoke manually with /gbase:monitor or chained from /gbase:go; do not trigger automatically."
+description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), and run /gbase:polish on every non-trivial auto-edit before committing. Ask on ambiguous ones. Invoke manually with /gbase:monitor or chained from /gbase:go; do not trigger automatically."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
@@ -65,14 +65,14 @@ When in doubt, ask. Include reviewer + a one-line quote + `file:line` + 2–3 co
 
 **Ask** for everything else: same-line semantic edits, migrations/schemas, config files (`.env*`, `tsconfig.json`, `next.config.*`, CI yamls), conflicts spanning more than ~30 lines, rebase replays of more than ~5 commits, renames where the other side modified the old path.
 
-After resolving, `git rebase --continue`, run [Post-fix code-review](#post-fix-code-review) on resolved non-lockfile files, then `git push --force-with-lease`. If `--force-with-lease` is rejected, stop and surface.
+After resolving, `git rebase --continue`, run [Post-fix polish](#post-fix-polish) on resolved non-lockfile files, then `git push --force-with-lease`. If `--force-with-lease` is rejected, stop and surface.
 
-## Post-fix code-review
+## Post-fix polish
 
-Whenever monitor produces a code edit, run the bundled `code-review` skill on touched files **before** staging — fold any resulting edits into the same commit.
+Whenever monitor produces a code edit, run the `gbase:polish` skill on touched files **before** staging — fold any resulting edits into the same commit. Polish does deslop + structural passes (both behavior-preserving), so monitor's auto-fix doesn't ship with leftover AI cruft or premature abstractions.
 
 ```
-Skill(skill: "code-review", args: "<touched files>")
+Skill(skill: "gbase:polish", args: "<touched files>")
 ```
 
 **Skip** when the edit is provably mechanical and re-running would be a no-op: lint/format auto-fix output, verbatim ` ```suggestion ` block application, lockfile regen, whitespace-only.
