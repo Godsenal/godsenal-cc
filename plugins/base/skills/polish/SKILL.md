@@ -30,19 +30,15 @@ Skip entirely on: pure rename/move commits, dependency bumps, generated code (lo
 
 The signature pattern from the original built-in `/simplify`: each lens reads the **full** diff but applies a different heuristic, then a resolution step merges the proposals.
 
-### Fan-out (large diffs: ≥10 changed files OR >300 changed lines)
+### Fan-out (always)
 
-Spawn three sub-agents in parallel via `Agent` with `subagent_type: general-purpose`. Hand each the same diff plus only its lens prompt. Each returns a structured proposal list — `{file, line_range, before, after, rationale}` — and does **not** edit files itself.
+Always spawn three sub-agents in parallel via `Agent` with `subagent_type: general-purpose`, regardless of diff size. Hand each the same diff plus only its lens prompt. Each returns a structured proposal list — `{file, line_range, before, after, rationale}` — and does **not** edit files itself.
 
 ```
 Agent A — AI cruft & dead code lens
 Agent B — code reuse & duplication lens
 Agent C — clarity & efficiency lens
 ```
-
-### Small diffs (<10 files AND ≤300 lines)
-
-Skip fan-out — main agent walks all three lenses sequentially. Orchestration overhead exceeds the speedup on tiny diffs.
 
 ### Lens A — AI cruft & dead code
 
