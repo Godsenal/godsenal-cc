@@ -10,6 +10,15 @@ Two polish passes on the current diff (or files the caller hands in). Both passe
 
 Polish runs autonomously and proactively whenever code has just been written or modified — don't wait for an explicit ask once a non-trivial diff exists.
 
+## Posture — asymmetric by risk
+
+Polish is **not uniformly cautious**. A low change-count is a virtue only when it comes from *searching thoroughly and finding little* — never from *not looking*. Split every candidate by risk and treat the two halves differently:
+
+- **Reuse of existing code & literal de-duplication** — calling a helper that already exists, collapsing byte-identical blocks, deleting dead code. **Low risk, high value → be aggressive.** The bar to *leave* such a finding is "I grepped and there genuinely is no helper / no other copy", not "the diff looked fine".
+- **Net-new abstraction** — inventing a wrapper, data-driving an explicit list, adding a config array or indirection. **High risk → be conservative.** Prefer the house style; three similar lines beat a premature abstraction.
+
+Reading the repo's conventions (`CLAUDE.md` / `AGENTS.md`) sharpens this rather than overriding it: a codebase that bans "clever" code objects to *new* cleverness, not to reusing what already exists. Don't let an "explicit over clever" culture talk you out of calling an existing utility or deleting a literal copy.
+
 ## Scope
 
 Default target:
@@ -23,6 +32,8 @@ git diff --stat origin/main...HEAD   # if branched
 - **Uncommitted changes present** → target those files.
 - **Clean working tree** → target the latest commit (`git show HEAD --name-only`).
 - **Caller passes explicit paths** → scope to those.
+
+**Cover every changed file.** Do not drop files by topic or subsystem ("that's backend dev-infra, this is the frontend feature"). Every changed file goes through all three lenses — a duplication spanning a backend helper and a frontend util still counts, and a 3-way repeat in a file you mentally set aside is exactly what gets missed. If a changed file truly isn't worth polishing it must fall under a Skip category below; name it in the report rather than silently excluding it.
 
 Skip entirely on: pure rename/move commits, dependency bumps, generated code (lockfiles, OpenAPI clients, compiled assets), prototype/throwaway code the user is still exploring.
 
@@ -54,8 +65,8 @@ Agent C — clarity & efficiency lens
 
 - **Unused imports** and unreferenced top-level declarations
 - **Redundant variables** — vars assigned once and used once, parallel vars holding the same value, intermediate names that don't earn their keep
-- Three or more near-duplicate blocks where one well-named helper would collapse them
-- Logic already implemented elsewhere in the codebase (look for utility modules before duplicating)
+- Three or more near-duplicate blocks where one well-named helper would collapse them. When you find one copy, **grep the whole repo for every sibling and count them all** before proposing — a dup you read as 2-way is often 3-way, and the true count decides where the helper should live.
+- Logic already implemented elsewhere in the codebase. **Operationalize, don't just intend**: for each non-trivial inline implementation (param merging, formatting, debounce, date math, port selection, …) grep `src/utils`, `src/hooks`, and sibling directories by *behavior keyword* (`URLSearchParams`, `Params`, `debounce`, …) before concluding "not reusable". "No helper exists" counts only after the grep.
 - Repeated literal/constant strings that should be named
 - Functions that recompute the same value multiple times in a request lifecycle
 
@@ -77,8 +88,12 @@ After lenses return:
    - Changes observable behavior (e.g., removes a check the user could see)
    - Conflicts with another lens's proposal that the main agent judges more important
    - Looks like a false positive on closer read (helper actually has callers, "unused" import is a type-only re-export, etc.)
-3. **Apply** — main agent edits files directly. No `AskUserQuestion` for Pass 1.
+   - **Fights the local house style** — before collapsing repeated blocks into an abstraction, open the sibling files in the same directory. If the immediate neighbors enumerate explicitly (especially when this file already imports and renders one of them), prefer consistency: reject the abstraction or downgrade it to an opt-in note. This filter is for **net-new abstractions only** — never use it to drop a reuse-of-existing-helper or literal-dedup finding (see Posture).
+
+   When you reject, **state the narrowest version of the proposal and refute that exact transform**, not a broader one the lens never made. ("Can't merge the two `<List>`s" is not grounds to drop "extract the shared row shell".) Strawman rejections quietly bury real wins.
+3. **Apply** — main agent edits files directly, no `AskUserQuestion`, **for edits confined to the diff**. *Exception — out-of-diff edits*: when a fix (usually a de-duplication) requires a file outside the current diff, do **not** auto-apply — the blast radius and drift risk are a different class. Auto-edit the in-diff copy only if that alone is safe and coherent; otherwise surface the whole change as a proposal with the sibling list and rationale and let the user confirm.
 4. **Record** — keep a tally of `proposed / deduped / filtered / applied` per lens for the final report.
+5. **Recall gate** — before declaring the pass done, fill in the search surfaces and confirm each was actually checked, not assumed: utils/hooks grepped by keyword? every changed file seen by every lens? every copy of each found duplicate counted? A "clean diff" verdict earns trust only *after* this list is complete — "found nothing" must mean "searched and found nothing", never "didn't look". Any unchecked surface → check it before reporting.
 
 ## Pass 2 — Structural (ambitious)
 
@@ -102,6 +117,7 @@ Runs after Pass 1 lands. Single-agent — Pass 2 needs whole-diff context and sh
 - **Confirm before large changes** — anything that moves files, renames public APIs, or rewrites more than ~50 lines uses `AskUserQuestion` with a one-line rationale and the diff outline before touching code.
 - Small contained simplifications (delete unused helper, inline single-caller function, collapse nested `if`, hoist a constant) apply directly.
 - Don't invent abstractions for hypothetical future requirements. Three similar lines is better than a premature abstraction.
+- **Match the local pattern.** The "missing data structure" target above (lookup table, config array, polymorphism) is exactly what re-proposes a divergent abstraction. If sibling files in the same directory solve the same shape explicitly, a shorter-but-divergent restructuring is a consistency regression — leave it, or mark it opt-in. (Reuse of an *existing* shared helper is not divergence — that still applies.)
 
 ## Verification
 
@@ -126,12 +142,15 @@ Pass 1 (3-lens deslop)
 
 Pass 2 (structural)
   Applied: <bullet list of small landings>
-  Proposed (awaiting confirm): <bullet list with one-line rationale each>
+  Proposed (awaiting confirm): <bullet list; mark ⚠ out-of-diff when it touches files beyond the diff>
+
+Rejected (reason): <considered and deliberately left — one line each with the why>
+Excluded from scope: <changed files not polished + the Skip category that justifies it | none>
 
 Verification: <command> → pass | fail (reverted: <file>)
 ```
 
-Keep it under ~15 lines. The diff is the proof.
+Keep it tight — one line per entry. The diff is the proof.
 
 ## When NOT to run
 
