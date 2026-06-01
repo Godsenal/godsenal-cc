@@ -1,12 +1,12 @@
 ---
 name: monitor
-description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), and run /gbase:polish on every non-trivial auto-edit before committing. Ask on ambiguous ones. Invoke manually with /gbase:monitor or chained from /gbase:go; do not trigger automatically."
+description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), surface testable preview/deploy links from CI/bot comments, and run /gbase:polish on every non-trivial auto-edit before committing. Ask on ambiguous ones. Invoke manually with /gbase:monitor or chained from /gbase:go; do not trigger automatically."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
 # /gbase:monitor
 
-Subscribe to the current branch's PR and keep it moving until it merges or closes. Apply clear review feedback, fix obvious CI failures, resolve safe merge conflicts. Surface anything subjective via `AskUserQuestion`.
+Subscribe to the current branch's PR and keep it moving until it merges or closes. Apply clear review feedback, fix obvious CI failures, resolve safe merge conflicts. Surface anything subjective via `AskUserQuestion`. Surface testable preview/deploy links that CI or bots post so the user can try the change.
 
 Reviewer-agnostic: human reviewers, code review bots, and CI assistants go through the same classification. Identity matters for the *reply target*, not for whether to engage.
 
@@ -25,9 +25,9 @@ Invoke explicitly via `/gbase:monitor` or as the tail of `/gbase:go`.
 ## Loop
 
 1. Resolve the PR for the current branch. Stop if it's already `MERGED` / `CLOSED`.
-2. Sweep current state — CI, every review surface GitHub exposes (inline comments, top-level reviews, PR conversation comments), and mergeability. **Act on every unresolved item before subscribing** — don't just watermark them. Pre-existing reviews slipping past the loop is the most common failure mode.
+2. Sweep current state — CI, every review surface GitHub exposes (inline comments, top-level reviews, PR conversation comments), mergeability, and any testable links already posted (see [Surface testable links](#surface-testable-links)). **Act on every unresolved item before subscribing** — don't just watermark them. Pre-existing reviews slipping past the loop is the most common failure mode.
 3. Start a persistent `Monitor` (~30s poll). Emit one event per state change; watermark to avoid re-emission. Skip events authored by the current gh user so your own replies don't loop back.
-4. On each event: classify, act, reply (when applicable).
+4. On each event: classify, act, reply (when applicable), and surface any new testable link.
 5. Exit when state flips to `MERGED` / `CLOSED`. Print a one-line summary.
 
 If `mergeable` is `CONFLICTING` at any point, handle the conflict first — CI runs on the merge commit and keeps failing while it stands.
@@ -66,6 +66,18 @@ When in doubt, ask. Include reviewer + a one-line quote + `file:line` + 2–3 co
 **Ask** for everything else: same-line semantic edits, migrations/schemas, config files (`.env*`, `tsconfig.json`, `next.config.*`, CI yamls), conflicts spanning more than ~30 lines, rebase replays of more than ~5 commits, renames where the other side modified the old path.
 
 After resolving, `git rebase --continue`, run [Post-fix polish](#post-fix-polish) on resolved non-lockfile files, then `git push --force-with-lease`. If `--force-with-lease` is rejected, stop and surface.
+
+## Surface testable links
+
+CI checks and deploy/preview bots routinely post links you can open to *try the change* — Vercel/Netlify/Cloudflare preview deployments, Storybook/Chromatic builds, staging or review-app URLs, "View deployment" targets on a check run. When one shows up, surface it to the user inline so they can click through and test. Bots usually label these clearly — use judgment; you don't need an exhaustive allowlist.
+
+- **Surface**: links whose purpose is testing the change (preview / deploy / staging / review-app / storybook / demo).
+- **Skip**: links that aren't for testing — docs, issue/PR/commit references, coverage badges, dashboards, CI log/run URLs.
+- **Include context**: the URL, its source (which bot/check), and the commit SHA it was built from, so the user knows which revision they're testing.
+- **Dedup**: surface each distinct URL once. Preview bots edit the same comment per push — when the URL changes (new deployment), surface the new one once; never re-emit an unchanged URL.
+- **Surface only**: don't open it, smoke-test it, or post anything back to the PR. This is purely informational for the user. No new side effects, no `allowed-tools` beyond what monitor already has.
+
+Catch already-posted links during the initial sweep; catch new ones on each event.
 
 ## Post-fix polish
 

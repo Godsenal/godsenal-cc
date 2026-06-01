@@ -1,6 +1,6 @@
 {
   "name": "gbase",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Core productivity tools for Claude Code — skill discovery, automated branch/PR workflows, two-pass diff polish (3-lens fan-out + structural), one-shot polish+PR+monitor, and CI/review monitoring",
   "author": {
     "name": "godsenal",
