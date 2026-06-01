@@ -68,6 +68,16 @@ Core productivity tools for Claude Code — skill discovery and automated branch
 - Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
 - Stops automatically when the PR reaches `MERGED` or `CLOSED`
 
+**pr-verify** (skill, model-invocable) — Throw it a PR and it verifies the change actually works in the browser. The counterpart to `monitor`, which surfaces preview links but never opens them.
+
+- Packaged as a Skill (`plugins/base/skills/pr-verify/SKILL.md`); model-invocable
+- Resolves a PR (URL / `owner/repo#123` / bare number / current branch) and builds a requirement checklist from **four sources**: the PR body & checklists, the diff, linked **Figma** designs (via the Figma MCP), and linked issue/Notion/Jira specs — each item tagged `[behavior]` or `[design]`
+- Finds the PR's preview/deploy link (Vercel/Netlify/Storybook/staging, newest build from the head SHA) and opens it in **Claude-in-Chrome**
+- Drives each `[behavior]` item (clicks/typing, console-error check) and screenshot-compares each `[design]` item against Figma (layout, spacing, color tokens, copy, states)
+- Reports a per-requirement `PASS`/`FAIL`/`BLOCKED` table with screenshots **to you** — read-only on GitHub, never comments/approves/merges
+- Never enters credentials — on a login wall it pauses and asks you to sign in manually; never clicks destructive controls on the preview
+- Surfaces ambiguity (which preview, vague requirements, writes needed, login, whole-file Figma links) via `AskUserQuestion`
+
 ## Usage
 
 After installation, the following are available:
@@ -78,6 +88,7 @@ After installation, the following are available:
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
 /gbase:go                      # Polish → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
+/gbase:pr-verify <pr>          # Verify a PR's behavior + design in the browser via Claude-in-Chrome (skill)
 ```
 
 ## License
