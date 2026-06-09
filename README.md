@@ -20,7 +20,7 @@ Or browse interactively with `/plugin` and go to the **Discover** tab.
 
 ### gbase
 
-Core productivity tools for Claude Code — skill discovery and automated branch/PR workflows.
+Core productivity tools for Claude Code — skill discovery, autonomous branch/PR workflows, and backward-compat deploy-order checks.
 
 **find-skills** — Discover and install Claude Code skills matching your project's tech stack.
 
@@ -29,13 +29,21 @@ Core productivity tools for Claude Code — skill discovery and automated branch
 - Recommends skills ranked by relevance
 - Handles installation with proper agent scoping
 
-**branch-pr** — Automate branch creation, intelligent commit grouping, and PR generation from current changes.
+**branch-pr** — Automate branch creation, intelligent commit grouping, and PR generation from current changes. **Runs fully autonomously** — invoking it is the go-ahead to branch, commit, push, and open the PR without step-by-step confirmation.
 
 - Analyzes current git changes
-- Creates a properly named branch
-- Groups files into logical commits (by layer, feature, or change type)
-- Generates a PR with summary, changes, and test plan
-- Includes safety rails and backup/recovery at every step
+- Decides the branch name and commit grouping itself (by layer, feature, or change type) — no "confirm?" prompts
+- Pushes and opens a PR with summary, changes, and test plan
+- Calls **compat-check** before opening the PR; injects a `## Rollout / Deploy order` section when a sequenced rollout is needed
+- Stops only for the narrow "ask only when necessary" cases: a secret in the diff, unrelated WIP mixed in, an ambiguous PR split, a diverged branch, or remote ambiguity
+- Keeps the destructive-command guardrails (no `git reset --hard`, no plain `--force`) and a persistent backup stash
+
+**compat-check** (skill, model-invocable) — Scan a change for backward-compatibility hazards and get the safe deploy/script order.
+
+- Packaged as a Skill (`plugins/base/skills/compat-check/SKILL.md`); read-only — never edits code, runs scripts, or deploys
+- Reads a diff (uncommitted, a commit range, or a PR) and flags **migrations** (column drops, `NOT NULL` without default, type narrowing), **API/contract** changes, **queue/event schema** changes, new required **env/secrets**, **feature flags**, **backfill scripts**, and **cache/serialization** format changes
+- Emits a one-line verdict (`✅ no special ordering` or `⚠️ requires ordered rollout`) and, when needed, a numbered runbook (expand → migrate → backfill → deploy → ramp → follow-up contract PR) with a rollback note, each hazard mapped to `file:line`
+- Auto-invoked by **branch-pr** / **go** to drop a `## Rollout / Deploy order` section into the PR body; also runs standalone via `/gbase:compat-check`
 
 **polish** (skill) — Two-pass behavior-preserving polish on the current diff. Replaces `/simplify` and the bundled `/code-review` for the polish role.
 
@@ -84,7 +92,8 @@ After installation, the following are available:
 
 ```
 /gbase:find-skills             # Discover skills for your project (command)
-/gbase:branch-pr               # Branch + commit + PR from current changes (command)
+/gbase:branch-pr               # Autonomous branch + commit + PR from current changes (command)
+/gbase:compat-check [range]    # Flag backward-compat hazards + emit a deploy-order runbook (skill, model-invocable)
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
 /gbase:go                      # Polish → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)

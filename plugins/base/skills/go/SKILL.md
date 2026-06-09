@@ -55,7 +55,7 @@ If Step 1 found uncommitted changes — or if polish introduced new ones — imm
 Skill(skill: "gbase:branch-pr")
 ```
 
-That skill owns the rest: status analysis, backup stash, branch suggestion (confirmed with `AskUserQuestion`), branch creation, commit grouping (confirmed with `AskUserQuestion`), sequential commits, `git push -u origin`, `gh pr create`, and optional backup cleanup.
+That skill owns the rest and runs **fully autonomously** — it decides the branch name, commit grouping, and PR body itself, pushes, and opens the PR without step-by-step confirmation, stopping only for its narrow "ask only when necessary" cases (secret in the diff, unrelated WIP, ambiguous PR split, remote ambiguity). As part of PR creation it invokes `gbase:compat-check` on the change; if a sequenced rollout is needed (migration-before-deploy, new required env, etc.), it injects a `## Rollout / Deploy order` section into the PR body and flags it to you.
 
 All safety rules from `gbase:branch-pr` apply unchanged — `go` is a pure wrapper.
 
@@ -106,8 +106,8 @@ Running /gbase:polish on these files…
 [structural pass inlines a single-caller helper in route.ts]
 
 Polish done. Proceeding to /gbase:branch-pr.
-Suggested branch: feat/user-profile — confirm?
-…
+Branch: feat/user-profile → committed, pushed (no confirmation needed).
+compat-check: ✅ no special deploy ordering.
 [branch-pr opens PR #142]
 
 Proceeding to /gbase:monitor for PR #142.

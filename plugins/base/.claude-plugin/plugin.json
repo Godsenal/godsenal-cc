@@ -1,7 +1,7 @@
 {
   "name": "gbase",
-  "version": "1.9.0",
-  "description": "Core productivity tools for Claude Code — skill discovery, automated branch/PR workflows, two-pass diff polish (3-lens fan-out + structural), one-shot polish+PR+monitor, CI/review monitoring, and browser-driven PR verification",
+  "version": "1.10.0",
+  "description": "Core productivity tools for Claude Code — skill discovery, fully-autonomous branch/PR workflows, backward-compat deploy-order checks, two-pass diff polish (3-lens fan-out + structural), one-shot polish+PR+monitor, CI/review monitoring, and browser-driven PR verification",
   "author": {
     "name": "godsenal",
     "url": "https://github.com/Godsenal"
@@ -29,6 +29,11 @@
     "browser",
     "chrome",
     "figma",
-    "design-review"
+    "design-review",
+    "compat-check",
+    "backward-compatibility",
+    "rollout",
+    "deploy-order",
+    "migration"
   ]
 }
