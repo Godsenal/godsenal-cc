@@ -57,7 +57,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 **go** (skill) — Wrap up a working session in one shot: `polish` → `branch-pr` → `monitor`.
 
 - Packaged as a Skill (`plugins/base/skills/go/SKILL.md`), not a legacy command
-- `disable-model-invocation: true` — only triggers when you explicitly invoke `/gbase:go`; Claude won't auto-run it
+- Model-invocable — you can invoke `/gbase:go` explicitly, or Claude may auto-trigger it when you signal a change is done and want it shipped (sub-steps keep their own consent/safety gates)
 - Invokes `/gbase:polish` (deslop + structural) on the current diff (or the latest commit if the tree is clean)
 - Then invokes `/gbase:branch-pr` for the full flow (backup → branch → grouped commits → push → PR)
 - Then hands off to `/gbase:monitor` to babysit CI + reviews until the PR is merged or closed
@@ -66,7 +66,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 **monitor** (skill) — Subscribe to the current branch's PR and keep it moving until merge/close.
 
 - Packaged as a Skill (`plugins/base/skills/monitor/SKILL.md`)
-- `disable-model-invocation: true` — only triggers via `/gbase:monitor` or as the tail of `/gbase:go`
+- Model-invocable — triggers via `/gbase:monitor`, as the tail of `/gbase:go`, or when Claude judges you want a PR watched until merge (auto-triggering only starts the watch loop; ambiguous items still gate through `AskUserQuestion`)
 - Resolves the PR via `gh`, sweeps current CI + reviews, then starts a persistent `Monitor` polling every 30s
 - Auto-fixes clear CI failures (lint, format, type, unused imports) and applies clearly-required review comments (suggested diff blocks, typos, dead code)
 - Resolves safe merge conflicts (lockfile regeneration, pure-addition merges, whitespace-only) via rebase + `--force-with-lease`; aborts and surfaces anything semantic

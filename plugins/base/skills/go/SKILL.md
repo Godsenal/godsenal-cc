@@ -1,7 +1,6 @@
 ---
 name: go
-description: "Finish code changes in one shot — run the /gbase:polish skill (deslop + structural pass) on the current diff, run /gbase:branch-pr end-to-end, then hand off to /gbase:monitor to watch CI and reviews until merge. Invoke manually with /gbase:go; do not trigger automatically."
-disable-model-invocation: true
+description: "Finish code changes in one shot — run the /gbase:polish skill (deslop + structural pass) on the current diff, run /gbase:branch-pr end-to-end, then hand off to /gbase:monitor to watch CI and reviews until merge. Invoke manually with /gbase:go, or let the model auto-trigger it when the user signals a change is done and wants it shipped."
 allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Edit Write
 ---
 
@@ -9,7 +8,7 @@ allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Edit Write
 
 Wraps up a working session by running **polish** on recent code (deslop + ambitious structural pass), **branch-pr** to ship it, and **monitor** to babysit CI + reviews until merge. The three steps run back-to-back without extra confirmation between them — each sub-skill's own confirmations still apply.
 
-This skill has `disable-model-invocation: true`: only the user can trigger it via `/gbase:go`, never the model on its own.
+Model-invocable: the user can trigger it via `/gbase:go`, and the model may auto-trigger it when the user signals a chunk of work is finished and wants it shipped (polish → PR → monitor). Because each sub-step (`branch-pr` push/PR, `monitor` auto-fixes) carries its own consent and safety rules, those still gate the side effects — `go` itself just sequences them.
 
 ## Flow
 

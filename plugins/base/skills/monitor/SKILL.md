@@ -1,6 +1,6 @@
 ---
 name: monitor
-description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), surface testable preview/deploy links from CI/bot comments, and run /gbase:polish on every non-trivial auto-edit before committing. Ask on ambiguous ones. Invoke manually with /gbase:monitor or chained from /gbase:go; do not trigger automatically."
+description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), surface testable preview/deploy links from CI/bot comments, and run /gbase:polish on every non-trivial auto-edit before committing. Ask on ambiguous ones. Invoke manually with /gbase:monitor, chained from /gbase:go, or auto-triggered when the user wants a PR babysat until it merges; the persistent Monitor and AskUserQuestion gates keep it from acting unilaterally on anything ambiguous."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
@@ -10,7 +10,7 @@ Subscribe to the current branch's PR and keep it moving until it merges or close
 
 Reviewer-agnostic: human reviewers, code review bots, and CI assistants go through the same classification. Identity matters for the *reply target*, not for whether to engage.
 
-Invoke explicitly via `/gbase:monitor` or as the tail of `/gbase:go`.
+Model-invocable: invoke explicitly via `/gbase:monitor`, as the tail of `/gbase:go`, or let the model trigger it when the user asks to keep a PR moving until merge. The persistent `Monitor` and the `AskUserQuestion` gates on ambiguous items mean auto-triggering only starts the watch loop — it never green-lights a unilateral edit, merge, or force-push.
 
 ## Safety rules
 
