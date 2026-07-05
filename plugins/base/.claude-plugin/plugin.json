@@ -1,7 +1,7 @@
 {
   "name": "gbase",
-  "version": "1.11.0",
-  "description": "Core productivity tools for Claude Code — skill discovery, fully-autonomous branch/PR workflows, backward-compat deploy-order checks, two-pass diff polish (3-lens fan-out + structural), one-shot polish+PR+monitor, CI/review monitoring, and browser-driven PR verification",
+  "version": "1.12.0",
+  "description": "Core productivity tools for Claude Code — skill discovery, fully-autonomous branch/PR workflows, backward-compat deploy-order checks, two-pass diff polish (3-lens fan-out + structural), one-shot polish+PR+monitor, CI/review monitoring, browser-driven PR verification, and one-command Karpathy CLAUDE.md guidelines merge",
   "author": {
     "name": "godsenal",
     "url": "https://github.com/Godsenal"
@@ -34,6 +34,10 @@
     "backward-compatibility",
     "rollout",
     "deploy-order",
-    "migration"
+    "migration",
+    "karpathy",
+    "claude-md",
+    "guidelines",
+    "agent-rules"
   ]
 }
