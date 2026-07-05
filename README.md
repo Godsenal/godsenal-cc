@@ -12,6 +12,9 @@ Inside Claude Code, run these slash commands:
 
 # 2. Install the gbase plugin (includes all commands)
 /plugin install gbase@godsenal
+
+# (optional) Install the gapp plugin — app-building harness
+/plugin install gapp@godsenal
 ```
 
 Or browse interactively with `/plugin` and go to the **Discover** tab.
@@ -86,6 +89,26 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Never enters credentials — on a login wall it pauses and asks you to sign in manually; never clicks destructive controls on the preview
 - Surfaces ambiguity (which preview, vague requirements, writes needed, login, whole-file Figma links) via `AskUserQuestion`
 
+### gapp
+
+App-building harness — takes a raw app idea all the way to an App Store submission, one skill per stage. Every stage reads/writes `docs/HARNESS.md` (a living pipeline document), and every stage **auto-continues into the next one** unless the user says stop — you should never wonder "what do I run now". Distilled from shipping a real Expo + Supabase app (somandlee) end to end. Delegates to best-in-class skills when installed (gstack `office-hours` for idea validation, gstack `design-consultation` + taste skills for design) instead of reimplementing them.
+
+Pipeline:
+
+| Stage | Skill | What it does |
+|---|---|---|
+| 0 | **kickoff** | Office-hours-style idea interview (delegates to gstack `office-hours` if installed) — locks product/stack/design-direction/backend decisions, always fetching the *current* latest Expo SDK instead of trusting memory; creates `docs/HARNESS.md`, then flows straight into scaffold |
+| 1 | **scaffold** | Expo project setup with battle-tested conventions: versioned-docs-only rule in the new repo's CLAUDE.md, bootstrap import order, `EXPO_PUBLIC_*` env discipline (never throw on missing config), pure-core + thin-IO test layout, DevMenu with state-reset + demo-seed actions, `theme/tokens.ts` skeleton |
+| 2 | **design** | Design decision session using gstack `design-consultation`, taste skills, and `mobile-app-ui-design` (prompts installation if missing) — locks aesthetic/typography/color/spacing into real token values + `DESIGN.md`; enforces Korean-app font rules (no system-ui fallback) |
+| 3 | **backend** | Supabase setup with the proven security model: RLS-gated reads, `security definer` RPCs for privileged writes (with mandatory permission pre-check — a recurring real-world bug), private storage + signed URLs only, `service_role` in Edge Functions only, append-only migrations, local-first/cloud-canonical sync with a `pending_ops` offline retry queue, plus a cloud integration smoke-test script |
+| 4 | **cicd** | GitHub Actions + EAS: PR/main CI, main-push = OTA update, `v*` tag = native build + auto-submit, Supabase deploy on `supabase/**` — ships four generalized workflow templates (in `references/`) and walks the one-time setup checklist (secrets, channel↔branch link, submit credentials, branch protection) |
+| 5 | **landing** | Marketing/landing site in the app monorepo's `web/` (static-first, Vercel Root=web, cleanUrls rewrite gotcha) — produces the privacy-policy and support URLs that store submission hard-requires |
+| loop | **deploy** | The deploy runbook for the ongoing dev loop: auto-decides OTA vs native build from the diff (fingerprint runtime policy), runs preflight before native builds, executes with a single confirm gate before the irreversible trigger, and always reports what still needs a human (Apple review submission) |
+| gate | **preflight** | Pre-release checklist gate: code (typecheck/test/expo-doctor/leftover temp code), backend (Supabase advisors/RLS pre-checks/smoke test/service_role leak grep), config (version bump, permission strings, secrets in history, channel link), store (privacy URL live, screenshot specs, metadata-vs-app consistency, demo account). PASS/FAIL table; fixes small FAILs itself |
+| 6 | **store-assets** | Simulator-only App Store screenshots (preview-simulator build, demo-data seeding, screen forcing via Fast Refresh, dev-FAB removal via `simctl defaults`, `sips` resizing/padding) + complete store metadata doc (name/subtitle/keywords/privacy answers/age rating drafts) |
+| 7 | **store-submit** | Claude-in-Chrome automation of App Store Connect: screenshot upload via ngrok tunnel + `DataTransfer` injection (native file dialogs and localhost fetch are both dead ends), React form filling via prototype setters, privacy/age-rating wizard loops (45s CDP timeout aware), and a human confirm gate before the final Submit-for-Review click; never touches Apple credentials |
+| any | **next** | The resume button: reads `HARNESS.md`, reconciles it against actual repo state, then **runs** the next stage (not just a report) — the answer to "what do I do now?" |
+
 ## Usage
 
 After installation, the following are available:
@@ -98,6 +121,18 @@ After installation, the following are available:
 /gbase:go                      # Polish → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
 /gbase:pr-verify <pr>          # Verify a PR's behavior + design in the browser via Claude-in-Chrome (skill)
+
+/gapp:kickoff                  # New app idea → office-hours interview → decisions + HARNESS.md
+/gapp:next                     # Resume: where am I? → runs the next stage automatically
+/gapp:scaffold                 # Expo project setup (latest SDK, conventions, CLAUDE.md)
+/gapp:design                   # Design decision session → tokens + DESIGN.md (taste skills)
+/gapp:backend                  # Supabase backend with the proven security model
+/gapp:cicd                     # GitHub Actions + EAS pipeline (OTA on main, build on v* tags)
+/gapp:landing                  # Marketing site + privacy/support URLs (store prerequisites)
+/gapp:deploy                   # Deploy runbook — auto-decides OTA vs native build
+/gapp:preflight                # Pre-release checklist gate (code/backend/config/store)
+/gapp:store-assets             # Simulator screenshots + store metadata
+/gapp:store-submit             # App Store Connect submission via Claude-in-Chrome
 ```
 
 ## License

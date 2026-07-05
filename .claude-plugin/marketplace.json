@@ -11,8 +11,20 @@
       "name": "gbase",
       "description": "Core productivity tools — base plugins",
       "version": "1.11.0",
-      "author": { "name": "godsenal" },
+      "author": {
+        "name": "godsenal"
+      },
       "source": "./plugins/base",
+      "category": "productivity"
+    },
+    {
+      "name": "gapp",
+      "description": "App-building harness — idea intake to App Store submission, stage by stage",
+      "version": "1.1.0",
+      "author": {
+        "name": "godsenal"
+      },
+      "source": "./plugins/app",
       "category": "productivity"
     }
   ]

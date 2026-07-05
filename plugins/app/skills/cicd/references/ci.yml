@@ -1,0 +1,54 @@
+# 품질 게이트 — 시크릿 불필요. 모든 PR·main push에서 타입체크·테스트를 강제한다.
+# [템플릿] NODE_VERSION을 프로젝트 값으로 치환. 모노레포면 paths-ignore에 앱 무관 경로 추가.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 같은 브랜치/PR에서 새 push가 오면 이전 실행은 취소(러너 낭비 방지).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: NODE_VERSION
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test -- --ci
+
+  doctor:
+    name: expo-doctor (정보성)
+    runs-on: ubuntu-latest
+    # 게이트가 아니라 헬스체크 — 실패해도 CI를 막지 않는다.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: NODE_VERSION
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: expo-doctor
+        run: npx expo-doctor

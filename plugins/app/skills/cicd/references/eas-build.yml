@@ -1,0 +1,82 @@
+# 네이티브 빌드(+스토어 제출) — 릴리스 태그 push가 트리거.
+#   git tag v1.0.1 && git push --tags  →  production 빌드(iOS+Android) + 스토어 자동 제출
+# 수동 빌드는 Actions 탭의 "Run workflow"(workflow_dispatch)로 프로파일/플랫폼 선택.
+#
+# 참고: 매 main 머지마다 네이티브 빌드를 원하면 아래 on:을 push branches:[main]으로 바꾸면 된다.
+# 다만 iOS 빌드는 1회 20~40분 + 크레딧 소모라 릴리스 태그 방식을 권장.
+# [템플릿] NODE_VERSION 치환. --auto-submit은 eas.json submit 자격증명 세팅 후에만 성공.
+name: EAS Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 빌드 프로파일
+        type: choice
+        default: production
+        options: [production, preview]
+      platform:
+        description: 대상 플랫폼
+        type: choice
+        default: all
+        options: [all, ios, android]
+      submit:
+        description: 빌드 후 스토어 제출
+        type: boolean
+        default: false
+
+concurrency:
+  group: eas-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: eas build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: NODE_VERSION
+          cache: npm
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # 트리거별 파라미터 결정: 태그 push는 항상 production/all/제출, dispatch는 입력값.
+      - name: Resolve build params
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            { echo "profile=production"; echo "platform=all"; echo "submit=true"; } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "profile=${{ inputs.profile }}"
+              echo "platform=${{ inputs.platform }}"
+              echo "submit=${{ inputs.submit }}"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      # --auto-submit은 eas.json의 submit.production 설정을 사용(iOS: ASC API key / Android: 서비스계정).
+      # 자격증명 준비 전이면 빌드는 성공, 제출만 실패.
+      - name: Build
+        run: |
+          SUBMIT_FLAG=""
+          if [ "${{ steps.params.outputs.submit }}" = "true" ]; then
+            SUBMIT_FLAG="--auto-submit"
+          fi
+          eas build \
+            --platform "${{ steps.params.outputs.platform }}" \
+            --profile "${{ steps.params.outputs.profile }}" \
+            --non-interactive \
+            $SUBMIT_FLAG

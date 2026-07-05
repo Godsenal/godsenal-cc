@@ -1,0 +1,45 @@
+# OTA(EAS Update) — main에 JS/설정 변경이 머지되면 production 채널로 즉시 반영.
+# 네이티브 빌드가 필요 없는 대부분의 변경이 여기서 커버된다(빠르고 저렴).
+# 전제: production 채널 ↔ main 브랜치 링크 1회 필요(eas channel:edit production --branch main).
+# [템플릿] NODE_VERSION 치환. 백엔드/웹 디렉토리가 있으면 paths-ignore에 추가.
+name: EAS Update (OTA)
+
+on:
+  push:
+    branches: [main]
+    # 문서·백엔드·CI 자체 변경은 OTA 불필요 → 건너뜀.
+    paths-ignore:
+      - docs/**
+      - supabase/**
+      - .github/**
+      - '**.md'
+
+concurrency:
+  group: eas-update-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: publish update
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: NODE_VERSION
+          cache: npm
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # --auto: 브랜치=현재 git 브랜치(main), 메시지=커밋 메시지.
+      - name: Publish update
+        run: eas update --auto --non-interactive

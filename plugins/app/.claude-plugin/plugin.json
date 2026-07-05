@@ -1,0 +1,33 @@
+{
+  "name": "gapp",
+  "version": "1.1.0",
+  "description": "App-building harness for Claude Code — idea intake (office-hours style), Expo scaffold with latest-SDK discipline, design decision sessions (taste skills), Supabase backend security model, EAS CI/CD, landing site + store prerequisites, OTA-vs-native deploy runbook, pre-release preflight gate, simulator screenshot pipeline, and Claude-in-Chrome App Store Connect submission automation. Each stage is a separate skill that auto-continues to the next; docs/HARNESS.md tracks progress across sessions and /gapp:next resumes anywhere.",
+  "author": {
+    "name": "godsenal",
+    "url": "https://github.com/Godsenal"
+  },
+  "repository": "https://github.com/Godsenal/godsenal-cc",
+  "license": "MIT",
+  "keywords": [
+    "app",
+    "expo",
+    "react-native",
+    "eas",
+    "supabase",
+    "harness",
+    "scaffold",
+    "office-hours",
+    "design",
+    "ci-cd",
+    "ota",
+    "deploy",
+    "app-store",
+    "app-store-connect",
+    "screenshots",
+    "submission",
+    "browser-automation",
+    "landing-page",
+    "preflight",
+    "release-checklist"
+  ]
+}

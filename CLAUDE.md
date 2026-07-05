@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Claude Code plugin marketplace (`godsenal`) containing the `gbase` plugin. No build step, no dependencies — plugins are pure markdown skill definitions.
+A Claude Code plugin marketplace (`godsenal`) containing the `gbase` and `gapp` plugins. No build step, no dependencies — plugins are pure markdown skill definitions.
 
 **Naming convention:** Plugin names use a `g` prefix (e.g. `gbase`, `gfe`), while directory names omit it (e.g. `plugins/base/`, `plugins/fe/`).
 
@@ -29,6 +29,21 @@ plugins/
         SKILL.md                   ← pr-verify skill: open a PR's preview links in Claude-in-Chrome and verify behavior + design against PR body / diff / Figma / linked specs; reports to user, read-only on GitHub
       compat-check/
         SKILL.md                   ← compat-check skill: read-only diff analysis for backward-compat hazards (migrations, API/contract, queue schema, env/secrets, flags, backfills) → ordered rollout runbook; auto-invoked by branch-pr/go to inject a Rollout section into the PR body
+  app/                             ← gapp plugin: app-building harness (idea → App Store submission)
+    .claude-plugin/plugin.json
+    skills/                        ← every stage updates docs/HARNESS.md and auto-continues to the next stage ("이어달리기 규칙" in kickoff/SKILL.md)
+      kickoff/SKILL.md             ← office-hours idea interview (delegates to gstack office-hours if installed) → decisions + docs/HARNESS.md
+      scaffold/SKILL.md            ← Expo setup: latest-SDK lookup (never from memory), conventions, new repo's CLAUDE.md
+      design/SKILL.md              ← design decision session via gstack design-consultation + taste/mobile-ui skills (installs if missing) → tokens + DESIGN.md
+      backend/SKILL.md             ← Supabase: RLS + security-definer RPC model, append-only migrations, local-first sync, smoke test
+      cicd/SKILL.md                ← GitHub Actions + EAS pipeline; references/ has 4 generalized workflow templates
+        references/{ci,eas-update,eas-build,supabase-deploy}.yml
+      landing/SKILL.md             ← marketing site in web/ + privacy/support URLs (store submission prerequisites)
+      deploy/SKILL.md              ← OTA-vs-native-build decision runbook, preflight before native builds, single confirm gate
+      preflight/SKILL.md           ← pre-release checklist gate (code/backend/config/store), PASS/FAIL table, fixes small items
+      store-assets/SKILL.md        ← simulator screenshot pipeline + store metadata doc
+      store-submit/SKILL.md        ← Claude-in-Chrome ASC submission (ngrok+DataTransfer upload, React form setters, wizard loops); runs preflight first
+      next/SKILL.md                ← resume button: read HARNESS.md, reconcile with repo state, RUN the next stage (not just report)
 ```
 
 **Marketplace JSON** at root registers plugins with `source` paths pointing to each plugin directory. Commands and skills both surface as `/gbase:<name>` invocations. Skills (`skills/<name>/SKILL.md`) support extra frontmatter that commands don't — notably `disable-model-invocation: true` to prevent Claude from auto-triggering them.
