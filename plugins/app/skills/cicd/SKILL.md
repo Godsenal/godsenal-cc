@@ -14,14 +14,18 @@ description: >-
 
 | 이벤트 | 워크플로 | 동작 | 시크릿 |
 |---|---|---|---|
-| PR → main | `ci.yml` | typecheck + jest + expo-doctor(정보성) | 불필요 |
+| push/PR → main | `ci.yml` | typecheck + jest + expo-doctor(정보성) | 불필요 |
 | push → main (앱 코드) | `eas-update.yml` | `eas update --auto` (OTA) | `EXPO_TOKEN` |
 | push → main (`supabase/**`) | `supabase-deploy.yml` | `db push` + `functions deploy` | Supabase 2종 |
 | tag `v*` push | `eas-build.yml` | production 빌드 iOS+Android + `--auto-submit` | `EXPO_TOKEN` + 제출 자격증명 |
 | 수동 (Run workflow) | `eas-build.yml` | 프로파일/플랫폼 선택 빌드 | 〃 |
 
 이렇게 가르는 이유: OTA는 초단위·무료지만 네이티브를 못 바꾸고, 네이티브 빌드는 20~40분+크레딧.
-그래서 **JS 변경은 main 머지로 즉시, 네이티브는 릴리스 태그로만** 빌드한다.
+그래서 **JS 변경은 main 푸시로 즉시, 네이티브는 릴리스 태그로만** 빌드한다.
+
+**기본 흐름은 직푸시**: 작업 → 버전업 → `git push origin main`이면 Actions가 CI+OTA를 자동 처리한다.
+직푸시해도 `ci.yml`은 그대로 돈다(§2, push·PR 둘 다 트리거). PR·브랜치는 강제가 아니라, 팀이 붙거나
+회귀 위험이 클 때 켜는 선택지다(§3 브랜치 보호). 검증용으로 PR을 일부러 만들 필요 없다.
 
 ## 1. eas.json 프로파일
 
@@ -64,16 +68,17 @@ description: >-
 - [ ] **스토어 제출 자격증명**: iOS는 ASC API key를 EAS에 업로드(`eas credentials`), Android는
   Play 서비스계정 JSON. **준비 전이어도 빌드는 성공하고 제출만 실패**하므로 뒤로 미뤄도 됨 —
   미룬 경우 HARNESS.md에 TODO로 남긴다.
-- [ ] **main 브랜치 보호** — CI 통과를 머지 조건으로. 배포 워크플로는 push→main에 바로 반응하므로
-  "검증 후 머지"의 실질 게이트는 브랜치 보호다.
+- [ ] **main 브랜치 보호 (선택 — 기본은 끄고 직푸시)** — 혼자 빠르게 갈 땐 보호 없이
+  `git push origin main`이 기본 흐름이다. 팀이 붙거나 회귀 위험이 커지면 그때 켜서 PR+CI 통과를
+  머지 조건으로 걸어라 — 배포 워크플로는 push→main에 바로 반응하므로 이때 실질 게이트가 된다.
 
 ## 4. 검증
 
 ```bash
 npm run typecheck && npm test && npx expo-doctor   # CI와 동일 명령 로컬 확인
 ```
-- 브랜치 하나로 PR → Actions에서 CI 통과 확인
-- 사소한 앱 코드 변경을 main 머지 → `eas branch:view main`에 업데이트 게시 확인
+- main에 직푸시 → Actions에서 CI 통과 확인 (검증용 PR 따로 만들 필요 없다; 원하면 PR로도 가능)
+- 사소한 앱 코드 변경을 main 푸시 → `eas branch:view main`에 업데이트 게시 확인
 - (백엔드) supabase/** 변경 머지 → db push 로그 확인, 스모크 테스트 스크립트 실행
 - 첫 네이티브 빌드는 태그 대신 `workflow_dispatch`(submit=false)로 안전하게 리허설 가능
 
