@@ -26,7 +26,7 @@ Default target:
 ```bash
 git status --short
 git diff --stat HEAD
-git diff --stat origin/main...HEAD   # if branched
+git diff --stat @{upstream}...HEAD   # if branched (no upstream: main...HEAD, then HEAD~1)
 ```
 
 - **Uncommitted changes present** → target those files.
@@ -78,6 +78,7 @@ Agent C — clarity & efficiency lens
 - Unnecessary work in hot paths (recomputing in loops, O(n²) where O(n) is trivial, sync I/O in async paths, eager evaluation of unused branches)
 - `await` inside loops where `Promise.all` is correct
 - Cheap-but-impactful perf wins: memoization candidates, redundant DOM reads, repeated `JSON.parse` of the same payload
+- Long-lived objects built from closures or captured environments — they keep the whole enclosing scope alive for the object's lifetime (a memory leak when that scope holds large values); prefer a class/struct that copies only the fields it needs
 
 ### Resolution step (main agent)
 
@@ -108,6 +109,7 @@ Runs after Pass 1 lands. Single-agent — Pass 2 needs whole-diff context and sh
 - Conditional growth that signals a missing data structure (state machine, lookup table, polymorphism)
 - Files growing past ~500 lines that should split by responsibility
 - Coupling between modules that should be unidirectional
+- Changes made at the wrong altitude — special cases layered on shared infrastructure instead of a fix in the underlying mechanism; prefer generalizing one level down over stacking band-aids
 - Names that no longer match what the code does
 
 **Guardrails:**
@@ -128,7 +130,7 @@ After Pass 1 and again after Pass 2, run the lightest available correctness chec
 - If a focused test suite exists for the touched files, run it
 - If nothing applies, skip — don't invent a check
 
-If verification fails, **revert the offending edit** (`git checkout -- <file>` for uncommitted, or surgical undo in the editor) and report it in the output. Never push through a verification failure.
+If verification fails, **revert the offending edit by reversing it with `Edit`** — apply the exact `after → before` of the proposal you landed — and report it in the output. Never revert with `git checkout --` / `git restore`: polish usually edits on top of the user's uncommitted changes, and those commands wipe the user's work together with yours. Never push through a verification failure.
 
 ## Output
 

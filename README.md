@@ -63,14 +63,15 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Model-invocable — you can invoke `/gbase:go` explicitly, or Claude may auto-trigger it when you signal a change is done and want it shipped (sub-steps keep their own consent/safety gates)
 - Invokes `/gbase:polish` (deslop + structural) on the current diff (or the latest commit if the tree is clean)
 - Then invokes `/gbase:branch-pr` for the full flow (backup → branch → grouped commits → push → PR)
-- Then hands off to `/gbase:monitor` to babysit CI + reviews until the PR is merged or closed
-- Inherits all `branch-pr` safety rules — no force push, no hard reset, step-by-step confirmation
+- Then hands off to `/gbase:monitor` to babysit CI + reviews until the PR is merged or closed — including a post-PR **self-review** of the fresh PR, so review never slows the path to PR (`--no-review` to skip, `--draft` to open as a draft that flips to ready once CI is green and the review is resolved)
+- Inherits all `branch-pr` safety rules — no force push, no hard reset; runs autonomously, stopping only for branch-pr's narrow "ask only when necessary" cases
 
 **monitor** (skill) — Subscribe to the current branch's PR and keep it moving until merge/close.
 
 - Packaged as a Skill (`plugins/base/skills/monitor/SKILL.md`)
 - Model-invocable — triggers via `/gbase:monitor`, as the tail of `/gbase:go`, or when Claude judges you want a PR watched until merge (auto-triggering only starts the watch loop; ambiguous items still gate through `AskUserQuestion`)
 - Resolves the PR via `gh`, sweeps current CI + reviews, then starts a persistent `Monitor` polling every 30s
+- Runs one **self-review** of the PR (built-in `code-review`) right after the watch starts — it runs inside the CI wait the PR already pays, so it costs the ship path nothing; clear findings are auto-fixed in their own commits, the rest come back as a severity-ordered report; nothing is posted to GitHub (`--no-review` to skip; with `--draft`, flips the draft PR to ready once CI is green and the review is resolved)
 - Auto-fixes clear CI failures (lint, format, type, unused imports) and applies clearly-required review comments (suggested diff blocks, typos, dead code)
 - Resolves safe merge conflicts (lockfile regeneration, pure-addition merges, whitespace-only) via rebase + `--force-with-lease`; aborts and surfaces anything semantic
 - Runs `/gbase:polish` on touched files before each auto-fix commit (skipped for pure lint/format output, verbatim `suggestion` block application, lockfile regen, and whitespace-only conflict resolution where polish would be a no-op)

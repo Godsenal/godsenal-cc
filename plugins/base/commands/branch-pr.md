@@ -68,6 +68,10 @@ Analyze changed files and compile the following:
 - Change type for each file (modified/added/deleted)
 - Logical grouping of files (by directory/feature)
 
+**Nothing to ship** (clean tree — no modified, staged, or untracked files) → stop here and tell the user.
+Do not proceed to Step 2: the backup `git stash push` would create nothing, and the `git stash apply`
+that follows would resurrect whatever unrelated stash the user already had at `stash@{0}`.
+
 ### Step 2: Create Backup
 
 Always create a backup before starting:
@@ -77,10 +81,16 @@ Always create a backup before starting:
 git stash push -m "branch-pr-backup-$(date +%Y%m%d-%H%M%S)" --include-untracked
 ```
 
-Then reapply the changes while **keeping** the stash as a persistent backup (`apply`, not `pop`):
+Confirm the backup was actually created, then reapply the changes while **keeping** the stash as a
+persistent backup (`apply`, not `pop`):
+
 ```bash
+git stash list | head -1   # must show the branch-pr-backup message you just wrote
 git stash apply
 ```
+
+If `git stash push` printed `No local changes to save` (Step 1 should have already stopped you), **do not
+run `git stash apply`** — with no fresh backup on the stack it would apply an unrelated, pre-existing stash.
 
 The stash stays in the list (as `stash@{0}`) so it remains a real recovery point through the rest of the
 run. Recover anytime with `git stash apply` / inspect with `git stash list`.
@@ -171,7 +181,8 @@ Skill(skill: "gbase:compat-check", args: "origin/<default-branch>...HEAD")
   body (below) and print its one-line summary to the user as a heads-up.
 - If it returns `✅`, omit the section entirely and say nothing extra.
 
-Then create the PR:
+Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
+`gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
 
 ```bash
 gh pr create --title "<PR title>" --body "$(cat <<'EOF'
@@ -204,7 +215,7 @@ On any error:
 1. Stop all operations immediately
 2. Print current state (`git status`)
 3. Provide recovery instructions:
-   - "To restore from backup: `git stash pop`"
+   - "To restore from backup: `git stash apply stash@{0}` (apply, not pop — keep the backup for another try)"
    - "To delete the branch: `git checkout main && git branch -D <branch-name>`"
 
 ## Usage Example
