@@ -37,6 +37,8 @@ description: >-
 - `preview`: internal 배포용, `channel: preview`
 - `production`: `autoIncrement: true`, `channel: production`
 - 각 프로파일 `env` 블록에 `EXPO_PUBLIC_*` 주입 (백엔드 있으면 URL/anon key)
+- 각 프로파일 `env`에 `APP_VARIANT`(development/preview/production) 주입 — scaffold의 `app.config.js`와
+  짝을 이뤄 변형별 번들 ID 공존을 만든다. `preview-simulator`는 development 상속으로 자동 해결
 - `node` 버전을 프로파일에 고정하고 **같은 값을 워크플로 NODE_VERSION에** 쓴다
 - `submit.production`: iOS `appleTeamId`/`ascAppId`(ASC 앱 레코드 생성 후), Android 서비스계정 경로
 - `cli.appVersionSource: "remote"` — 빌드 번호를 EAS가 관리
@@ -50,6 +52,9 @@ description: >-
   (함수 없으면 해당 step 삭제)
 - 모노레포/웹 디렉토리가 있으면 `ci.yml`·`eas-update.yml`의 paths-ignore에 추가
 - 템플릿 헤더의 `[템플릿]` 주석 줄은 치환 후 삭제
+- `eas-update.yml`은 OTA를 러너에서 로컬 평가하므로 eas.json env가 안 먹는다 → 템플릿이 job에
+  `env.APP_VARIANT: production`을 박아둔다(fingerprint 런타임 버전이 프로덕션 빌드와 일치해야 업데이트
+  적용). 변형/번들ID 규칙을 바꿨으면 이 값도 같이 확인
 - 가능하면 `actionlint`로 YAML 검증
 
 템플릿이 오래됐을 수 있다 — action 메이저 버전(expo-github-action, setup-node 등)이 의심되면

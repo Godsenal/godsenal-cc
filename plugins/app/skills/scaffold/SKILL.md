@@ -33,6 +33,9 @@ cd <app-name> && git init  # create-expo-app이 이미 했으면 생략
 `scheme`(딥링크), `runtimeVersion: { "policy": "fingerprint" }` (OTA 안전판정의 전제 — deploy가
 이 정책에 의존), `updates.url`은 EAS 프로젝트 생성 후 자동 주입.
 
+번들 ID는 **base 하나만** 정하면 된다 — dev/preview/prod를 한 기기에 공존시키는 변형별 접미사는
+§2의 `app.config.js` 오버레이가 처리한다(처음부터 깔아라 — 나중에 소급하면 스토어 값이 얽힌다).
+
 ## 2. 검증된 컨벤션 이식 (petstagram에서 배운 것들)
 
 ### 부트스트랩 순서 (어기면 런타임에서만 터짐)
@@ -68,6 +71,27 @@ import 'react-native-gesture-handler';    // 제스처 — 최상단 아니면 �
 ### 디자인 시스템 자리 잡기
 `theme/tokens.ts` 파일만 골격으로 생성(색/타이포/스페이싱 + `withOpacity(color, a)` 헬퍼 — 수동
 rgba 복사 금지 규칙). 실제 값 채우기는 design 단계. **인라인 hex 금지** 규칙을 CLAUDE.md에.
+
+### 앱 변형(variant) — 한 기기에 dev/preview/prod 공존
+셋이 같은 번들 ID면 iOS가 같은 앱으로 보고 서로 덮어써 공존이 안 된다(스토어 앱 위에 dev/preview를 못
+깐다). 정적 `app.json`은 **production 기준값만** 담고, `app.config.js`(동적)로 오버레이해 `APP_VARIANT`에
+따라 접미사를 붙인다 — Expo 공식 "multiple app variants" 패턴(쓰기 전 버전 고정 문서 확인):
+
+| APP_VARIANT | 번들 ID / android.package | scheme | 표시 이름 |
+|---|---|---|---|
+| production(기본·미설정) | `com.you.app` (접미사 없음 — 스토어 값 불변) | `app` | 앱 |
+| preview | `com.you.app.preview` | `apppreview` | 앱 Preview |
+| development | `com.you.app.dev` | `appdev` | 앱 Dev |
+
+`app.config.js`는 `module.exports = ({ config }) => ({ ...config, ... })`로 app.json을 스프레드하고 위
+필드만 덮는다(`config`는 inner expo 객체). 주입: **EAS는 eas.json 프로파일 `env.APP_VARIANT`**(cicd 단계),
+**로컬은 package.json 스크립트**(`"start": "APP_VARIANT=development expo start"`). 함정 둘:
+- **딥링크 스킴 하드코딩**: URL 파싱이 `/^myscheme:\/\//`처럼 스킴을 박아 벗기면 변형 스킴에서 깨진다 →
+  `/^[a-z0-9.+-]+:\/\//i`로 스킴 무관하게 벗겨라.
+- **앱 확장(위젯 등)**: 확장 번들 ID는 메인의 자식(`<bundleId>.widget`)이어야 하니 변형에 맞춰 같이
+  분기하고 EAS provisioning 값(`extra.eas.build.experimental.ios.appExtensions`)도 맞춘다. App Group이
+  네이티브(Swift)에 하드코딩돼 있으면 변형끼리 **공유**가 저위험 — 하나의 App Group을 여러 App ID가
+  선언하는 건 앱↔위젯 공유와 동일한 정상 패턴이라 공존을 막지 않는다(완전 격리는 네이티브 동적화 후속작업).
 
 ## 3. dev client vs Expo Go 판정
 

@@ -22,6 +22,11 @@ jobs:
   update:
     name: publish update
     runs-on: ubuntu-latest
+    # OTA는 스토어(production) 빌드에 도달해야 한다. app.config.js가 APP_VARIANT로 번들 ID·스킴을 분기하고
+    # runtimeVersion=fingerprint가 그 config를 지문에 포함 → 지문이 프로덕션 빌드와 일치해야 업데이트가
+    # 적용된다. eas.json env는 EAS 빌드에만 적용되므로 여기서 명시 주입. (변형 미사용 프로젝트여도 무해)
+    env:
+      APP_VARIANT: production
     steps:
       - uses: actions/checkout@v4
 
