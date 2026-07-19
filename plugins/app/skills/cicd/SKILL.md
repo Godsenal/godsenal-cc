@@ -45,7 +45,8 @@ description: >-
 
 ## 2. 워크플로 설치
 
-이 스킬 디렉토리의 `references/` 템플릿 4개를 `.github/workflows/`로 복사 후 치환:
+이 스킬 디렉토리의 `references/` 워크플로 4개를 `.github/workflows/`로,
+`check-ota-compat.mjs`는 `scripts/`로 복사 후 치환:
 
 - `ci.yml`, `eas-update.yml`, `eas-build.yml`: `NODE_VERSION` → eas.json과 동일 값
 - `supabase-deploy.yml` (백엔드 있을 때만): `SUPABASE_PROJECT_REF`, `EDGE_FUNCTION_NAME` 치환
@@ -55,11 +56,40 @@ description: >-
 - `eas-update.yml`은 OTA를 러너에서 로컬 평가하므로 eas.json env가 안 먹는다 → 템플릿이 job에
   `env.APP_VARIANT: production`을 박아둔다(fingerprint 런타임 버전이 프로덕션 빌드와 일치해야 업데이트
   적용). 변형/번들ID 규칙을 바꿨으면 이 값도 같이 확인
+- `check-ota-compat.mjs`는 치환값 없음 — 그대로 복사(§2.5가 이걸 쓴다)
 - 가능하면 `actionlint`로 YAML 검증
 
 템플릿이 오래됐을 수 있다 — action 메이저 버전(expo-github-action, setup-node 등)이 의심되면
 최신 문서 확인. `expo:expo-cicd-workflows` 스킬이 있으면 EAS 자체 워크플로(.eas/workflows) 방식과
 비교 검토해도 좋다 (기본은 GitHub Actions — 레포 보호규칙·시크릿·타 잡과의 결합이 쉬움).
+
+## 2.5. 네이티브 변경과 OTA — 지문이 갈리면 기존 유저가 끊긴다
+
+`runtimeVersion: fingerprint`(scaffold 기본)에서는 **네이티브에 영향을 주는 변경이 main에 들어가는
+순간 그 이후 모든 OTA가 현재 스토어 유저를 건너뛴다.** 새 빌드가 심사를 통과하고 유저가 앱을
+업데이트할 때까지. 조용히 일어나는 게 진짜 문제다 — 모르면 그 구간에 머지한 픽스가 전부 유실된다.
+
+`scripts/check-ota-compat.mjs`가 현재 지문을 최신 production 빌드의 `runtimeVersion`과 비교해
+두 군데서 알려준다: **PR**(`ci.yml`의 `OTA 호환 (정보성)`)과 **머지 후**(`eas-update.yml` 게시 직전).
+직푸시 흐름이면 후자만 돈다.
+
+**둘 다 게이트가 아니라 알림이다(항상 exit 0).** 일부러 실패시키지 말 것 — PR을 상주 감시하며 CI
+실패를 자동으로 고치는 에이전트가 붙어 있으면 정당한 네이티브 변경을 되돌려버린다. 판단은 사람이:
+
+1. **지금 릴리스할 게 아니면 머지를 미룬다.** PR을 열어둔 채 두면 그동안 다른 JS 변경은 계속 OTA로
+   나간다. 릴리스하기로 한 날 머지하고 곧바로 `v*` 태그를 민다.
+2. **릴리스할 거면 창을 짧게.** 머지 → 태그 → 빌드/제출을 붙여서. 머지만 해놓고 방치하면 그 사이
+   픽스가 전부 기존 유저에게 유실된다.
+3. **창 안에 긴급 픽스가 필요하면 백포트.** 스토어에 나가 있는 커밋에서 브랜치를 따 픽스만
+   cherry-pick하고, `eas-update.yml`을 **Run workflow**로 실행하며 `ref`에 그 브랜치를 넣는다.
+   구 지문 업데이트가 EAS 브랜치 `main`에 하나 더 얹히고, 클라이언트는 자기 런타임에 맞는 최신을
+   받으므로 두 런타임이 공존한다. 로컬에서 직접 `eas update` 하지 말 것(env 주입이 빠진다).
+
+지문을 바꾸는 것들: `app.json`/`app.config.js`, `package.json` 의존성, config plugin, 네이티브 타깃
+소스, `eas.json`, 아이콘·스플래시 에셋.
+
+> 자율 에이전트(loop/워커)가 이 레포에 붙어 있다면 **그 지침에도 같은 규칙을 명시**해야 한다 —
+> "머지 = 배포"를 가정하고 네이티브 변경을 그냥 구현해 PR을 올린다. 릴리스 타이밍은 사람 판단이다.
 
 ## 3. 1회 셋업 체크리스트 (사람 손 필요한 것 — 하나씩 확인받기)
 

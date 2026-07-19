@@ -1,4 +1,5 @@
-# 품질 게이트 — 시크릿 불필요. 모든 PR·main push에서 타입체크·테스트를 강제한다.
+# 품질 게이트 — 모든 PR·main push에서 타입체크·테스트를 강제한다.
+# 시크릿은 OTA 호환 점검(정보성)의 EXPO_TOKEN 하나뿐이고, 없으면 그 잡만 조용히 건너뛴다.
 # [템플릿] NODE_VERSION을 프로젝트 값으로 치환. 모노레포면 paths-ignore에 앱 무관 경로 추가.
 name: CI
 
@@ -33,6 +34,32 @@ jobs:
 
       - name: Test
         run: npm test -- --ci
+
+  # 이 PR이 네이티브 지문(runtimeVersion)을 바꾸는지 머지 전에 알려준다. 지문이 갈리면 이후 OTA가
+  # 현재 스토어 유저에게 안 내려가므로, "지금 머지할지 릴리스까지 미룰지"는 사람이 판단해야 한다.
+  # 정보성 — 스크립트가 항상 exit 0이다(실패로 만들면 자동화가 되돌리려 든다).
+  # 직푸시 흐름이면 이 잡은 안 돌고, eas-update.yml의 같은 점검이 게시 요약에 남는다.
+  ota-compat:
+    name: OTA 호환 (정보성)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: NODE_VERSION
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # 토큰이 없는 레포/포크에서는 조용히 건너뛴다(게이트가 아니므로 막을 이유가 없다).
+      - name: 지문 드리프트 점검
+        if: env.EXPO_TOKEN != ''
+        run: node scripts/check-ota-compat.mjs
 
   doctor:
     name: expo-doctor (정보성)
