@@ -53,6 +53,15 @@ jobs:
           node-version: NODE_VERSION
           cache: npm
 
+      # eas-cli는 로컬 의존성이 아니라 전역 설치다 — 이게 없으면 스크립트가 조회를 건너뛴다.
+      - name: Setup EAS
+        if: env.EXPO_TOKEN != ''
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+
       - name: Install deps
         run: npm ci
 

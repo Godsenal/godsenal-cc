@@ -27,9 +27,15 @@ const PLATFORM = 'ios';
 // 비교하는 게 목적이므로 여기서 못 박는다(워크플로에서 빠뜨려도 틀린 지문을 비교하지 않도록).
 const env = { ...process.env, APP_VARIANT: 'production' };
 
-/** stdout만 캡처하고 진행 로그(stderr)는 그대로 흘린다. --json 계열은 stdout이 순수 JSON이다. */
-function capture(args) {
-  return execFileSync('npx', args, {
+/**
+ * stdout만 캡처하고 진행 로그(stderr)는 그대로 흘린다. --json 계열은 stdout이 순수 JSON이다.
+ *
+ * eas-cli는 로컬 의존성이 아니라 PATH에 전역 설치돼 있다(CI는 expo-github-action이 깐다) →
+ * `npx eas`는 "could not determine executable to run"으로 죽는다. expo-updates는 반대로 로컬
+ * 의존성이라 npx로 부른다.
+ */
+function capture(cmd, args) {
+  return execFileSync(cmd, args, {
     encoding: 'utf8',
     env,
     maxBuffer: 128 * 1024 * 1024, // fingerprint:generate는 소스 목록까지 뱉어서 수십 MB가 될 수 있다.
@@ -43,22 +49,30 @@ function report(lines) {
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${body}\n`);
 }
 
-const localHash = JSON.parse(
-  capture(['expo-updates', 'fingerprint:generate', '--platform', PLATFORM]),
-).hash;
+// 점검은 알림이지 게이트가 아니다 — 지문 계산이든 EAS 조회든 실패해도 CI를 막지 않는다.
+// (막으면 자동화가 "고치려" 들면서 엉뚱한 수정을 낸다. 이 스크립트는 항상 exit 0이어야 한다.)
+let localHash;
+let shipped;
+try {
+  localHash = JSON.parse(
+    capture('npx', ['expo-updates', 'fingerprint:generate', '--platform', PLATFORM]),
+  ).hash;
 
-const builds = JSON.parse(
-  capture([
-    'eas', 'build:list',
-    '--platform', PLATFORM,
-    '--profile', 'production',
-    '--status', 'finished',
-    '--limit', '1',
-    '--non-interactive', '--json',
-  ]),
-);
+  shipped = JSON.parse(
+    capture('eas', [
+      'build:list',
+      '--platform', PLATFORM,
+      '--profile', 'production',
+      '--status', 'finished',
+      '--limit', '1',
+      '--non-interactive', '--json',
+    ]),
+  )[0];
+} catch (err) {
+  report([`ℹ️ OTA 호환 점검을 못 돌렸다 — 건너뜀 (${err.message.split('\n')[0]})`]);
+  process.exit(0);
+}
 
-const shipped = builds[0];
 if (!shipped) {
   report(['ℹ️ 비교할 production 빌드가 없다 — 점검 건너뜀.']);
   process.exit(0);
