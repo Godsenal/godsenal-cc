@@ -48,6 +48,14 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Emits a one-line verdict (`✅ no special ordering` or `⚠️ requires ordered rollout`) and, when needed, a numbered runbook (expand → migrate → backfill → deploy → ramp → follow-up contract PR) with a rollback note, each hazard mapped to `file:line`
 - Auto-invoked by **branch-pr** / **go** to drop a `## Rollout / Deploy order` section into the PR body; also runs standalone via `/gbase:compat-check`
 
+**review** (skill, model-invocable) — Adversarial code review of the current change. Our own replacement for the built-in `code-review` (which is no longer model-invocable), used as the self-review role inside `monitor` / `go`.
+
+- Packaged as a Skill (`plugins/base/skills/review/SKILL.md`); read-only on GitHub — never comments, reviews, replies, or merges
+- **Stage 1 — Find** replicates the built-in `code-review`'s dimensions (correctness & edge cases, bugs/regressions/missing error handling, security & data handling, clarity & consistency, test/doc gaps) with the same high-signal, no-nits bar; fans out to parallel per-dimension sub-agents on non-trivial diffs
+- **Stage 2 — Adversarial verify** hands each candidate to independent skeptics prompted to *refute* it with a concrete counter-scenario; low/medium findings face one skeptic, high/critical ones a 3-skeptic majority panel — anything refuted is dropped, so plausible-but-wrong findings never reach you
+- **Stage 3 — Classify & act**: clear+local survivors are auto-fixed in their own commits (polished first); everything else comes back as a severity-ordered table + `review: F found, R refuted, S survived` tally, with `AskUserQuestion` on the judgment calls
+- Invoke via `/gbase:review`, or let `monitor` run it as the post-PR self-review
+
 **polish** (skill) — Two-pass behavior-preserving polish on the current diff. Replaces `/simplify` and the bundled `/code-review` for the polish role.
 
 - Packaged as a Skill (`plugins/base/skills/polish/SKILL.md`); model-invocable
@@ -71,7 +79,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Packaged as a Skill (`plugins/base/skills/monitor/SKILL.md`)
 - Model-invocable — triggers via `/gbase:monitor`, as the tail of `/gbase:go`, or when Claude judges you want a PR watched until merge (auto-triggering only starts the watch loop; ambiguous items still gate through `AskUserQuestion`)
 - Resolves the PR via `gh`, sweeps current CI + reviews, then starts a persistent `Monitor` polling every 30s
-- Runs one **self-review** of the PR (built-in `code-review`) right after the watch starts — it runs inside the CI wait the PR already pays, so it costs the ship path nothing; clear findings are auto-fixed in their own commits, the rest come back as a severity-ordered report; nothing is posted to GitHub (`--no-review` to skip; with `--draft`, flips the draft PR to ready once CI is green and the review is resolved)
+- Runs one **adversarial self-review** of the PR (`gbase:review`, our own skill) right after the watch starts — it runs inside the CI wait the PR already pays, so it costs the ship path nothing; findings are verified against independent skeptics, clear survivors are auto-fixed in their own commits, the rest come back as a severity-ordered report; nothing is posted to GitHub (`--no-review` to skip; with `--draft`, flips the draft PR to ready once CI is green and the review is resolved)
 - Auto-fixes clear CI failures (lint, format, type, unused imports) and applies clearly-required review comments (suggested diff blocks, typos, dead code)
 - Resolves safe merge conflicts (lockfile regeneration, pure-addition merges, whitespace-only) via rebase + `--force-with-lease`; aborts and surfaces anything semantic
 - Runs `/gbase:polish` on touched files before each auto-fix commit (skipped for pure lint/format output, verbatim `suggestion` block application, lockfile regen, and whitespace-only conflict resolution where polish would be a no-op)

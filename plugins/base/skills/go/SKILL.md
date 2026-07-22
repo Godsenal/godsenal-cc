@@ -1,6 +1,6 @@
 ---
 name: go
-description: "Finish code changes in one shot — run the /gbase:polish skill (deslop + structural pass) on the current diff, run /gbase:branch-pr end-to-end, then hand off to /gbase:monitor to watch CI and reviews until merge; monitor also self-reviews the fresh PR (built-in code-review) after it opens, so review never slows the path to PR. Invoke manually with /gbase:go, or let the model auto-trigger it when the user signals a change is done and wants it shipped."
+description: "Finish code changes in one shot — run the /gbase:polish skill (deslop + structural pass) on the current diff, run /gbase:branch-pr end-to-end, then hand off to /gbase:monitor to watch CI and reviews until merge; monitor also self-reviews the fresh PR (gbase:review — our own adversarial review skill) after it opens, so review never slows the path to PR. Invoke manually with /gbase:go, or let the model auto-trigger it when the user signals a change is done and wants it shipped."
 allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Edit Write
 ---
 
@@ -15,7 +15,7 @@ Model-invocable: the user can trigger it via `/gbase:go`, and the model may auto
 1. **Detect scope** — decide whether polish targets the uncommitted diff or the latest commit.
 2. **Polish** — invoke the `gbase:polish` skill (deslop pass → structural pass) on the in-scope code.
 3. **Branch & PR** — invoke the `gbase:branch-pr` skill to back up, branch, group commits, push, and open a PR.
-4. **Monitor** — invoke the `gbase:monitor` skill to watch CI, auto-fix clear failures, and address review comments until the PR is merged or closed. Monitor also runs one self-review of the fresh PR (built-in `code-review`) in parallel with the watch, so review adds nothing to the time-to-PR.
+4. **Monitor** — invoke the `gbase:monitor` skill to watch CI, auto-fix clear failures, and address review comments until the PR is merged or closed. Monitor also runs one adversarial self-review of the fresh PR (`gbase:review`) in parallel with the watch, so review adds nothing to the time-to-PR.
 
 ## Execution
 
@@ -68,7 +68,7 @@ Immediately after `branch-pr` returns successfully with a PR URL, chain into:
 Skill(skill: "gbase:monitor")
 ```
 
-That skill resolves the PR for the current branch, sweeps current CI + reviews, and starts a persistent `Monitor` that runs until the PR is merged or closed. It auto-fixes clear CI failures (lint, format, type, missing imports) and applies clearly-required review comments (suggested diff blocks, typos, dead-code removal); ambiguous items get surfaced with `AskUserQuestion`. It then runs one self-review of the PR (built-in `code-review`) while the watch runs: clear findings are auto-fixed in their own commits, everything else comes back as an organized report — nothing is posted to GitHub. Pass `--no-review` to skip it, or `--draft` to have branch-pr open a draft PR that monitor flips to ready once CI is green and the self-review is resolved (both flags pass through).
+That skill resolves the PR for the current branch, sweeps current CI + reviews, and starts a persistent `Monitor` that runs until the PR is merged or closed. It auto-fixes clear CI failures (lint, format, type, missing imports) and applies clearly-required review comments (suggested diff blocks, typos, dead-code removal); ambiguous items get surfaced with `AskUserQuestion`. It then runs one adversarial self-review of the PR (`gbase:review`) while the watch runs: findings are verified against independent skeptics, clear survivors are auto-fixed in their own commits, everything else comes back as an organized report — nothing is posted to GitHub. Pass `--no-review` to skip it, or `--draft` to have branch-pr open a draft PR that monitor flips to ready once CI is green and the self-review is resolved (both flags pass through).
 
 If `branch-pr` was skipped (no changes), skip this step too.
 
@@ -113,5 +113,5 @@ compat-check: ✅ no special deploy ordering.
 
 Proceeding to /gbase:monitor for PR #142.
 Subscribing to CI + reviews (auto-fixing clear failures; will ping on anything ambiguous).
-Self-review (code-review): 2 findings — 1 auto-fixed (missing await, pushed in a1b2c3d), 1 needs your call.
+Adversarial review (gbase:review): 4 found, 2 refuted, 2 survived — 1 auto-fixed (missing await, pushed in a1b2c3d), 1 needs your call.
 ```

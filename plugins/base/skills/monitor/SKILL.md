@@ -1,12 +1,12 @@
 ---
 name: monitor
-description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), surface testable preview/deploy links from CI/bot comments, and run /gbase:polish on every non-trivial auto-edit before committing. Also runs one post-PR self-review (built-in code-review) in parallel with the watch — findings are classified like reviewer comments and reported to the user, never posted to GitHub (--no-review skips it). Ask on ambiguous ones. Invoke manually with /gbase:monitor, chained from /gbase:go, or auto-triggered when the user wants a PR babysat until it merges; the persistent Monitor and AskUserQuestion gates keep it from acting unilaterally on anything ambiguous."
+description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), surface testable preview/deploy links from CI/bot comments, and run /gbase:polish on every non-trivial auto-edit before committing. Also runs one post-PR self-review (gbase:review — our own adversarial review skill) in parallel with the watch — findings are verified against independent skeptics, classified like reviewer comments, and reported to the user, never posted to GitHub (--no-review skips it). Ask on ambiguous ones. Invoke manually with /gbase:monitor, chained from /gbase:go, or auto-triggered when the user wants a PR babysat until it merges; the persistent Monitor and AskUserQuestion gates keep it from acting unilaterally on anything ambiguous."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
 # /gbase:monitor
 
-Subscribe to the current branch's PR and keep it moving until it merges or closes. Apply clear review feedback, fix obvious CI failures, resolve safe merge conflicts. Surface anything subjective via `AskUserQuestion`. Surface testable preview/deploy links that CI or bots post so the user can try the change. Run one self-review of the PR right after the watch starts — review costs the ship path nothing because it runs inside the CI wait the PR already pays.
+Subscribe to the current branch's PR and keep it moving until it merges or closes. Apply clear review feedback, fix obvious CI failures, resolve safe merge conflicts. Surface anything subjective via `AskUserQuestion`. Surface testable preview/deploy links that CI or bots post so the user can try the change. Run one adversarial self-review of the PR (`gbase:review`) right after the watch starts — review costs the ship path nothing because it runs inside the CI wait the PR already pays.
 
 Reviewer-agnostic: human reviewers, code review bots, and CI assistants go through the same classification. Identity matters for the *reply target*, not for whether to engage.
 
@@ -59,19 +59,21 @@ When in doubt, ask. Include reviewer + a one-line quote + `file:line` + 2–3 co
 ## Self-review
 
 One pass per watch, right after the `Monitor` starts (loop step 4) — never before the PR exists, so it
-adds nothing to the time-to-PR. Skip on `--no-review`; skip with a one-line note if the built-in skill
-isn't available in this environment.
+adds nothing to the time-to-PR. Skip on `--no-review`.
 
 ```
-Skill(skill: "code-review")
+Skill(skill: "gbase:review", args: "<PR diff scope>")
 ```
 
-The built-in resolves the PR diff itself and reports findings. Feed every finding through the same
-[classification](#classification-clear-vs-ambiguous) as an external review comment:
+`gbase:review` is our own **adversarial** review skill (the built-in `code-review` is no longer
+model-invocable). It finds defects along the built-in's dimensions, then makes each finding survive an
+independent skeptic before returning it — and it already does the [classification](#classification-clear-vs-ambiguous)
+below internally, auto-fixing clear+local survivors in their own commits and returning the rest as a
+report. Monitor just relays that report; the split is:
 
 - **Clear** (mechanical, local, concrete failure scenario — missing `await`, inverted condition,
-  wrong-variable copy-paste) → auto-fix: own commit, [post-fix polish](#post-fix-polish), push.
-- **Everything else** → goes in the report; anything worth fixing before merge gets an `AskUserQuestion`.
+  wrong-variable copy-paste) → auto-fixed by `gbase:review`: own commit, [post-fix polish](#post-fix-polish), push.
+- **Everything else** → in the report; anything worth fixing before merge gets an `AskUserQuestion`.
 
 Differences from external review comments:
 
@@ -79,7 +81,7 @@ Differences from external review comments:
   show up as commits.
 - **One organized report** when the pass finishes: a severity-ordered table
   `# | file:line | finding | action (auto-fixed <sha> / needs decision / noted)`, then a one-line tally:
-  `self-review: N findings — M auto-fixed, K for you`.
+  `review: F found, R refuted, S survived — A auto-fixed, K for you`.
 - **PR merged before the pass finished** (fast CI, auto-merge): don't push to the merged branch — report
   the remaining findings as follow-up-PR candidates.
 
