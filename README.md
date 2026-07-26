@@ -106,6 +106,14 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Detects a hand-pasted copy of the rules and asks rather than duplicating; previews the exact block and confirms once before writing any governance file
 - Targets the repo `CLAUDE.md` by default, `~/.claude/CLAUDE.md` with `--user`, or an explicit path; `--refresh` pulls the latest canonical text (pinned official repo only — never a fork URL), diffs it, then merges
 
+**ego-profile** (skill, model-invocable) — Drive ego-browser as a *different* account when work and personal profiles are split.
+
+- `listProfiles()` + `newTaskSpace(name, profileId)` — **positional args**, not an options object; both helpers are missing from ego-browser's own SKILL.md
+- Documents the trap that cost a session: `import --browser chrome --profile X` reports success, but task spaces still open on the **default** profile, so the account never changes
+- Verify the logged-in account over the service's API (`/api/users/@me/`) *before* acting — the UI looks signed in either way, and the mismatch only surfaces as "that project isn't in the list"
+- Re-auth walls on sensitive settings (API keys, billing) stay a human step: hand off, wait for confirmation, take over
+- Recovering an undocumented signature: call it wrong on purpose and read the error
+
 ### gapp
 
 App-building harness — takes a raw app idea all the way to an App Store submission, one skill per stage. Every stage reads/writes `docs/HARNESS.md` (a living pipeline document), and every stage **auto-continues into the next one** unless the user says stop — you should never wonder "what do I run now". Distilled from shipping a real Expo + Supabase app (somandlee) end to end. Delegates to best-in-class skills when installed (gstack `office-hours` for idea validation, gstack `design-consultation` + taste skills for design) instead of reimplementing them.
@@ -140,6 +148,7 @@ After installation, the following are available:
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
 /gbase:pr-verify <pr>          # Verify a PR's behavior + design in the browser via Claude-in-Chrome (skill)
 /gbase:karpathy [--user]       # Merge Karpathy's behavioral guidelines into CLAUDE.md — additive + idempotent (skill)
+/gbase:ego-profile             # Switch ego-browser to another account/profile (skill, model-invocable)
 
 /gapp:kickoff                  # New app idea → office-hours interview → decisions + HARNESS.md
 /gapp:next                     # Resume: where am I? → runs the next stage automatically

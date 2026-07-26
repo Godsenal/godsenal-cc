@@ -33,6 +33,8 @@ plugins/
         SKILL.md                   ← compat-check skill: read-only diff analysis for backward-compat hazards (migrations, API/contract, queue schema, env/secrets, flags, backfills) → ordered rollout runbook; auto-invoked by branch-pr/go to inject a Rollout section into the PR body
       karpathy/
         SKILL.md                   ← karpathy skill: merge Karpathy's 4 behavioral guidelines (Think Before Coding / Simplicity First / Surgical Changes / Goal-Driven Execution) into a project's CLAUDE.md as a marker-delimited managed block — additive, idempotent, preview+confirm gate; text embedded verbatim (MIT, forrestchang/andrej-karpathy-skills)
+      ego-profile/
+        SKILL.md                   ← ego-profile skill: switch ego-browser to a different account/profile via listProfiles() + newTaskSpace(name, profileId) (positional, not an options object); covers the import-doesn't-switch-the-space trap, verifying the logged-in account via API before acting, and handing off for re-auth walls. Both helpers are absent from ego-browser's own SKILL.md
   app/                             ← gapp plugin: app-building harness (idea → App Store submission)
     .claude-plugin/plugin.json
     skills/                        ← every stage updates docs/HARNESS.md and auto-continues to the next stage ("이어달리기 규칙" in kickoff/SKILL.md)

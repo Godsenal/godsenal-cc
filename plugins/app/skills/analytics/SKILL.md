@@ -218,6 +218,20 @@ export default POSTHOG_CLI_TOKEN && POSTHOG_PROJECT_ID
 `deleteAfterUpload`를 빼면 소스맵이 배포물에 남아 누구나 원본 코드를 받아볼 수 있다.
 CI 시크릿(`POSTHOG_CLI_TOKEN`, `POSTHOG_PROJECT_ID`)은 `/gapp:cicd`가 깐 워크플로에 추가한다.
 
+**키를 브라우저 자동화로 발급할 때 (실제로 물린 것들):**
+
+- 스코프는 `error_tracking:write` + `organization:read` 둘이면 된다. 그리고
+  `Organization & project access` 를 **`Projects` → 해당 프로젝트**로 좁혀야 한다. 이걸 안 고르면
+  `Create key` 버튼이 **비활성인 채로 이유를 안 알려준다** — 라벨·스코프를 다 채워놓고 왜 안 눌리는지
+  한참 찾게 된다. 검증 메시지도 안 뜬다.
+- 스코프 목록은 수십 줄이다. 검색창(`Search scopes...`)으로 한 행만 남긴 뒤 클릭한다. 전체 목록에서
+  ref나 좌표로 찍으면 스크롤 위치에 따라 빗나가고 **조용히 아무 일도 안 일어난다.** 누른 뒤
+  `.LemonSegmentedButton__option--selected` 로 실제 선택값을 확인한다 — 스크린샷으로 눈으로도 본다.
+- 그 검색창에 `fillInput` 은 기존 값을 **덮지 않고 이어붙인다.** X 버튼으로 비우고 `typeText` 한다.
+- 회사/개인 계정이 갈려 있으면 브라우저가 엉뚱한 org로 붙는다 → `gbase:ego-profile`.
+- 발급 화면은 **재인증**을 요구한다. 비밀번호·OAuth는 유저 몫이므로 그 지점에서 넘긴다.
+- 키는 **생성 직후 한 번만** 보인다. 읽는 즉시 `.env.local` 에 쓰고 로그·채팅에 값을 남기지 않는다.
+
 ## 8. 이벤트 택소노미 — 문자열을 직접 쓰지 않는다
 
 `lib/analytics/events.ts`에 상수로 모은다. 호출부에서 문자열을 쓰면 `alert_saved`와
