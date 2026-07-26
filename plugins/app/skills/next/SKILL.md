@@ -26,6 +26,7 @@ description: >-
    | design | `theme/tokens.ts`(또는 동급) + `DESIGN.md` 존재 |
    | backend | `supabase/` 디렉토리 + migrations 존재 |
    | cicd | `.github/workflows/`에 ci/eas-update/eas-build 존재 |
+   | analytics | `lib/analytics/` (또는 동급) + `next.config`에 `/ingest` rewrite + `.env.example`에 POSTHOG 키 |
    | landing | 웹 디렉토리(예: `web/`) + 개인정보처리방침 페이지/URL 존재 |
    | store-assets | 스크린샷 디렉토리 + `docs/APPSTORE-METADATA.md` 존재 |
    | store-submit | HARNESS.md 로그에 제출 기록 (레포 밖 상태라 문서가 진실) |

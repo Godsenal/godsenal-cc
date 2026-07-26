@@ -122,6 +122,6 @@ npm run typecheck && npm test && npx expo-doctor   # CI와 동일 명령 로컬 
 - 새 레포 CLAUDE.md에 "빌드는 EAS로, 배포는 main push=OTA / v* 태그=빌드" 요약 추가.
 - `docs/CICD.md`를 레포에 생성(위 트리거 맵 + 시크릿 표 + 체크리스트를 그 프로젝트 값으로).
 - HARNESS.md: cicd 체크, 미완 항목(제출 자격증명 등) TODO 기록, 로그.
-- 한 줄 보고 후 **`/gapp:landing`을 바로 이어서 실행한다** (이어달리기 규칙 — 스토어 제출에 필요한
-  privacy URL을 미리 확보해두는 단계). 이후는 개발 루프: 배포할 일이 생기면 `/gapp:deploy`,
-  릴리스 전엔 `/gapp:preflight`.
+- 한 줄 보고 후 **`/gapp:analytics`를 바로 이어서 실행한다** (이어달리기 규칙 — 배포 경로가
+  생겼으니 이제 배포된 것을 볼 눈을 붙일 차례다). 이후는 개발 루프: 배포할 일이 생기면
+  `/gapp:deploy`, 릴리스 전엔 `/gapp:preflight`.

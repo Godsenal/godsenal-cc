@@ -42,6 +42,7 @@ plugins/
       backend/SKILL.md             ← Supabase: RLS + security-definer RPC model, append-only migrations, local-first sync, smoke test
       cicd/SKILL.md                ← GitHub Actions + EAS pipeline; references/ has 4 generalized workflow templates
         references/{ci,eas-update,eas-build,supabase-deploy}.yml
+      analytics/SKILL.md           ← PostHog product analytics + error tracking + structured logs for web (Next.js) and app (Expo); lazy env reads, /ingest reverse proxy, OTel log pipeline for Node, worker flush discipline, app↔web person unification, MCP-verified delivery
       landing/SKILL.md             ← marketing site in web/ + privacy/support URLs (store submission prerequisites)
       deploy/SKILL.md              ← OTA-vs-native-build decision runbook, preflight before native builds, single confirm gate
       preflight/SKILL.md           ← pre-release checklist gate (code/backend/config/store), PASS/FAIL table, fixes small items

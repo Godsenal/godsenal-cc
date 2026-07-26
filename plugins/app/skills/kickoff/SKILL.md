@@ -107,9 +107,10 @@ description: >-
 - [ ] 2. design (`/gapp:design`)
 - [ ] 3. backend (`/gapp:backend`)        ← 불필요 시 "N/A(로컬 전용)"으로 표기
 - [ ] 4. cicd (`/gapp:cicd`)
-- [ ] 5. landing (`/gapp:landing`)
-- [ ] 6. store-assets (`/gapp:store-assets`)
-- [ ] 7. store-submit (`/gapp:store-submit`)
+- [ ] 5. analytics (`/gapp:analytics`)
+- [ ] 6. landing (`/gapp:landing`)
+- [ ] 7. store-assets (`/gapp:store-assets`)
+- [ ] 8. store-submit (`/gapp:store-submit`)
 
 ## 결정사항
 
