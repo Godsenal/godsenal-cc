@@ -60,8 +60,43 @@ description: >-
 - 가능하면 `actionlint`로 YAML 검증
 
 템플릿이 오래됐을 수 있다 — action 메이저 버전(expo-github-action, setup-node 등)이 의심되면
-최신 문서 확인. `expo:expo-cicd-workflows` 스킬이 있으면 EAS 자체 워크플로(.eas/workflows) 방식과
-비교 검토해도 좋다 (기본은 GitHub Actions — 레포 보호규칙·시크릿·타 잡과의 결합이 쉬움).
+최신 문서 확인.
+
+## 2.4. EAS Workflows(.eas/workflows)를 쓸 것인가
+
+기본은 위 GitHub Actions다(레포 보호규칙·시크릿·타 잡과의 결합이 쉽다). 다만 **모바일 잡만**
+EAS Workflows로 옮기는 게 확실히 나은 경우가 있다:
+
+- **아직 GitHub 레포가 없다.** `eas workflow:run`은 로컬 디렉토리를 업로드해 실행하므로 원격
+  저장소 없이 빌드가 나간다. 반대로 GitHub Actions는 레포가 생기기 전까지 **한 줄도 안 돈다** —
+  워크플로를 다 짜놓고 "돌아가겠지" 하다가, 레포를 붙이는 날 처음 실행되며 우수수 깨진다.
+- EAS 인프라에서 직접 돌아 `EXPO_TOKEN`을 GitHub 시크릿에 복사할 필요가 없다.
+
+옮긴다면 **겹치는 GitHub 워크플로는 지운다**(`eas-build.yml`·`eas-update.yml`). 둘 다 두면 GitHub를
+붙이는 순간 같은 커밋에 빌드가 두 번 돌아 크레딧이 두 배다.
+
+**단, `check-ota-compat.mjs`는 GitHub Actions에 남긴다.** 이 스크립트의 산출물은 GitHub step
+summary인데 EAS Workflows에는 그 자리가 없다. 옮기면 로그에 묻혀 아무도 안 본다 — 경고는 눈에
+띄는 곳에 있어야 경고다. 배포는 EAS가, 알림만 GitHub가 하는 형태로 가른다.
+
+### 검증된 함정 (실제로 물린 것)
+
+`eas workflow:validate <file>`을 **반드시** 돌려라. 아래는 그게 잡아준 것들이다:
+
+- **`workflow_dispatch:`만 쓰면 스키마 검증에서 떨어진다.** `workflow_dispatch: {}`로 빈 객체를
+  명시해야 한다.
+- **`cancel_in_progress`는 `true`만 받는다.** `false`는 "must be equal to constant"로 거부된다.
+  취소를 원치 않으면(릴리스 빌드는 취소되면 크레딧이 날아간다) `concurrency` 블록을 통째로 뺀다.
+- **파일 위치는 `eas.json`·`app.json` 옆이다.** 모노레포에서 앱이 `mobile/`이면
+  `mobile/.eas/workflows/`. git 루트가 아니다.
+- **`on: push`의 `paths`는 git 루트 기준이다.** 워크플로 파일이 `mobile/.eas/workflows/`에 있어도
+  `paths: ['mobile/**']`처럼 접두사를 붙여야 한다(EAS가 레포 전체를 클론한다). Expo 문서에 명시가
+  없어 실제로 밀어서 확인한 값이다 — 앱 디렉토리 안의 파일 하나만 바꾼 커밋으로 트리거가 걸렸다.
+- **`branch:view`/`channel:view`는 업데이트 그룹의 대표 항목 하나만 보여준다.** iOS만 나와도
+  Android가 빠진 게 아니다. 실제 게시 목록은 `workflow:view`의 `updates_json`에서 확인해라.
+  여기서 잘못 읽고 "안드로이드 OTA가 안 나간다"고 진단하기 쉽다.
+- **push/tag 트리거는 GitHub App 연결이 전제다.** expo.dev › 프로젝트 › GitHub › Install GitHub app.
+  안 하면 `on:` 블록이 전부 죽은 설정이고 `eas workflow:run` 수동 실행만 된다. 1회 셋업(§3)에 넣어라.
 
 ## 2.5. 네이티브 변경과 OTA — 지문이 갈리면 기존 유저가 끊긴다
 
@@ -98,6 +133,8 @@ description: >-
   - `SUPABASE_ACCESS_TOKEN` — supabase.com › Account › Access Tokens (백엔드 있을 때)
   - `SUPABASE_DB_PASSWORD` — 프로젝트 › Settings › Database (백엔드 있을 때)
   - Variables 탭에 `SUPABASE_PROJECT_ID` (선택 — fallback 하드코딩 대신)
+- [ ] **(EAS Workflows를 쓴다면) EAS ↔ GitHub 연결** — expo.dev › 프로젝트 › GitHub ›
+  Install GitHub app. 없으면 `.eas/workflows/`의 `on: push`·`on: tags`가 전부 죽은 설정이다.
 - [ ] **production 채널 ↔ main 브랜치 링크** — 없으면 OTA가 게시돼도 앱에 안 내려간다:
   `eas channel:edit production --branch main` (브랜치 없으면 `eas branch:create main` 먼저)
 - [ ] **스토어 제출 자격증명**: iOS는 ASC API key를 EAS에 업로드(`eas credentials`), Android는
@@ -112,6 +149,30 @@ description: >-
 ```bash
 npm run typecheck && npm test && npx expo-doctor   # CI와 동일 명령 로컬 확인
 ```
+
+### 로컬은 통과하는데 CI만 깨지는 것들
+
+"CI와 동일 명령"을 로컬에서 돌려도 안 잡히는 부류가 있다. **CI가 한 번도 안 돌아본 레포**(레포를
+뒤늦게 만든 경우)에서 특히 몰려 나온다 — 워크플로를 짜둔 것과 돌려본 것은 다르다:
+
+- **루트 tsconfig의 `include: ["**/*.ts"]`가 앱 소스까지 빨아들인다.** 모노레포에서 웹은 pnpm,
+  앱은 npm이면 웹 CI 잡에 `mobile/node_modules`가 없어 `react-native`부터 전부 못 찾고 죽는다.
+  로컬에는 앱 의존성이 깔려 있어 통과한다. 루트 tsconfig `exclude`에 앱 디렉토리를 넣어라.
+- **패키지 매니저 버전을 두 곳에 적으면 즉사한다.** `pnpm/action-setup`의 `version:`과
+  `package.json`의 `packageManager`가 둘 다 있으면 "Multiple versions of pnpm specified"로
+  설치 단계에서 죽는다. `packageManager` 한 곳만 남겨라.
+- **expo-doctor의 스키마 체크는 SDK를 올릴 때마다 새로 깨진다.** SDK 57 기준 `app.json`의
+  top-level `splash`와 `newArchEnabled`는 스키마에서 빠졌다(splash는 `expo-splash-screen`
+  플러그인 props로, newArch는 기본값이라 토글 자체가 없다). 정보성 잡이라 CI는 통과하지만
+  방치하면 legacy 키가 제거되는 날 스플래시가 조용히 사라진다.
+
+### 레포를 지금 만든다면
+
+- **`gh auth status`로 활성 계정을 먼저 확인한다.** 회사·개인 계정이 같이 로그인돼 있으면
+  `gh repo create`가 엉뚱한 소유자로 만든다. `gh auth switch --user <계정>` 후 `gh api user --jq .login`로 확인.
+- **첫 푸시 전에 `git ls-files -co --exclude-standard`로 실제 올라갈 목록을 훑는다.**
+  `.env*` 패턴은 `.env.example`까지 같이 삼킨다 — 문서가 "환경변수는 .env.example 참고"라고
+  가리키는데 레포에 없는 상태가 된다. `!.env.example` 예외를 넣어라.
 - main에 직푸시 → Actions에서 CI 통과 확인 (검증용 PR 따로 만들 필요 없다; 원하면 PR로도 가능)
 - 사소한 앱 코드 변경을 main 푸시 → `eas branch:view main`에 업데이트 게시 확인
 - (백엔드) supabase/** 변경 머지 → db push 로그 확인, 스모크 테스트 스크립트 실행

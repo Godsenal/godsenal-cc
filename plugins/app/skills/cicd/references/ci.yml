@@ -43,6 +43,9 @@ jobs:
     name: OTA 호환 (정보성)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # 알림용 잡이 CI를 빨갛게 만들면 안 된다 — 스크립트가 exit 0이어도 npm ci·Setup EAS·네트워크가
+    # 죽을 수 있다. 빨개지면 PR을 상주 감시하는 에이전트가 남의 실패를 "고치려" 든다.
+    continue-on-error: true
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
