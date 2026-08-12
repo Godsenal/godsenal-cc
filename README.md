@@ -48,38 +48,40 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Emits a one-line verdict (`✅ no special ordering` or `⚠️ requires ordered rollout`) and, when needed, a numbered runbook (expand → migrate → backfill → deploy → ramp → follow-up contract PR) with a rollback note, each hazard mapped to `file:line`
 - Auto-invoked by **branch-pr** / **go** to drop a `## Rollout / Deploy order` section into the PR body; also runs standalone via `/gbase:compat-check`
 
-**review** (skill, model-invocable) — Adversarial code review of the current change. Our own replacement for the built-in `code-review` (which is no longer model-invocable), used as the self-review role inside `monitor` / `go`.
+**review** (skill, model-invocable) — Adversarial code review of the current change. The judgment layer on top of the built-in `code-review`: verification, and a gate deciding what may be fixed without asking.
 
 - Packaged as a Skill (`plugins/base/skills/review/SKILL.md`); read-only on GitHub — never comments, reviews, replies, or merges
-- **Stage 1 — Find** replicates the built-in `code-review`'s dimensions (correctness & edge cases, bugs/regressions/missing error handling, security & data handling, clarity & consistency, test/doc gaps) with the same high-signal, no-nits bar; fans out to parallel per-dimension sub-agents on non-trivial diffs
-- **Stage 2 — Adversarial verify** hands each candidate to independent skeptics prompted to *refute* it with a concrete counter-scenario; low/medium findings face one skeptic, high/critical ones a 3-skeptic majority panel — anything refuted is dropped, so plausible-but-wrong findings never reach you
-- **Stage 3 — Classify & act**: clear+local survivors are auto-fixed in their own commits (polished first); everything else comes back as a severity-ordered table + `review: F found, R refuted, S survived` tally, with `AskUserQuestion` on the judgment calls
-- Invoke via `/gbase:review`, or let `monitor` run it as the post-PR self-review
+- **Stage 1 — Find** is *delegated* to the built-in `code-review` skill (`Skill(code-review, "medium")`), which runs in the background and returns findings labelled `CONFIRMED` / `PLAUSIBLE`. No hand-rolled finder — we inherit its dimensions and effort dial. `medium` is the default on purpose: above it the built-in routes to a multi-agent workflow fanning out to dozens of agents, and Stage 2 already recovers most of what the extra effort buys. Never `--fix` (it would bypass the gate below), never `--comment` (this skill is local-only), never `ultra` (user-triggered and billed). Falls back to an inline pass along the same dimensions if the built-in isn't available.
+- **Stage 2 — Adversarial verify**: `PLAUSIBLE` findings go to independent skeptics prompted to *refute* them with a concrete counter-scenario; low/medium face one skeptic, high/critical a 3-skeptic majority panel. A `CONFIRMED` finding skips the panel only if it will merely be *reported* — if it would be auto-fixed, or is high/critical, it still faces a skeptic, because the built-in's verify is a single non-adversarial pass and auto-fixing is the irreversible half. Anything refuted is dropped. Cleanup-category findings (reuse/simplification/efficiency) are filtered out before this stage — that's `polish`'s job, and they carry no failure scenario.
+- **Stage 3 — Classify & act**: clear+local survivors are auto-fixed; everything else comes back as a severity-ordered table + `review: F found, R refuted, S survived` tally. **Pre-PR mode** (from `go`) applies fixes as working-tree edits so `branch-pr` folds them into the initial commits, and *defers* judgment calls instead of asking; **post-PR mode** (from `monitor`) commits each fix separately.
+- Invoke via `/gbase:review`, from `go` before the PR opens, or let `monitor` run it on a PR it didn't ship
 
-**polish** (skill) — Two-pass behavior-preserving polish on the current diff. Replaces `/simplify` and the bundled `/code-review` for the polish role.
+**polish** (skill) — Two-pass behavior-preserving polish on the current diff. The polish role in `go` / `monitor`; distinct from the built-in `simplify` in its 3-lens fan-out, risk-split posture, recall gate, out-of-diff guard, and non-destructive revert.
 
 - Packaged as a Skill (`plugins/base/skills/polish/SKILL.md`); model-invocable
-- **Pass 1 — Deslop (3-lens fan-out)**: always spawns three parallel sub-agents — Lens A (AI cruft & dead code), Lens B (code reuse & duplication, unused imports, redundant vars), Lens C (clarity & efficiency, deep nesting, complex conditionals, hot-path perf wins). A resolution step then dedupes overlapping proposals, filters false positives, and applies the survivors. Mirrors the original built-in `/simplify` design.
+- **Pass 1 — Deslop (3-lens fan-out)**: always spawns three parallel sub-agents — Lens A (AI cruft & dead code), Lens B (code reuse & duplication, unused imports, redundant vars), Lens C (clarity & efficiency, deep nesting, complex conditionals, hot-path perf wins). A resolution step then dedupes overlapping proposals, filters false positives, and applies the survivors.
 - **Pass 2 — Structural**: ambitious "code judo" pass — collapses single-caller helpers, removes premature abstractions, suggests file splits, flattens conditional growth. Small contained edits apply directly; anything large (file moves, public API renames, >~50 lines) surfaces via `AskUserQuestion` first.
 - **Verification**: after each pass, runs the lightest available correctness check (`tsc --noEmit`, focused tests) on touched files; reverts edits that break the check.
 - Both passes preserve behavior; surfaces real bugs to the user instead of silently patching them
 - Skips on pure renames, dependency bumps, generated code, prototype/throwaway diffs
 
-**go** (skill) — Wrap up a working session in one shot: `polish` → `branch-pr` → `monitor`.
+**go** (skill) — Wrap up a working session in one shot: `review ∥ polish` → `verify` → `branch-pr` → `monitor`.
 
 - Packaged as a Skill (`plugins/base/skills/go/SKILL.md`), not a legacy command
 - Model-invocable — you can invoke `/gbase:go` explicitly, or Claude may auto-trigger it when you signal a change is done and want it shipped (sub-steps keep their own consent/safety gates)
-- Invokes `/gbase:polish` (deslop + structural) on the current diff (or the latest commit if the tree is clean)
-- Then invokes `/gbase:branch-pr` for the full flow (backup → branch → grouped commits → push → PR)
-- Then hands off to `/gbase:monitor` to babysit CI + reviews until the PR is merged or closed — including a post-PR **self-review** of the fresh PR, so review never slows the path to PR (`--no-review` to skip, `--draft` to open as a draft that flips to ready once CI is green and the review is resolved)
-- Inherits all `branch-pr` safety rules — no force push, no hard reset; runs autonomously, stopping only for branch-pr's narrow "ask only when necessary" cases
+- **Launches the built-in `code-review` in the background, then runs `/gbase:polish` while it works.** Because the built-in forks to a background agent, review costs the ship path no wall-clock — and running it *before* the PR means fixes land in the initial commits instead of as churn on an open PR with a CI rerun per fix
+- Hands the findings to `/gbase:review` for skeptic verification and the clear-vs-ambiguous gate; clear fixes are applied to the working tree, judgment calls are **deferred** and raised after the PR is open
+- **Verification gate** — runs the project's *own* lint/typecheck/tests over the changed scope before anything is pushed (polish's check only validates polish's own edits, so a pre-existing failure would otherwise sail into CI). Biased toward shipping: pre-existing, flaky, and environment-dependent failures are noted and passed; only a diff-caused failure that resists two mechanical fix attempts stops the flow. `--no-verify` skips it
+- Then `/gbase:branch-pr` (backup → branch → grouped commits → push → PR), then `/gbase:monitor --no-review` to babysit CI + reviews until merge
+- **The PR still opens without asking.** Exactly two things can stop the flow before the PR exists: a diff-caused verification failure that isn't mechanically fixable, and branch-pr's narrow "ask only when necessary" cases. Everything else is carried and raised afterward
+- Inherits all `branch-pr` safety rules — no force push, no hard reset
 
 **monitor** (skill) — Subscribe to the current branch's PR and keep it moving until merge/close.
 
 - Packaged as a Skill (`plugins/base/skills/monitor/SKILL.md`)
 - Model-invocable — triggers via `/gbase:monitor`, as the tail of `/gbase:go`, or when Claude judges you want a PR watched until merge (auto-triggering only starts the watch loop; ambiguous items still gate through `AskUserQuestion`)
 - Resolves the PR via `gh`, sweeps current CI + reviews, then starts a persistent `Monitor` polling every 30s
-- Runs one **adversarial self-review** of the PR (`gbase:review`, our own skill) right after the watch starts — it runs inside the CI wait the PR already pays, so it costs the ship path nothing; findings are verified against independent skeptics, clear survivors are auto-fixed in their own commits, the rest come back as a severity-ordered report; nothing is posted to GitHub (`--no-review` to skip; with `--draft`, flips the draft PR to ready once CI is green and the review is resolved)
+- Runs one **adversarial self-review** of the PR (`gbase:review`) right after the watch starts — inside the CI wait the PR already pays, so it costs the ship path nothing; findings are skeptic-verified, clear survivors are auto-fixed in their own commits, the rest come back as a severity-ordered report; nothing is posted to GitHub. This is for PRs `go` didn't ship (opened by an earlier session, a teammate, or by hand) — `go` reviews *before* the PR opens and passes `--no-review`. With `--draft`, flips the draft PR to ready once CI is green
 - Auto-fixes clear CI failures (lint, format, type, unused imports) and applies clearly-required review comments (suggested diff blocks, typos, dead code)
 - Resolves safe merge conflicts (lockfile regeneration, pure-addition merges, whitespace-only) via rebase + `--force-with-lease`; aborts and surfaces anything semantic
 - Runs `/gbase:polish` on touched files before each auto-fix commit (skipped for pure lint/format output, verbatim `suggestion` block application, lockfile regen, and whitespace-only conflict resolution where polish would be a no-op)
@@ -144,7 +146,8 @@ After installation, the following are available:
 /gbase:branch-pr               # Autonomous branch + commit + PR from current changes (command)
 /gbase:compat-check [range]    # Flag backward-compat hazards + emit a deploy-order runbook (skill, model-invocable)
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
-/gbase:go                      # Polish → branch + commit + PR → monitor (skill)
+/gbase:review                  # Adversarial review — built-in code-review + skeptic verify (skill, model-invocable)
+/gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
 /gbase:pr-verify <pr>          # Verify a PR's behavior + design in the browser via Claude-in-Chrome (skill)
 /gbase:karpathy [--user]       # Merge Karpathy's behavioral guidelines into CLAUDE.md — additive + idempotent (skill)
