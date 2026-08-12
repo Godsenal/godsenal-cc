@@ -1,6 +1,6 @@
 ---
 name: polish
-description: "Two-pass code polish on the current diff. Pass 1 fans out to three parallel lenses (AI cruft & dead code, code reuse & duplication, clarity & efficiency), then a resolution step dedupes/filters/applies. Pass 2 hunts for ambitious behavior-preserving structural simplifications. Use after writing code, before review, or whenever a diff feels bloated — operates autonomously and proactively right after edits land. Replaces `/simplify` and the bundled `/code-review` for the polish role in `gbase:go` and `gbase:monitor`."
+description: "Two-pass code polish on the current diff. Pass 1 fans out to three parallel lenses (AI cruft & dead code, code reuse & duplication, clarity & efficiency), then a resolution step dedupes/filters/applies. Pass 2 hunts for ambitious behavior-preserving structural simplifications. Use after writing code, before review, or whenever a diff feels bloated — operates autonomously and proactively right after edits land. The polish role inside `gbase:go` and `gbase:monitor`: unlike the built-in `simplify`, it splits its posture by risk (aggressive on reuse/dedup, conservative on net-new abstraction), gates on a recall checklist, refuses to auto-apply out-of-diff edits, and reverts a failed edit by reversing its own `Edit` rather than `git checkout --`."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent
 ---
 

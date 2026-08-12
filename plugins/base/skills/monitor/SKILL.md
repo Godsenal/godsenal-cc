@@ -1,12 +1,12 @@
 ---
 name: monitor
-description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), surface testable preview/deploy links from CI/bot comments, and run /gbase:polish on every non-trivial auto-edit before committing. Also runs one post-PR self-review (gbase:review — our own adversarial review skill) in parallel with the watch — findings are verified against independent skeptics, classified like reviewer comments, and reported to the user, never posted to GitHub (--no-review skips it). Ask on ambiguous ones. Invoke manually with /gbase:monitor, chained from /gbase:go, or auto-triggered when the user wants a PR babysat until it merges; the persistent Monitor and AskUserQuestion gates keep it from acting unilaterally on anything ambiguous."
+description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), surface testable preview/deploy links from CI/bot comments, and run /gbase:polish on every non-trivial auto-edit before committing. When attached to a PR that wasn't just reviewed, also runs one adversarial self-review (gbase:review) in parallel with the watch — findings are skeptic-verified, classified like reviewer comments, and reported to the user, never posted to GitHub (--no-review skips it). Ask on ambiguous ones. Invoke manually with /gbase:monitor, chained from /gbase:go, or auto-triggered when the user wants a PR babysat until it merges; the persistent Monitor and AskUserQuestion gates keep it from acting unilaterally on anything ambiguous."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
 # /gbase:monitor
 
-Subscribe to the current branch's PR and keep it moving until it merges or closes. Apply clear review feedback, fix obvious CI failures, resolve safe merge conflicts. Surface anything subjective via `AskUserQuestion`. Surface testable preview/deploy links that CI or bots post so the user can try the change. Run one adversarial self-review of the PR (`gbase:review`) right after the watch starts — review costs the ship path nothing because it runs inside the CI wait the PR already pays.
+Subscribe to the current branch's PR and keep it moving until it merges or closes. Apply clear review feedback, fix obvious CI failures, resolve safe merge conflicts. Surface anything subjective via `AskUserQuestion`. Surface testable preview/deploy links that CI or bots post so the user can try the change. Unless the caller passed `--no-review`, run one adversarial self-review of the PR (`gbase:review`) right after the watch starts — it runs inside the CI wait the PR already pays, so it costs the ship path nothing.
 
 Reviewer-agnostic: human reviewers, code review bots, and CI assistants go through the same classification. Identity matters for the *reply target*, not for whether to engage.
 
@@ -58,18 +58,22 @@ When in doubt, ask. Include reviewer + a one-line quote + `file:line` + 2–3 co
 
 ## Self-review
 
-One pass per watch, right after the `Monitor` starts (loop step 4) — never before the PR exists, so it
-adds nothing to the time-to-PR. Skip on `--no-review`.
+One pass per watch, right after the `Monitor` starts (loop step 4). Skip on `--no-review`.
 
 ```
 Skill(skill: "gbase:review", args: "<PR diff scope>")
 ```
 
-`gbase:review` is our own **adversarial** review skill (the built-in `code-review` is no longer
-model-invocable). It finds defects along the built-in's dimensions, then makes each finding survive an
-independent skeptic before returning it — and it already does the [classification](#classification-clear-vs-ambiguous)
-below internally, auto-fixing clear+local survivors in their own commits and returning the rest as a
-report. Monitor just relays that report; the split is:
+**When this actually runs.** `gbase:go` reviews the diff *before* `branch-pr` opens the PR and passes
+`--no-review` here, so a PR shipped through `go` is not reviewed twice. This pass is for the case `go`
+doesn't cover: monitor attached to a PR opened by an earlier session, by a teammate, or by hand. If you
+can't tell whether the diff was already reviewed, run it — a duplicate pass costs tokens, a skipped one
+costs a defect.
+
+`gbase:review` delegates finding to the built-in `code-review`, makes every `PLAUSIBLE` finding survive
+an independent skeptic, and already does the [classification](#classification-clear-vs-ambiguous) below
+internally — auto-fixing clear+local survivors in their own commits and returning the rest as a report.
+Monitor just relays that report; the split is:
 
 - **Clear** (mechanical, local, concrete failure scenario — missing `await`, inverted condition,
   wrong-variable copy-paste) → auto-fixed by `gbase:review`: own commit, [post-fix polish](#post-fix-polish), push.
@@ -88,9 +92,15 @@ Differences from external review comments:
 ### `--draft` flow
 
 When invoked with `--draft` (usually passed through from `gbase:go`, with `branch-pr` having opened the
-PR as a draft): once CI is green **and** every self-review finding is resolved (auto-fixed or decided by
-the user), run `gh pr ready` and tell the user. This is the only case where monitor may flip draft
-state, and only because the flag was the user's opt-in.
+PR as a draft): once CI is green **and** every finding from a self-review it actually ran is resolved
+(auto-fixed or decided by the user), run `gh pr ready` and tell the user. This is the only case where
+monitor may flip draft state, and only because the flag was the user's opt-in.
+
+**Unresolved findings block the flip even when monitor didn't find them.** Under `gbase:go` the review
+ran pre-PR, and `go` *defers* its judgment calls to after the PR opens — so "no self-review here" does not
+mean "nothing outstanding". If `go` reported deferred findings, hold the flip until they are resolved
+too. Flipping to ready on CI green alone would announce the PR for review with a defect the review
+already found still sitting in it, which is the exact thing the draft gate is for.
 
 ## Conflict classification
 
