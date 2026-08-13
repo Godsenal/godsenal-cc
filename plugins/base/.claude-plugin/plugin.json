@@ -1,6 +1,6 @@
 {
   "name": "gbase",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "Core productivity tools for Claude Code — skill discovery, fully-autonomous branch/PR workflows, backward-compat deploy-order checks, two-pass diff polish (3-lens fan-out + structural), one-shot review+polish → verify → PR → monitor, adversarial code review (delegated find + skeptic-verify), CI/review monitoring with self-review, browser-driven PR verification, and one-command Karpathy CLAUDE.md guidelines merge",
   "author": {
     "name": "godsenal",
@@ -43,6 +43,8 @@
     "agent-rules",
     "ego-browser",
     "browser-profile",
-    "account-switching"
+    "account-switching",
+    "korean",
+    "i18n"
   ]
 }

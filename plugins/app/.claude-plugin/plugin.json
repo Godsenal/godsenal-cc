@@ -1,6 +1,6 @@
 {
   "name": "gapp",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "App-building harness for Claude Code — idea intake (office-hours style), Expo scaffold with latest-SDK discipline, design decision sessions (taste skills), Supabase backend security model, EAS CI/CD (GitHub Actions or EAS Workflows), PostHog analytics + error tracking + logs (web and app, with ad-blocker proxy and delivery verification), landing site + store prerequisites, OTA-vs-native deploy runbook, pre-release preflight gate, simulator screenshot pipeline, and Claude-in-Chrome App Store Connect submission automation. Each stage is a separate skill that auto-continues to the next; docs/HARNESS.md tracks progress across sessions and /gapp:next resumes anywhere.",
   "author": {
     "name": "godsenal",
@@ -33,6 +33,8 @@
     "posthog",
     "error-tracking",
     "observability",
-    "logs"
+    "logs",
+    "korean",
+    "i18n"
   ]
 }

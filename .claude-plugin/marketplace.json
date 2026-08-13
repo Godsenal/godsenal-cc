@@ -10,7 +10,7 @@
     {
       "name": "gbase",
       "description": "Core productivity tools — base plugins",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "author": {
         "name": "godsenal"
       },
@@ -20,7 +20,7 @@
     {
       "name": "gapp",
       "description": "App-building harness — idea intake to App Store submission, stage by stage",
-      "version": "1.5.1",
+      "version": "1.6.0",
       "author": {
         "name": "godsenal"
       },

@@ -25,6 +25,8 @@ Or browse interactively with `/plugin` and go to the **Discover** tab.
 
 Core productivity tools for Claude Code — skill discovery, autonomous branch/PR workflows, and backward-compat deploy-order checks.
 
+> **출력 언어:** 모든 gbase 스킬은 사용자에게 보이는 텍스트(진행 보고, 리포트 표, `AskUserQuestion` 질문·옵션)를 **한국어**로 낸다. 코드·경로·명령어·고정 라벨(`critical`, `PASS`/`FAIL`, `✅`/`⚠️`)은 영어 그대로, 커밋 메시지·브랜치 이름·PR 본문은 대상 레포의 기존 관례를 따른다. 다른 언어로 요청하면 그 언어를 쓴다.
+
 **find-skills** — Discover and install Claude Code skills matching your project's tech stack.
 
 - Auto-analyzes `package.json` and `CLAUDE.md` to detect your stack
@@ -119,6 +121,8 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 ### gapp
 
 App-building harness — takes a raw app idea all the way to an App Store submission, one skill per stage. Every stage reads/writes `docs/HARNESS.md` (a living pipeline document), and every stage **auto-continues into the next one** unless the user says stop — you should never wonder "what do I run now". Distilled from shipping a real Expo + Supabase app (somandlee) end to end. Delegates to best-in-class skills when installed (gstack `office-hours` for idea validation, gstack `design-consultation` + taste skills for design) instead of reimplementing them.
+
+> **출력 언어:** 모든 gapp 스킬은 사용자와의 대화(진행 보고, 판정 표, `AskUserQuestion`)를 **한국어**로 낸다. 단 **앱 산출물**(앱 UI 문구, 랜딩 카피, 개인정보/지원 페이지, 스토어 메타데이터)은 대화 언어가 아니라 `kickoff`에서 정한 **앱 언어**(`docs/HARNESS.md`)를 따른다. 코드·명령어·워크플로 YAML·상태 라벨은 영어 그대로.
 
 Pipeline:
 

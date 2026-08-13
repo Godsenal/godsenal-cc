@@ -14,6 +14,16 @@ agents (silent assumptions, overengineering, scope creep, weak success criteria)
 This skill is **additive and idempotent**: it never deletes or rewrites your project-specific
 content, and re-running it updates the managed block in place instead of duplicating it.
 
+## 출력 언어
+
+사용자에게 보이는 텍스트는 **한국어**로 쓴다 — 진행 보고, 요약, 리포트 표의 설명 칸, 집계/tally 라인, `AskUserQuestion`의 질문·헤더·옵션·설명까지 전부. 하위 에이전트를 띄울 때도, 결과가 사용자에게 그대로 노출되는 텍스트는 한국어로 돌려달라고 프롬프트에 적는다.
+
+영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름·PR 제목/본문 — 이건 이 규칙이 아니라 레포의 기존 관례(`git log`, 최근 PR)를 따른다.
+
+사용자가 다른 언어로 요청하면 그 언어를 따른다.
+
+**예외 — 삽입되는 블록 본문은 절대 번역하지 않는다.** [The block](#the-block-embedded-verbatim)의 Karpathy 가이드라인 텍스트는 원문(영어) 그대로 `CLAUDE.md`에 들어간다. 미리보기·확인 질문·요약만 한국어로 쓴다.
+
 ## Provenance & safety
 
 - **Canonical source:** [`forrestchang/andrej-karpathy-skills`](https://github.com/forrestchang/andrej-karpathy-skills) (MIT). The

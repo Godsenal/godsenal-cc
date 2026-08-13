@@ -10,6 +10,14 @@ $ARGUMENTS
 
 You are now in skill discovery mode. Your task is to find and recommend Claude Code skills that match the current project's tech stack.
 
+### 출력 언어
+
+사용자에게 보이는 텍스트는 **한국어**로 쓴다 — 진행 보고, 추천 이유, 요약, `AskUserQuestion`의 질문·헤더·옵션·설명까지 전부.
+
+영어 그대로 두는 것: 스킬/패키지/레포 이름, 파일 경로, 설치 명령어, 아래 리포트 템플릿의 고정 헤딩과 표 헤더. 템플릿 헤딩은 그대로 두되 채워 넣는 설명·추천 이유 문장은 한국어로 쓴다.
+
+사용자가 다른 언어로 요청하면 그 언어를 따른다.
+
 ### Arguments Parsing
 
 First, parse the arguments:
