@@ -2,13 +2,11 @@
 description: Find skills that match your project's tech stack
 ---
 
-[FIND SKILLS MODE]
-
 $ARGUMENTS
 
 ## Skill Finder
 
-You are now in skill discovery mode. Your task is to find and recommend Claude Code skills that match the current project's tech stack.
+Find and recommend Claude Code skills that match the current project's tech stack, then install the ones the user picks.
 
 ### 출력 언어
 
@@ -124,32 +122,20 @@ Output format:
 |-------|--------|-----------------|
 ```
 
-#### Step 6: Ask Installation Scope (IMPORTANT)
+#### Step 6: Ask Installation Scope
 
-**ALWAYS ask the user before installing:**
-
-Use AskUserQuestion to ask:
+Nothing gets installed without the user choosing where. Use AskUserQuestion to ask:
 - **Question:** "Where should I install the skills?"
 - **Options:**
   1. **Project local** (Recommended) - Install to `.claude/skills/` in this project only
   2. **Global** - Install to `~/.claude/skills/` for all projects
 
-#### Step 7: Detect Current Agent
+#### Step 7: Pick the target agent
 
-Before installing, detect which AI agent/IDE the user is using by checking for config directories:
+This command runs inside Claude Code, so install for `claude-code`. Add another agent to `-a` only when the
+user asks for it (e.g. they also use Cursor in this repo).
 
-```bash
-# Check which agent configs exist in the project
-ls -d .claude .cursor .cline .windsurf .codex 2>/dev/null
-```
-
-**Agent Detection Priority:**
-1. If running in Claude Code → use `claude-code`
-2. If `.cursor/` exists → user might use Cursor too
-3. If `.cline/` exists → user might use Cline too
-4. Default to `claude-code` for this skill
-
-**Common agent names for -a flag:**
+**Agent names for the -a flag:**
 - `claude-code` - Claude Code CLI
 - `cursor` - Cursor IDE
 - `cline` - Cline extension
@@ -178,7 +164,7 @@ npx skills add <source> [options]
 
 Options:
   -g, --global           Install globally (user-level) instead of project-level
-  -a, --agent <agents>   Specify agents to install to (IMPORTANT: use this!)
+  -a, --agent <agents>   Specify agents to install to (always pass it — see below)
   -s, --skill <skills>   Specify skill names to install
   -y, --yes              Skip confirmation prompts
   --all                  Install all skills to all agents (avoid this)
@@ -219,7 +205,3 @@ Use these mappings to expand search:
 | Supabase | supabase, postgres, auth, realtime |
 | MCP | mcp, model-context-protocol, mcp-server |
 | Monorepo | monorepo, turborepo, nx, workspaces |
-
----
-
-Now analyze the project and find matching skills!

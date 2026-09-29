@@ -5,7 +5,7 @@ description: >-
   앱(Expo)에 한 벌로 깐다. 광고차단 우회 리버스 프록시, 앱↔웹 person 통일, 서버·워커
   플러시 규율, 소스맵 업로드, 그리고 **PostHog에 실제로 도착했는지 MCP로 질의해 확인**하는
   검증까지 포함한다. "포스트호그 붙여줘", "analytics 붙이자", "에러트래킹", "로그 수집",
-  "sentry 대신 뭐 쓰지", "계측" 요청이나 cicd 직후 다음 단계로 이 스킬을 써라.
+  "sentry 대신 뭐 쓰지", "계측" 요청이나 cicd 직후 다음 단계로 쓴다.
   PostHog MCP가 붙어 있으면 그걸로 프로젝트 상태를 읽고 검증한다.
 ---
 
@@ -32,7 +32,7 @@ description: >-
 
 ## 0. 프로젝트 확보 (먼저 확인 — 여기서 막힌다)
 
-PostHog MCP가 있으면 `projects-get`으로 기존 프로젝트를 본다.
+PostHog MCP가 있으면 `mcp__posthog__projects-get`으로 기존 프로젝트를 본다 (서버 이름은 설치에 따라 다를 수 있다).
 
 **무료 플랜은 프로젝트 1개다.** 두 번째를 만들려면 카드 등록이 필요하다 —
 에이전트가 대신 결제하지 않는다. 유저에게 알리고 둘 중 하나를 고르게 한다:
@@ -268,11 +268,11 @@ React가 렌더 에러를 먼저 붙잡아 에러 경계로 넘기므로 `window
 
 | 경로 | 확인 방법 |
 |---|---|
-| 웹 이벤트 + 슈퍼 속성 | `execute-sql`: `SELECT event, properties.product, properties.app_surface FROM events WHERE timestamp > now() - INTERVAL 20 MINUTE` |
+| 웹 이벤트 + 슈퍼 속성 | `mcp__posthog__execute-sql`: `SELECT event, properties.product, properties.app_surface FROM events WHERE timestamp > now() - INTERVAL 20 MINUTE` |
 | 웹 예외 | 브라우저에서 `setTimeout(() => { throw new Error('verify') })` → `$exception` 행 확인 |
 | 서버 이벤트 + 예외 | 임시 스크립트로 `captureServerEvent`/`captureServerException` → `app_surface = 'server'` 행 확인 |
-| 서버 로그 | `query-logs` with `serviceNames: ['<앱>-server']` |
-| 브라우저 로그 | `query-logs` with `serviceNames: ['<앱>-web']` — `posthogDistinctId`/`sessionId`가 붙는지도 본다 |
+| 서버 로그 | `mcp__posthog__query-logs` with `serviceNames: ['<앱>-server']` |
+| 브라우저 로그 | `mcp__posthog__query-logs` with `serviceNames: ['<앱>-web']` — `posthogDistinctId`/`sessionId`가 붙는지도 본다 |
 
 **모든 행에 `product` 속성이 붙어 있는지 반드시 확인한다** (프로젝트 공유 중이면 이게 생명줄).
 임시 검증 스크립트는 확인 후 지운다.

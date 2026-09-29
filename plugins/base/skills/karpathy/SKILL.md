@@ -1,6 +1,6 @@
 ---
 name: karpathy
-description: "Merge Andrej Karpathy's behavioral coding-agent guidelines (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution) into this project's CLAUDE.md — additively and idempotently, never clobbering project-specific rules. Use when the user asks to add the Karpathy rules/skills, 'karpathy 룰 넣어줘', set up agent behavior guidelines, or install the karpathy CLAUDE.md into a repo. Writes only after showing the exact block and confirming."
+description: "Merges Andrej Karpathy's behavioral coding-agent guidelines (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution) into this project's CLAUDE.md — additively and idempotently, never clobbering project-specific rules. Use when the user asks to add the Karpathy rules/skills, 'karpathy 룰 넣어줘', set up agent behavior guidelines, or install the karpathy CLAUDE.md into a repo. Writes only after showing the exact block and confirming."
 allowed-tools: Bash Read Write Edit Glob Grep AskUserQuestion WebFetch
 ---
 

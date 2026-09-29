@@ -4,10 +4,10 @@ description: >-
   새 앱/웹 아이디어를 받아 프로덕트를 시작하는 하네스의 진입점. 오피스아워(YC/gstack 스타일)처럼
   한 번에 하나씩 질문하며 아이디어를 검증·구체화하고, 프로덕트/디자인/엔지니어링 결정사항을 전부
   이 단계에서 확정한 뒤, docs/HARNESS.md(살아있는 파이프라인 문서)를 만들고 곧바로 다음 단계
-  (scaffold → design → backend → cicd → landing → store-assets → store-submit)로 이어달린다.
+  (scaffold → design → backend → cicd → analytics → landing → store-assets → store-submit)로 이어달린다.
   "새 앱 만들자", "앱 아이디어 있어", "이거 앱으로 만들면 어때", "사이드 프로젝트 시작",
-  "kickoff", "새 프로젝트 세팅" 같은 말이 나오면 이 스킬을 써라. 이미 진행 중인 프로젝트면
-  next를 대신 써라.
+  "kickoff", "새 프로젝트 세팅" 같은 말이 나오면 쓴다. 이미 진행 중인 프로젝트면
+  next를 쓴다.
 ---
 
 # /gapp:kickoff — 아이디어 → 앱 하네스 시작
@@ -34,10 +34,11 @@ description: >-
 2. design       디자인 결정 세션 (taste/mobile-ui 스킬) → tokens + DESIGN.md
 3. backend      Supabase 백엔드 (보안모델, 마이그레이션 규율)     [백엔드 필요 시]
 4. cicd         GitHub Actions + EAS 파이프라인
-5. landing      마케팅/랜딩 사이트 + 개인정보처리방침 URL          [스토어 제출 전제물]
+5. analytics    PostHog 계측 (제품분석 + 에러트래킹 + 로그)
+6. landing      마케팅/랜딩 사이트 + 개인정보처리방침 URL          [스토어 제출 전제물]
    ↳ 이후 개발 루프: 기능 개발 ⇄ 테스트 ⇄ deploy(OTA/빌드)
-6. store-assets 스크린샷 + 스토어 메타데이터
-7. store-submit preflight 게이트 통과 후 Claude Chrome으로 ASC 제출
+7. store-assets 스크린샷 + 스토어 메타데이터
+8. store-submit preflight 게이트 통과 후 Claude Chrome으로 ASC 제출
 ```
 
 ### 이어달리기 규칙 (모든 gapp 스킬 공통)

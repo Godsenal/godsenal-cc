@@ -46,7 +46,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 **compat-check** (skill, model-invocable) — Scan a change for backward-compatibility hazards and get the safe deploy/script order.
 
 - Packaged as a Skill (`plugins/base/skills/compat-check/SKILL.md`); read-only — never edits code, runs scripts, or deploys
-- Reads a diff (uncommitted, a commit range, or a PR) and flags **migrations** (column drops, `NOT NULL` without default, type narrowing), **API/contract** changes, **queue/event schema** changes, new required **env/secrets**, **feature flags**, **backfill scripts**, and **cache/serialization** format changes
+- Reads a diff (uncommitted, a commit range, or a PR) and flags **migrations** (column drops, `NOT NULL` without default, type narrowing), **API/contract** changes, **queue/event schema** changes, new required **env/secrets**, **feature flags**, **backfill scripts**, **cache/serialization** format changes, **mobile client version skew** (old app versions still in the wild), and **native changes** that can't ship over OTA
 - Emits a one-line verdict (`✅ no special ordering` or `⚠️ requires ordered rollout`) and, when needed, a numbered runbook (expand → migrate → backfill → deploy → ramp → follow-up contract PR) with a rollback note, each hazard mapped to `file:line`
 - Auto-invoked by **branch-pr** / **go** to drop a `## Rollout / Deploy order` section into the PR body; also runs standalone via `/gbase:compat-check`
 
@@ -87,20 +87,10 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Auto-fixes clear CI failures (lint, format, type, unused imports) and applies clearly-required review comments (suggested diff blocks, typos, dead code)
 - Resolves safe merge conflicts (lockfile regeneration, pure-addition merges, whitespace-only) via rebase + `--force-with-lease`; aborts and surfaces anything semantic
 - Runs `/gbase:polish` on touched files before each auto-fix commit (skipped for pure lint/format output, verbatim `suggestion` block application, lockfile regen, and whitespace-only conflict resolution where polish would be a no-op)
-- Surfaces testable preview/deploy links (Vercel/Netlify/Storybook/staging, etc.) that CI or bots post — inline, with source + commit SHA, deduped — so you know exactly what to click and test (surface-only; it never opens the link or comments back)
+- Surfaces testable preview/deploy links (app builds and OTA previews — EAS/TestFlight/Firebase App Distribution — or web previews like Vercel/Storybook/staging) that CI or bots post — inline, with source + commit SHA, deduped — so you know exactly what to click and test (surface-only; it never opens the link or comments back)
 - Replies on every inline review comment it touches — `Addressed in <sha>.` for applied items, a one-line reason for declined ones, a "deferred to maintainer" note when waiting on a decision — so reviewers never wonder whether their comment was seen
 - Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
 - Stops automatically when the PR reaches `MERGED` or `CLOSED`
-
-**pr-verify** (skill, model-invocable) — Throw it a PR and it verifies the change actually works in the browser. The counterpart to `monitor`, which surfaces preview links but never opens them.
-
-- Packaged as a Skill (`plugins/base/skills/pr-verify/SKILL.md`); model-invocable
-- Resolves a PR (URL / `owner/repo#123` / bare number / current branch) and builds a requirement checklist from **four sources**: the PR body & checklists, the diff, linked **Figma** designs (via the Figma MCP), and linked issue/Notion/Jira specs — each item tagged `[behavior]` or `[design]`
-- Finds the PR's preview/deploy link (Vercel/Netlify/Storybook/staging, newest build from the head SHA) and opens it in **Claude-in-Chrome**
-- Drives each `[behavior]` item (clicks/typing, console-error check) and screenshot-compares each `[design]` item against Figma (layout, spacing, color tokens, copy, states)
-- Reports a per-requirement `PASS`/`FAIL`/`BLOCKED` table with screenshots **to you** — read-only on GitHub, never comments/approves/merges
-- Never enters credentials — on a login wall it pauses and asks you to sign in manually; never clicks destructive controls on the preview
-- Surfaces ambiguity (which preview, vague requirements, writes needed, login, whole-file Figma links) via `AskUserQuestion`
 
 **karpathy** (skill, model-invocable) — Merge Andrej Karpathy's four behavioral coding-agent guidelines into a project's `CLAUDE.md` in one command.
 
@@ -153,7 +143,6 @@ After installation, the following are available:
 /gbase:review                  # Adversarial review — built-in code-review + skeptic verify (skill, model-invocable)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
-/gbase:pr-verify <pr>          # Verify a PR's behavior + design in the browser via Claude-in-Chrome (skill)
 /gbase:karpathy [--user]       # Merge Karpathy's behavioral guidelines into CLAUDE.md — additive + idempotent (skill)
 /gbase:ego-profile             # Switch ego-browser to another account/profile (skill, model-invocable)
 

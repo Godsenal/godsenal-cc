@@ -1,11 +1,11 @@
 ---
 name: store-assets
 description: >-
-  gapp 하네스 5단계 — App Store 제출용 애셋·메타데이터 준비. iOS 시뮬레이터로 스토어 규격 스크린샷을
+  gapp 하네스 7단계 — App Store 제출용 애셋·메타데이터 준비. iOS 시뮬레이터로 스토어 규격 스크린샷을
   찍는 검증된 파이프라인(preview-simulator 빌드 + 데모 시드 + 화면 강제 + dev FAB 제거)과 스토어
   메타데이터(이름/부제/설명/키워드/개인정보 URL) 작성을 담당한다. "스크린샷 찍자", "스토어 스크린샷",
   "앱스토어 이미지", "스토어 설명 쓰자", "메타데이터 준비" 요청이나 첫 심사 제출 준비 때 이 스킬을
-  써라. 실제 ASC 업로드/제출은 store-submit이 담당.
+  쓴다. 실제 ASC 업로드/제출은 store-submit이 담당.
 ---
 
 # /gapp:store-assets — 스크린샷 + 스토어 메타데이터

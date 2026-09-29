@@ -1,11 +1,11 @@
 ---
 name: store-submit
 description: >-
-  gapp 하네스 6단계 — Claude in Chrome으로 App Store Connect 웹을 자동화해 심사 제출까지 진행.
+  gapp 하네스 8단계 — Claude in Chrome으로 App Store Connect 웹을 자동화해 심사 제출까지 진행.
   버전 생성, 메타데이터 폼 입력(React setter 주입), 스크린샷 업로드(ngrok 터널 + DataTransfer 주입
   — 네이티브 파일 대화상자는 못 쓴다), 개인정보/연령등급 설문 위저드, 빌드 선택, 최종 Submit for
   Review까지. "심사 제출", "앱스토어 제출", "ASC 올려줘", "스토어 등록", "submit for review",
-  "스크린샷 업로드" 요청에 이 스킬을 써라. 전제: store-assets 산출물(스크린샷+메타데이터 문서)과
+  "스크린샷 업로드" 요청에 쓴다. 전제: store-assets 산출물(스크린샷+메타데이터 문서)과
   EAS가 업로드한 빌드. 로그인은 반드시 유저가 직접 한다.
 ---
 

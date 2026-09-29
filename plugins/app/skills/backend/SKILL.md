@@ -5,13 +5,13 @@ description: >-
   RPC, private storage + signed URL, service_role은 Edge Function에만), append-only 마이그레이션 규율,
   로컬-우선(익명 세션→승격) 아키텍처, 오프라인 쓰기 재시도 큐, 클라우드 통합 스모크 테스트까지 깐다.
   "백엔드 세팅", "supabase 붙이자", "DB 스키마", "서버 만들자", "동기화" 요청이나 design 직후
-  다음 단계로 이 스킬을 써라. 서버가 필요 없는 앱이면 HARNESS.md에 N/A 표기하고 건너뛴다.
+  다음 단계로 쓴다. 서버가 필요 없는 앱이면 HARNESS.md에 N/A 표기하고 건너뛴다.
 ---
 
 # /gapp:backend — Supabase 백엔드 (보안모델 포함)
 
 전제: HARNESS.md에서 백엔드 필요 판정이 났다. 아니라면 N/A 체크만 하고 종료.
-Supabase MCP가 연결돼 있으면 그걸 쓰고(스키마 조회 `list_tables`, 배포 후 `get_advisors`),
+Supabase MCP가 연결돼 있으면 그걸 쓰고(스키마 조회 `mcp__supabase__list_tables`, 배포 후 `mcp__supabase__get_advisors` — 서버 이름은 설치에 따라 다를 수 있다),
 없으면 CLI로. `supabase` 공식 스킬이 설치돼 있으면 함께 로드.
 
 ## 출력 언어
@@ -69,7 +69,7 @@ Supabase MCP가 연결돼 있으면 그걸 쓰고(스키마 조회 `list_tables`
 5. **Storage는 private 버킷 + signed URL만.** 공개 URL 금지. 경로에 리소스 id를 넣고
    (`<resource_id>/<file>`), 정책이 경로 세그먼트로 멤버십 판정.
 6. **`service_role` 키는 Edge Function에만.** 클라이언트/레포의 env 어디에도 금지.
-7. 배포 후 `get_advisors`(security) 돌려서 RLS 빠진 테이블 없는지 확인.
+7. 배포 후 `mcp__supabase__get_advisors`(security) 돌려서 RLS 빠진 테이블 없는지 확인.
 
 `supabase-postgres-best-practices` 스킬이 있으면 스키마 작성 시 함께 로드.
 

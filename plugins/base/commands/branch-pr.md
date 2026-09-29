@@ -161,7 +161,7 @@ git add <file1> <file2> ...
 git commit -m "$(cat <<'EOF'
 commit message
 
-Co-Authored-By: Claude <noreply@anthropic.com>
+<attribution trailer the session specifies, if any>
 EOF
 )"
 

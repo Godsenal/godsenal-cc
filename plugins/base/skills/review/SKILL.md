@@ -1,16 +1,14 @@
 ---
 name: review
-description: "Adversarial code review of the current change. Stage 1 delegates finding to the built-in `code-review` skill (which forks to a background agent), so we inherit its dimensions, effort dial, and its own CONFIRMED/PLAUSIBLE verdicts instead of hand-rolling a finder. Stage 2 is adversarial verification — every PLAUSIBLE finding is handed to independent skeptics that try to refute it with a concrete counter-scenario, and anything they kill is dropped. Survivors are classified like reviewer comments: clear+local ones auto-fixed, the rest reported in a severity table. Local-only — never posts to GitHub. Invoke via /gbase:review, from /gbase:go before the PR opens, or as monitor's self-review on an existing PR."
+description: "Adversarially reviews the current change for defects — bugs, regressions, security holes, missing handling. Delegates finding to the built-in code-review, has independent skeptic sub-agents try to refute each finding, auto-fixes the clear and local survivors, and reports the rest. Local-only; never posts to GitHub. Use when asked to review a change or find bugs before shipping; also runs inside gbase:go (before the PR) and gbase:monitor (on an open PR)."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent Skill
 ---
 
 # /gbase:review
 
-Adversarial code review of the current change. Let the built-in `code-review` find defects, then **make each finding survive an adversary before it reaches the user** — the verification stage exists to kill plausible-but-wrong findings, which is where an unverified review wastes the most of the user's time.
+Finding is delegated to the built-in `code-review`. This skill adds the judgment: make every finding survive an adversary before it reaches the user, then decide what may be fixed without asking.
 
-The value here is **not** the finding — that's delegated. It's the judgment layered on top: adversarial verification, and a clear-vs-ambiguous gate that decides what may be fixed without asking.
-
-Model-invocable: run explicitly via `/gbase:review`, let `gbase:go` run it before the PR opens, or let `gbase:monitor` run it on an already-open PR. Auto-triggering only produces a **local report + clear-and-local auto-fixes** — never a GitHub write, never a merge.
+Not polish — cleanup (reuse, dedup, clarity) is `gbase:polish`'s job. Not a GitHub actor — no comments, reviews, replies, or merges, ever.
 
 ## 출력 언어
 
@@ -20,145 +18,57 @@ Model-invocable: run explicitly via `/gbase:review`, let `gbase:go` run it befor
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
-## What this is not
+## Scope and mode
 
-- **Not polish.** `gbase:polish` is behavior-preserving cleanup (reuse, dedup, clarity). `gbase:review` hunts for *defects* — bugs, regressions, security holes, missing handling. If the only thing wrong is slop, that's polish's job; don't duplicate it here.
-- **Not a GitHub actor.** Read-only on GitHub: no comments, no reviews, no replies, no merge. Findings go to the user; fixes show up as local edits or commits.
+Target: explicit paths / range / PR from the caller; else uncommitted changes; else the latest commit. Skip pure renames, dependency bumps, and generated code.
 
-## Scope
+Mode decides how fixes land:
 
-Resolve the change under review, in this order:
-
-```bash
-git status --short
-git diff --stat HEAD
-git diff --stat @{upstream}...HEAD   # if branched (no upstream: main...HEAD, then HEAD~1)
-```
-
-- **Caller passes explicit paths / a range / a PR** → scope to those.
-- **Uncommitted changes present** → review those files.
-- **Clean working tree** → review the latest commit (`git show HEAD --name-only`).
-
-Skip entirely on: pure rename/move commits, dependency bumps, generated code (lockfiles, OpenAPI clients, compiled assets). Say so in one line and stop.
-
-## Mode: pre-PR vs post-PR
-
-This decides how fixes land, and it's the first thing to settle:
-
-| | **Pre-PR** (called from `gbase:go`, tree uncommitted, no PR yet) | **Post-PR** (called from `gbase:monitor`, PR is open) |
+| | **Pre-PR** (from `gbase:go`, or a dirty tree) | **Post-PR** (clean tree + open PR, e.g. from `gbase:monitor`) |
 |---|---|---|
-| Fixes land as | Working-tree edits, **no commits** — `branch-pr` groups them into the initial commits | One commit per fix, pushed to the PR branch |
-| Effect on the PR | PR opens already clean | Extra commits + a CI rerun per fix |
-| Polish before committing | Not needed — `go` already polished, and `branch-pr` commits afterward | Run [post-fix polish](#post-fix-polish) on non-trivial fixes |
+| Fixes land as | working-tree edits, no commits — `branch-pr` groups them | one commit per fix, pushed |
 
-**The caller's explicit mode wins** — `gbase:go` says pre-PR even on a branch that already has an open PR, and committing there mid-flow is exactly what pre-PR mode exists to prevent.
+The caller's stated mode wins. Without one, a dirty tree means pre-PR even if a PR is open — committing would sweep the user's unrelated edits into a review commit.
 
-Infer only when no mode was given, and **a dirty tree decides it**:
+## Stage 1 — Find
 
-- Uncommitted changes present → **pre-PR**, even if a PR is already open. Committing here would sweep the user's unrelated in-progress edits into a review commit and push them.
-- Clean tree + open PR → **post-PR**.
-- Clean tree, no PR → pre-PR, and hand the fixes back rather than committing.
-
-## Stage 1 — Find (delegate to the built-in `code-review`)
-
-Do **not** hand-roll a finder. Invoke the built-in skill:
+If the caller handed in findings (`gbase:go` does), skip to Stage 2. Otherwise:
 
 ```
 Skill(skill: "code-review", args: "medium <target>")
 ```
 
-**Always pass the target you resolved in [Scope](#scope).** With no target the built-in defaults to *the current diff* — so on a clean tree (reviewing the latest commit) it reviews an empty diff, returns zero findings, and the caller reports "review found nothing" about a change nothing ever looked at. Pass the commit range, PR number, or paths explicitly.
+- Always pass the target. With none, the built-in reviews the current diff — empty on the clean-tree path, so it reports "nothing found" about a commit it never read.
+- `medium` unless the user asked for depth; above it the built-in fans out to a multi-agent workflow at many times the cost, and Stage 2 already removes most of what the extra coverage adds.
+- Never `--fix` (bypasses Stage 3), `--comment` (posts to GitHub), or `ultra` (user-triggered and billed — tell the user they can run `/code-review ultra` themselves).
+- Drop reuse/simplification/efficiency findings — they're polish's, carry no failure scenario, and would otherwise pass the auto-fix gate and undo restructurings polish chose not to make. Mention them as "noted"; never count or auto-apply them.
 
-It runs in the background and returns a structured finding list — `{file, line, category, short_summary, summary, failure_scenario, verdict}` — covering correctness bugs plus reuse/simplification/efficiency, at the effort level you pass.
-
-**Drop the cleanup categories before Stage 2.** The built-in also reports reuse / simplification / efficiency findings. Those are `gbase:polish`'s job, not this skill's ([What this is not](#what-this-is-not)), and they arrive with no failure scenario — so they must never enter the auto-fix gate, where "inline this single-caller wrapper" would trivially read as mechanical-and-local and silently overturn a restructuring polish already considered and declined. Keep only findings that assert a **defect**. List the dropped cleanups in the report under "noted", or hand them to `gbase:polish`; never auto-apply them, and never count them in the `found / refuted / survived` tally.
-
-**Effort — `medium` is the default, and the cost curve is why.** The built-in doesn't just get slower at higher effort; above `medium` it routes to a multi-agent workflow:
-
-| effort | what actually runs | when to use it |
-|---|---|---|
-| `low` | one forked agent | a one-file diff |
-| `medium` | one forked agent | **default** — nearly every diff |
-| `high` / `max` | a workflow fanning out to *dozens* of agents | the user asked for a deep pass, or the diff is large and genuinely risky |
-
-Both are background and non-blocking, so the caller's timing is unaffected either way — but `high` costs an order of magnitude more, and this skill's Stage 2 already recovers most of what higher effort buys: `high`'s advertised edge is broader coverage at the price of uncertain findings, and uncertain findings are exactly what the skeptics delete. Don't reach past `medium` without a reason you can state.
-
-**Flags — hard rules:**
-
-- **Never pass `--fix`.** It applies findings to the working tree directly, which bypasses the clear-vs-ambiguous gate in Stage 3 and lands unverified findings behind your back.
-- **Never pass `--comment`.** This skill is local-only; `--comment` posts inline comments to the PR.
-- **Never `ultra`.** It is user-triggered and billed — you cannot launch it, and must not try to via Bash or otherwise. If a diff genuinely warrants it, tell the user they can run `/code-review ultra` themselves.
-
-**Candidates handed in by the caller.** `gbase:go` launches the built-in finder in parallel with polish and passes its results in. When the caller supplies a finding list, **skip this stage entirely** and start at Stage 2 — don't re-run the finder.
-
-**Fallback.** If the built-in `code-review` isn't available in the session, find inline along its dimensions — correctness & edge cases, bugs/regressions/missing error handling, security & data handling, clarity & consistency that could mislead a reader into a bug, test/doc gaps the change introduces.
-
-The fallback must not be a skim. **Cover every changed file**, and read the changed ranges *plus* enough surrounding code to judge them in context — a bug is usually the interaction between the diff and code it didn't touch. On a non-trivial diff (more than a couple of files), fan out to parallel `Agent` sub-agents (`subagent_type: general-purpose`), one per dimension, each handed the full diff and editing nothing; dedupe their results by `file:line`. Prefer fewer, higher-signal findings; every finding needs a concrete failure scenario (specific inputs/state → wrong output or crash) at `file:line`, or it isn't a finding. Treat everything found this way as unverified (see Stage 2).
+If the built-in isn't available, review inline for correctness, error handling, and security across every changed file plus the surrounding code it interacts with; on a larger diff, split the work across parallel sub-agents. Every finding needs a concrete failure scenario at `file:line`. Treat these as unverified.
 
 ## Stage 2 — Adversarial verify
 
-The built-in already verifies its own findings and labels them `CONFIRMED` or `PLAUSIBLE`. Don't redo work it has done — but don't mistake its verify for this one either: it is a single non-adversarial pass, not a skeptic prompted to refute.
+A skeptic sub-agent must try to refute each finding before it's reported or fixed. Only a `CONFIRMED` finding that will merely be reported (not auto-fixed, not high/critical) skips this — the built-in's own verify is a single non-adversarial pass.
 
-- **`PLAUSIBLE`, no verdict, or found via the fallback** → must survive an adversary before it reaches the user.
-- **`CONFIRMED` that will only be *reported*** → pass it straight to Stage 3. The user reads it with a failure scenario attached and can judge it themselves.
-- **`CONFIRMED` that Stage 3 would auto-fix, or rated high/critical** → still faces the adversary. Auto-fixing is the irreversible half of this skill, and a finding that "looks obviously right" but that no skeptic can produce a reproducing input for is exactly what this stage exists to catch. One skeptic is enough for a `CONFIRMED` candidate; high/critical still gets the 3-skeptic panel.
+Skeptic prompt:
 
-Never let Stage 1's confidence carry a finding through to an edit unexamined.
+> Claimed defect: `<finding>` at `file:line`, failure scenario `<scenario>`. Try to refute it: read the code and its callers and find a concrete reason the scenario can't happen (guarded upstream, invariant holds, no caller passes that input, dead branch). Refute the scenario exactly as stated, not a weaker one. If you can't, concede it's real. When uncertain, call it refuted.
 
-For each finding needing verification, spawn independent skeptic sub-agent(s) via `Agent` — **prompted to refute, not to confirm**:
+One skeptic for low/medium. High/critical (data loss, security, corruption, crash on a common path) gets three with different angles; a majority refutation kills it. Refuted findings are dropped from the report; keep the count and one-line reasons.
 
-> Here is a claimed defect: `<finding>` at `file:line`, with failure scenario `<scenario>`.
-> Your job is to **refute** it. Read the code and its callers. Produce a concrete reason the scenario cannot actually happen (guarded upstream, invariant holds, caller never passes that input, framework handles it, dead branch). If after genuinely trying you cannot refute it, concede it is real. Default to **refuted** when uncertain — a false alarm costs more than a miss here.
+## Stage 3 — Act
 
-Scale the adversary to the stakes:
+**Auto-fix** a survivor only when the fix is mechanical, local (one or two files, small), and fully determined by the finding — no design choice, dependency, schema/migration, API-contract change, or test added/removed. Land it per the mode. Run `gbase:polish` on the touched files before a non-trivial fix is committed or handed back — in pre-PR mode nothing else will polish it.
 
-- **Low / medium severity** → one skeptic. Survives only if the skeptic concedes it's real.
-- **High / critical severity** (data loss, security, corruption, crash on a common path) → a **3-skeptic panel**, each with a distinct lens where it helps (does-it-reproduce / is-it-guarded-upstream / does-a-caller-prevent-it). Kill the finding if a **majority** refute it.
+**Everything else** goes in the report; raise the ones worth fixing before merge with `AskUserQuestion` (`file:line`, failure scenario, 2–3 options). When the caller says *defer, don't ask* (`gbase:go` does, so nothing blocks the PR), return them instead of asking.
 
-A refuted finding is **dropped silently** — it never reaches the user. Keep a count of `found / refuted / survived` for the tally, and capture each refutation's one-line reason; a couple of the sharpest are worth showing as "considered and dismissed" so the review reads as thorough, not thin.
-
-The skeptic must refute the **exact** scenario as stated, not a weaker one — strawman refutations quietly bury real defects.
-
-## Stage 3 — Classify & act (local only)
-
-Feed every **survivor** through the same clear-vs-ambiguous split `gbase:monitor` uses for reviewer comments:
-
-**Clear → auto-fix** when ALL hold:
-
-- Mechanical and local (one or two files, small diff): missing `await`, inverted condition, wrong-variable copy-paste, an obvious missing null guard on a path the scenario proves is reachable.
-- The fix is fully determined by the finding — no design choice, no new dependency, no schema/migration, no API-contract change.
-- No test is added or removed to make it pass (beyond the fix itself).
-
-Apply each clear fix per the [mode](#mode-pre-pr-vs-post-pr) — working-tree edit pre-PR, its own commit post-PR. If the change is under an active PR watch and merges before a fix lands, don't push to the merged branch; report it as a follow-up-PR candidate instead.
-
-**Everything else → report + ask.** Architecture, behavior change, security trade-offs, anything touching tests/schemas/config, or any survivor where the fix is a judgment call: put it in the report, and surface the ones worth fixing before merge via `AskUserQuestion` (include `file:line`, the failure scenario, and 2–3 concrete options).
-
-**Defer mode.** When the caller asks to *defer, not ask* — `gbase:go` does, because a judgment call must never hold up a PR the user already asked for — **return** the ambiguous survivors instead of raising `AskUserQuestion`. The caller surfaces them at a moment that doesn't block anything. Auto-fixing the clear ones is unaffected.
-
-### Post-fix polish
-
-Before any non-trivial auto-fix is committed (post-PR) or handed back for commit (pre-PR), run:
-
-```
-Skill(skill: "gbase:polish", args: "<touched files>")
-```
-
-Skip for one-line mechanical fixes. **This applies in pre-PR mode too** — `go` runs polish at its Step 3, *before* these fixes exist at Step 4, so nothing else will ever polish them. A review fix landing a duplicated guard or a defensive wrapper would otherwise reach reviewers unpolished, inside the PR's initial commits.
+If the PR merges before a fix lands, don't push to the merged branch — report it as a follow-up.
 
 ## Report
 
-One organized report when the pass finishes — **local, nothing posted to GitHub**:
+Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / noted)`, then `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
 
-- A severity-ordered table: `# | severity | file:line | finding | action (auto-fixed / needs decision / noted)`.
-- A one-line tally: `review: F found, R refuted, S survived — A auto-fixed, K for you`.
-- Optionally, one line naming the sharpest refuted candidate(s) so the user sees what was dismissed and why.
+## Safety
 
-## Safety rules
-
-Inherits `gbase:monitor`'s rules:
-
-- Prohibited: `git reset --hard`, `git checkout .`, `git clean -f`, plain `git push --force`, `git stash drop`.
-- Revert a bad auto-fix by reversing your **own** `Edit`, never `git checkout --`/`git restore` (which would wipe the user's uncommitted work — in pre-PR mode the whole change is uncommitted).
-- Post-PR: each auto-fix is its own commit; stop and surface on any error rather than retrying destructively.
-- Read-only on GitHub at all times — no comments, reviews, replies, or merges.
-- If a real correctness bug is too entangled to fix mechanically, report it; don't half-fix it.
+- No `git reset --hard`, `git checkout .`, `git clean -f`, plain `git push --force`, `git stash drop`.
+- Undo a bad auto-fix by reversing your own `Edit`, never `git checkout --` / `git restore` — in pre-PR mode the whole change is uncommitted.
+- A bug too entangled to fix mechanically is reported, not half-fixed.

@@ -1,6 +1,6 @@
 ---
 name: compat-check
-description: "Scan a code change for backward-compatibility hazards and tell you the safe deploy/script order. Reads a diff (uncommitted, a commit range, or a PR) and flags migrations, API/contract changes, queue/event schema changes, new required env/secrets, feature flags, and backfill scripts — then emits an ordered rollout runbook. Read-only: it never edits code, runs scripts, or deploys. Use when asked about deploy order, rollout order, backward/forward compatibility, '배포 순서', '하위호환', migration ordering, or 'is this change safe to ship in one deploy'. Auto-invoked by gbase:branch-pr / gbase:go to add a Rollout section to the PR body."
+description: "Scans a code change for backward-compatibility hazards and gives the safe deploy/script order. Reads a diff (uncommitted, a commit range, or a PR) and flags migrations, API/contract changes, queue/event schema changes, new required env/secrets, feature flags, and backfill scripts — then emits an ordered rollout runbook. Read-only: never edits code, runs scripts, or deploys. Use when asked about deploy order, rollout order, backward/forward compatibility, '배포 순서', '하위호환', migration ordering, or 'is this change safe to ship in one deploy'. Auto-invoked by gbase:branch-pr / gbase:go to add a Rollout section to the PR body."
 allowed-tools: Bash Read Glob Grep AskUserQuestion
 ---
 
@@ -52,6 +52,8 @@ whole point of flagging it.
 | **Feature flag / kill switch** | behavior gated behind a flag | ship dark (flag off), deploy, then ramp the flag separately. |
 | **Data backfill / one-off script** | a script that must populate/transform data | sequence relative to deploy (before? after migration? before reads switch?). |
 | **Serialization / cache key / format** | cache value shape change, serializer version bump, changed cache key | versioned keys or invalidation; old and new instances must not fight over one key. |
+| **Mobile client version skew** | server/API change consumed by the app; app code that assumes a new server field or endpoint | installed app versions linger for months — the server must keep serving every supported app version. Ship server first, app second; remove old paths only after the minimum supported / force-update version passes them. |
+| **Native change vs OTA** | new/upgraded native module, `app.json`/`app.config.*` native fields, `ios/`/`android/` sources, RN/Expo SDK bump in a repo that ships OTA (EAS Update / CodePush) | JS that needs the new native code must not reach old binaries over OTA — gate it on the new runtime/app version, or release via store build first. |
 | **Cross-service removal** | deleting code/endpoint other services or repos still call | coordinate across repos; remove callers first, provider last. |
 
 If none of these appear and the change has no public/contract/schema/config surface (isolated new

@@ -1,16 +1,12 @@
 ---
 name: monitor
-description: "Watch a PR until merge/close — auto-fix clear CI failures, address clearly-needed review comments, resolve safe merge conflicts (lockfiles, pure additions), surface testable preview/deploy links from CI/bot comments, and run /gbase:polish on every non-trivial auto-edit before committing. When attached to a PR that wasn't just reviewed, also runs one adversarial self-review (gbase:review) in parallel with the watch — findings are skeptic-verified, classified like reviewer comments, and reported to the user, never posted to GitHub (--no-review skips it). Ask on ambiguous ones. Invoke manually with /gbase:monitor, chained from /gbase:go, or auto-triggered when the user wants a PR babysat until it merges; the persistent Monitor and AskUserQuestion gates keep it from acting unilaterally on anything ambiguous."
+description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles, surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). Use when the user wants a PR babysat to merge; also the tail of gbase:go."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
 # /gbase:monitor
 
-Subscribe to the current branch's PR and keep it moving until it merges or closes. Apply clear review feedback, fix obvious CI failures, resolve safe merge conflicts. Surface anything subjective via `AskUserQuestion`. Surface testable preview/deploy links that CI or bots post so the user can try the change. Unless the caller passed `--no-review`, run one adversarial self-review of the PR (`gbase:review`) right after the watch starts — it runs inside the CI wait the PR already pays, so it costs the ship path nothing.
-
-Reviewer-agnostic: human reviewers, code review bots, and CI assistants go through the same classification. Identity matters for the *reply target*, not for whether to engage.
-
-Model-invocable: invoke explicitly via `/gbase:monitor`, as the tail of `/gbase:go`, or let the model trigger it when the user asks to keep a PR moving until merge. The persistent `Monitor` and the `AskUserQuestion` gates on ambiguous items mean auto-triggering only starts the watch loop — it never green-lights a unilateral edit, merge, or force-push.
+Keep the current branch's PR moving until merge or close. Human reviewers, review bots, and CI assistants all go through the same classification; identity only decides where the reply goes. Auto-triggering starts the watch — it never licenses a unilateral merge, force-push, or ambiguous edit.
 
 ## 출력 언어
 
@@ -20,160 +16,87 @@ Model-invocable: invoke explicitly via `/gbase:monitor`, as the tail of `/gbase:
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
-## Safety rules
+## Safety
 
-- Prohibited: `git reset --hard`, `git checkout .`, `git clean -f`, plain `git push --force`, `git stash drop` (unless the user explicitly asks).
-- **Conflict rebases only**: `git push --force-with-lease` is allowed (refuses if the remote moved); `git checkout --ours/--theirs <file>` is allowed for the cases listed in [Conflict classification](#conflict-classification). Never as a shortcut on a semantic conflict.
-- Snapshot before any rebase. On uncertainty: `git rebase --abort`.
-- Each autonomous fix is its own commit with a clear message.
-- Stop and surface on any push/merge error; never retry destructively.
-- Never resolve a review thread, re-request review, or dismiss approvals on the user's behalf.
-- `gh pr ready` (draft → ready) only in the [`--draft` flow](#--draft-flow) the user opted into; never flip a draft the user created themselves.
-- Never reply twice to the same comment.
+- No `git reset --hard`, `git checkout .`, `git clean -f`, plain `git push --force`, or `git stash drop` (unless the user asks).
+- `git push --force-with-lease` and `git checkout --ours/--theirs` only while resolving the conflict types listed below; if the lease is rejected, stop.
+- One commit per autonomous fix. Stop and surface on any push/merge error instead of retrying destructively.
+- Never resolve threads, re-request review, dismiss approvals, or reply twice to the same comment.
+- `gh pr ready` only in the `--draft` flow below.
 
 ## Loop
 
-1. Resolve the PR for the current branch. Stop if it's already `MERGED` / `CLOSED`.
-2. Sweep current state — CI, every review surface GitHub exposes (inline comments, top-level reviews, PR conversation comments), mergeability, and any testable links already posted (see [Surface testable links](#surface-testable-links)). **Act on every unresolved item before subscribing** — don't just watermark them. Pre-existing reviews slipping past the loop is the most common failure mode.
-3. Start a persistent `Monitor` (~30s poll). Emit one event per state change; watermark to avoid re-emission. Skip events authored by the current gh user so your own replies don't loop back.
-4. Run the [Self-review](#self-review) pass — once, now, while the watch runs in the background.
-5. On each event: classify, act, reply (when applicable), and surface any new testable link.
-6. Exit when state flips to `MERGED` / `CLOSED`. Print a one-line summary (including the self-review tally).
+1. Resolve the PR for the current branch; stop if it's already merged or closed.
+2. Sweep current state — CI, inline comments, top-level reviews, PR conversation comments, mergeability, posted links — and act on every unresolved item before subscribing. Pre-existing reviews slipping past the loop is the most common miss.
+3. Start a persistent `Monitor` (~30s poll) that emits one event per state change, with watermarks, ignoring events authored by the current `gh` user.
+4. Unless `--no-review`, run the self-review once, now.
+5. On each event: classify, act, reply, surface new links. A `CONFLICTING` merge state comes first — CI keeps failing on the merge commit while it stands.
+6. On merge/close, print a one-line summary.
 
-If `mergeable` is `CONFLICTING` at any point, handle the conflict first — CI runs on the merge commit and keeps failing while it stands.
+## Classification
 
-## Classification: clear vs ambiguous
+**Apply automatically** only when all hold: mechanical (lint/type fix, rename, typo, missing `await`, a ```` ```suggestion ```` block verbatim); one or two files, under ~20 lines; no behavior change beyond what the reviewer named; no new dependency, schema/migration, or API change; the reviewer's intent is stated, not implied.
 
-**Apply automatically** when ALL hold:
+**Ask** otherwise — design choices, tests added/removed, behavior changes, trade-offs, questions, hedged comments ("maybe", "consider"), or fixes touching files the reviewer didn't mention. Include reviewer, a one-line quote, `file:line`, and 2–3 options.
 
-- Mechanical: rename, formatting, lint/typecheck fix, unused-import/variable removal, missing-await, obvious typo, applying a fenced ` ```suggestion ` block verbatim.
-- Local (one or two files, under ~20 lines of diff).
-- No behavior change beyond what the reviewer explicitly named.
-- No new dependency, no schema/migration, no API contract change.
-- Reviewer's intent is stated directly, not implied.
-
-**Ask the user** when ANY hold:
-
-- Architecture, abstraction, or design choice.
-- Test added or removed.
-- Behavior change ("we should also handle X").
-- Performance trade-off, new dependency, schema/migration.
-- Comment is a question, not a request.
-- Reviewer hedges ("maybe", "consider", "could we...").
-- Fix would touch files the reviewer didn't reference.
-
-When in doubt, ask. Include reviewer + a one-line quote + `file:line` + 2–3 concrete options.
+Same CI check failing twice after the same fix → stop auto-fixing it and ask.
 
 ## Self-review
-
-One pass per watch, right after the `Monitor` starts (loop step 4). Skip on `--no-review`.
 
 ```
 Skill(skill: "gbase:review", args: "<PR diff scope>")
 ```
 
-**When this actually runs.** `gbase:go` reviews the diff *before* `branch-pr` opens the PR and passes
-`--no-review` here, so a PR shipped through `go` is not reviewed twice. This pass is for the case `go`
-doesn't cover: monitor attached to a PR opened by an earlier session, by a teammate, or by hand. If you
-can't tell whether the diff was already reviewed, run it — a duplicate pass costs tokens, a skipped one
-costs a defect.
+`gbase:go` reviews before opening the PR and passes `--no-review`, so this pass is for PRs opened elsewhere (an earlier session, a teammate, by hand). If you can't tell whether the diff was reviewed, run it. `gbase:review` auto-fixes clear survivors in their own commits and returns the rest; relay its report (severity table + tally) and ask about anything worth fixing before merge. Nothing from it is posted to GitHub.
 
-`gbase:review` delegates finding to the built-in `code-review`, makes every `PLAUSIBLE` finding survive
-an independent skeptic, and already does the [classification](#classification-clear-vs-ambiguous) below
-internally — auto-fixing clear+local survivors in their own commits and returning the rest as a report.
-Monitor just relays that report; the split is:
+## `--draft` flow
 
-- **Clear** (mechanical, local, concrete failure scenario — missing `await`, inverted condition,
-  wrong-variable copy-paste) → auto-fixed by `gbase:review`: own commit, [post-fix polish](#post-fix-polish), push.
-- **Everything else** → in the report; anything worth fixing before merge gets an `AskUserQuestion`.
+Run `gh pr ready` once CI is green and every outstanding finding is resolved — from a self-review this run did, and from any deferred findings `gbase:go` reported. Flipping on CI green alone would announce the PR for review with a known defect still in it.
 
-Differences from external review comments:
+## Conflicts
 
-- **Nothing is posted to GitHub** — no comments, no replies, no reviews. Findings go to the user; fixes
-  show up as commits.
-- **One organized report** when the pass finishes: a severity-ordered table
-  `# | file:line | finding | action (auto-fixed <sha> / needs decision / noted)`, then a one-line tally:
-  `review: F found, R refuted, S survived — A auto-fixed, K for you`.
-- **PR merged before the pass finished** (fast CI, auto-merge): don't push to the merged branch — report
-  the remaining findings as follow-up-PR candidates.
+**Resolve automatically:**
+- Lockfiles (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, `Gemfile.lock`, `poetry.lock`, `Cargo.lock`, `go.sum`, …): take base, regenerate with the matching package manager. `Podfile.lock` only if `pod install` works locally; otherwise ask.
+- Generated artifacts (`dist/`, `build/`, `*.min.js`, `*.map`): take base, regenerate if a build script exists.
+- Pure additions at the same spot (separate imports, enum entries, test cases) that don't reference the same identifier: keep both.
+- Whitespace-only: rerun the formatter.
 
-### `--draft` flow
+**Ask** for everything else — same-line semantic edits, migrations/schemas, config files (`.env*`, `tsconfig.json`, `app.json`/`app.config.*`, `eas.json`, `Info.plist`, `build.gradle*`, `Podfile`, `next.config.*`, CI yamls), conflicts over ~30 lines, rebases replaying more than ~5 commits, renames modified on the other side.
 
-When invoked with `--draft` (usually passed through from `gbase:go`, with `branch-pr` having opened the
-PR as a draft): once CI is green **and** every finding from a self-review it actually ran is resolved
-(auto-fixed or decided by the user), run `gh pr ready` and tell the user. This is the only case where
-monitor may flip draft state, and only because the flag was the user's opt-in.
+After resolving: `git rebase --continue`, polish the resolved non-lockfile files, `git push --force-with-lease`. A conflict that reappears after a clean rebase means a parallel PR is fighting the same lines — stop and surface.
 
-**Unresolved findings block the flip even when monitor didn't find them.** Under `gbase:go` the review
-ran pre-PR, and `go` *defers* its judgment calls to after the PR opens — so "no self-review here" does not
-mean "nothing outstanding". If `go` reported deferred findings, hold the flip until they are resolved
-too. Flipping to ready on CI green alone would announce the PR for review with a defect the review
-already found still sitting in it, which is the exact thing the draft gate is for.
+## Polish before committing
 
-## Conflict classification
+Run `Skill(skill: "gbase:polish", args: "<touched files>")` on every non-trivial monitor edit and fold its changes into the same commit. Skip for formatter output, verbatim suggestion blocks, lockfile regeneration, and whitespace-only resolutions.
 
-**Resolve automatically**:
+## Replies
 
-- **Lockfiles** (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, `Gemfile.lock`, `poetry.lock`, `Cargo.lock`, `composer.lock`, `go.sum`): take the base side, regenerate via the matching package manager, `git add`.
-- **Generated/build artefacts** (`dist/`, `build/`, `*.min.js`, `*.map`): take base side, regenerate if a `build` script exists.
-- **Pure-addition conflicts** where both sides added independent content at the same location (separate enum entries, separate imports, separate test cases): keep both. The two blocks must not reference the same identifier.
-- **Whitespace-only conflicts**: rerun the project's formatter, `git add`.
+Every review comment monitor handles gets exactly one reply — inline for inline comments, a PR comment otherwise:
 
-**Ask** for everything else: same-line semantic edits, migrations/schemas, config files (`.env*`, `tsconfig.json`, `next.config.*`, CI yamls), conflicts spanning more than ~30 lines, rebase replays of more than ~5 commits, renames where the other side modified the old path.
-
-After resolving, `git rebase --continue`, run [Post-fix polish](#post-fix-polish) on resolved non-lockfile files, then `git push --force-with-lease`. If `--force-with-lease` is rejected, stop and surface.
-
-## Surface testable links
-
-CI checks and deploy/preview bots routinely post links you can open to *try the change* — Vercel/Netlify/Cloudflare preview deployments, Storybook/Chromatic builds, staging or review-app URLs, "View deployment" targets on a check run. When one shows up, surface it to the user inline so they can click through and test. Bots usually label these clearly — use judgment; you don't need an exhaustive allowlist.
-
-- **Surface**: links whose purpose is testing the change (preview / deploy / staging / review-app / storybook / demo).
-- **Skip**: links that aren't for testing — docs, issue/PR/commit references, coverage badges, dashboards, CI log/run URLs.
-- **Include context**: the URL, its source (which bot/check), and the commit SHA it was built from, so the user knows which revision they're testing.
-- **Dedup**: surface each distinct URL once. Preview bots edit the same comment per push — when the URL changes (new deployment), surface the new one once; never re-emit an unchanged URL.
-- **Surface only**: don't open it, smoke-test it, or post anything back to the PR. This is purely informational for the user. No new side effects, no `allowed-tools` beyond what monitor already has.
-
-Catch already-posted links during the initial sweep; catch new ones on each event.
-
-## Post-fix polish
-
-Whenever monitor produces a code edit, run the `gbase:polish` skill on touched files **before** staging — fold any resulting edits into the same commit. Polish does deslop + structural passes (both behavior-preserving), so monitor's auto-fix doesn't ship with leftover AI cruft or premature abstractions.
-
-```
-Skill(skill: "gbase:polish", args: "<touched files>")
-```
-
-**Skip** when the edit is provably mechanical and re-running would be a no-op: lint/format auto-fix output, verbatim ` ```suggestion ` block application, lockfile regen, whitespace-only.
-
-## Always reply
-
-Every review comment monitor touches gets exactly one reply, regardless of outcome. Inline comments get an inline reply; PR-level items get a PR conversation comment.
-
-| Outcome | Reply template |
+| Outcome | Reply |
 |---|---|
-| Applied (auto or after `AskUserQuestion` confirmed) | `Addressed in <short-sha>.` |
-| Declined (user picked "skip") | `Discussed with the maintainer — keeping current approach. <one-line reason>` |
-| Declined (clearly out of scope) | `Out of scope for this PR — tracking separately.` |
-| Deferred | `Surfaced to the maintainer; will follow up here once decided.` |
-| Question, not a request | `Answering inline: <one-line answer>` (or surface to the maintainer if unknown) |
+| Applied | `Addressed in <short-sha>.` |
+| Declined by the user | `Discussed with the maintainer — keeping current approach. <reason>` |
+| Out of scope | `Out of scope for this PR — tracking separately.` |
+| Waiting on the user | `Surfaced to the maintainer; will follow up here once decided.` |
+| A question | `Answering inline: <answer>` |
 
-Tone: one line, concrete reason on declines, no apology or "thanks for the feedback" filler. Never resolve the thread; the reviewer does that.
+One line, a concrete reason on declines, no filler. When every point of a `CHANGES_REQUESTED` review is handled, post one PR-level summary.
 
-When all points of a `CHANGES_REQUESTED` review are resolved, post a single PR-level summary so the reviewer doesn't crawl every thread.
+## Testable links
 
-## Error handling
+Surface links that let the user try the change — app builds and OTA previews (EAS Update / Expo QR, EAS internal, TestFlight, Firebase App Distribution, Play internal testing) and web previews (Vercel/Netlify/Cloudflare, Storybook/Chromatic, staging). Include the source bot/check and the commit SHA it was built from; surface each distinct URL once (bots edit one comment per push). Skip docs, badges, and CI log links. Surface only — don't open them or post back.
 
-- `gh` auth missing → stop, ask the user to run `gh auth login`.
-- No PR for branch → stop, suggest `/gbase:branch-pr`.
-- Push rejected (branch out of date) → `git pull --rebase`, retry once. Conflicts → hand off to conflict handling.
-- `--force-with-lease` rejected → stop, surface; do not retry.
-- Same CI check fails twice after the same fix pattern → stop auto-fixing that check, ask.
-- Same conflict reappears after a clean rebase → stop, surface (base branch likely has a parallel PR fighting the same lines).
+## Errors
+
+- No `gh` auth → ask the user to run `gh auth login`.
+- No PR for the branch → suggest `/gbase:branch-pr`.
+- Push rejected as out of date → `git pull --rebase`, retry once; conflicts go through the rules above.
 
 ## Usage
 
 ```
 /gbase:monitor                 # watch + self-review
 /gbase:monitor --no-review     # watch only
-/gbase:monitor --draft         # also flip the draft PR to ready once CI is green + self-review resolved
+/gbase:monitor --draft         # also flip the draft to ready once CI is green and findings are resolved
 ```

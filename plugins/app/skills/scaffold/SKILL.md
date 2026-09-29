@@ -5,7 +5,7 @@ description: >-
   TypeScript strict + jest + typecheck + 부트스트랩 순서 + env 규약 + DevMenu 패턴 같은
   검증된 컨벤션을 깔고, 새 레포의 CLAUDE.md("버전 고정 문서만 봐라" 규칙 포함)까지 생성한다.
   "환경세팅", "프로젝트 생성", "expo 세팅", "스캐폴드", "보일러플레이트" 요청이나 kickoff 직후
-  다음 단계로 이 스킬을 써라. 전제: docs/HARNESS.md가 있으면 그 결정사항을 따른다.
+  다음 단계로 쓴다. 전제: docs/HARNESS.md가 있으면 그 결정사항을 따른다.
 ---
 
 # /gapp:scaffold — Expo 환경세팅
