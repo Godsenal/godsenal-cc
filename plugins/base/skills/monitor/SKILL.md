@@ -60,7 +60,7 @@ Run `gh pr ready` once CI is green and every outstanding finding is resolved —
 
 ## `--merge` flow
 
-Only when the user passed `--merge` or `gbase:work` → `gbase:go` did — never add it on your own. Merge when all hold: no required check failing; no unresolved finding from this run's self-review (`go` passes `--merge` only after its deferred findings are settled); no unanswered review comment asking for a change; mergeable state `CLEAN`, or `UNSTABLE` only because of checks that never started (below). Never merge with a failing required check, an unresolved `CHANGES_REQUESTED` review, or a conflict.
+Only when `--merge` was passed — because the user asked to merge, or the project's instructions say to — never by default. Merge when all hold: no required check failing; no unresolved finding from this run's self-review (`go` passes `--merge` only after its deferred findings are settled); no unanswered review comment asking for a change; mergeable state `CLEAN`, or `UNSTABLE` only because of checks that never started (below). Never merge with a failing required check, an unresolved `CHANGES_REQUESTED` review, or a conflict.
 
 - **A merge that deploys is a deploy — ask first.** If a workflow on the default branch deploys on push (EAS Update / OTA, a production web deploy, a release) and this PR's paths aren't excluded by its `paths` / `paths-ignore`, stop and ask before merging.
 - **A check that never started** for account reasons (annotation like "job was not started because recent account payments have failed or your spending limit needs to be increased") isn't a diff failure. Say so, and merge only if `go` passed `verified-locally` (its Step 4 gate passed this run); standalone, ask.
