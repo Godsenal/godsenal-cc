@@ -8,6 +8,7 @@ A Claude Code plugin marketplace (`godsenal`) with two plugins — `gbase` (dev 
 .claude-plugin/marketplace.json     registry — one entry per plugin, with version
 plugins/base/  → gbase              .claude-plugin/plugin.json, skills/<name>/SKILL.md, commands/*.md (legacy)
 plugins/app/   → gapp               .claude-plugin/plugin.json, skills/<name>/SKILL.md (+ references/)
+scripts/check.py                    repo checks CI runs (.github/workflows/check.yml)
 ```
 
 Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
@@ -18,8 +19,10 @@ Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
 - **Every change bumps the version** in both `plugins/<p>/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (patch for fixes/wording, minor for new or reworked skills) — installed plugins don't update otherwise. Update `README.md` when a skill's behavior or usage changes; update `plugin.json` keywords when skills are added or removed.
 - **Output language.** Every skill/command carries a `## 출력 언어` block: user-facing text in Korean; code, paths, commands, status labels, and commit/branch/PR text stay as the target repo's convention. gapp app artifacts (UI copy, store metadata, landing/privacy pages) follow the app language in `docs/HARNESS.md`. Keep the block when editing a skill.
 - **Cross-skill contracts — change both sides together:**
-  - `compat-check`'s verdict tokens (`✅ no special ordering` / `⚠️ requires ordered rollout`) are parsed by `branch-pr` and `go`.
-  - `go` calls `gbase:review` with `pre-PR mode; defer, don't ask; … start at Stage 2`, and `gbase:monitor` with `--no-review` / `--draft`; monitor's `--draft` flip waits on the deferred-findings count `go` passes.
+  - `compat-check`'s verdict tokens (`✅ No special deploy ordering needed` / `⚠️ Requires ordered rollout`) are parsed by `branch-pr`.
+  - `go` calls `gbase:review` with `pre-PR mode; defer, don't ask; … start at Stage 2`, and `gbase:monitor` with `--no-review` / `--draft`; monitor's `--draft` flip waits on the deferred-findings count `go` passes; `go` hands `branch-pr` its check results as `Verification:` lines.
+  - `setup` writes the `<!-- gbase:verify -->` block in the target repo's `CLAUDE.md` that `go`'s verification gate reads; `create-verify` generates `.claude/skills/verify-*` that `go` runs for touched features.
+  - `review` and `monitor` append to the ledger `~/.claude/gbase/ledger/<owner>_<repo>.tsv` (date, pr, source, category, file, outcome, summary) that `correct` mines — keep the columns in sync.
   - gapp stages auto-continue to the next stage and update `docs/HARNESS.md`; stage numbers (0 kickoff … 8 store-submit) must match across `kickoff`, each skill's description, and `README.md`.
 
 ## Writing skills
@@ -34,8 +37,9 @@ Follow Anthropic's skill-authoring guidance (platform.claude.com/docs/en/agents-
 - Name MCP tools fully qualified (`mcp__<server>__<tool>`).
 - Side-effecting skills (push, deploy, submit) keep their own confirmation gate or `disable-model-invocation: true`.
 
-## Testing
+<!-- gbase:verify:start -->
+## Verify
 
-No automated tests. Validate:
-- JSON: `python3 -c "import json; json.load(open('<file>'))"` for each `plugin.json` and `marketplace.json`
-- Locally: `/plugin marketplace add ./`, `/plugin install gbase@godsenal`, then `/reload-plugins` and give Claude a task that should trigger the skill — confirm it loads the skill rather than improvising.
+- check: `python3 scripts/check.py --base main` — JSON validity, version sync and bump, frontmatter, line/description limits, `## 출력 언어` blocks, and the cross-skill contract tokens above. CI runs it on every PR (`.github/workflows/check.yml`); when you add a contract, add its token to `CONTRACTS` in the script.
+- trigger test (manual, not run by `go`): `/plugin marketplace add ./`, `/plugin install gbase@godsenal`, then `/reload-plugins` and give Claude a task that should trigger the skill — confirm it loads the skill rather than improvising.
+<!-- gbase:verify:end -->
