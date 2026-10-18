@@ -34,6 +34,7 @@ CONTRACTS = [
     ("--draft", [skill("go"), skill("monitor")]),
     ("gbase:verify", [skill("setup"), skill("go")]),
     ("verification:", [skill("go"), BRANCH_PR]),
+    ("risk:", [skill("go"), BRANCH_PR]),
     (".claude/skills/verify-", [skill("create-verify"), skill("go")]),
 ]
 

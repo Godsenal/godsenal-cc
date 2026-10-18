@@ -189,6 +189,18 @@ Skill(skill: "gbase:compat-check", args: "origin/<default-branch>...HEAD")
   body (below) and print its one-line summary to the user as a heads-up.
 - If it returns `✅`, omit the section entirely and say nothing extra.
 
+Classify the risk, unless the caller (e.g. `gbase:go`) passed a `Risk:` line — the tier is set from
+the change, not the author:
+
+- `high` — touches a path `REVIEW.md` marks always-high (without one: auth, payments/billing, migrations,
+  CI/release workflows, app config like `app.json`/`eas.json`/`Info.plist`), or compat-check returned ⚠️
+- `low` — docs, copy, tests, or an additive change behind a flag, and nothing above
+- `medium` — everything else
+
+If the repo has its own PR template (`.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/`,
+or `docs/pull_request_template.md`), fill that template's sections instead of the one below, and append
+whichever of `Test plan` / `Risk` / `How to revert` it lacks.
+
 Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
 `gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
 
@@ -206,6 +218,13 @@ gh pr create --title "<PR title>" --body "$(cat <<'EOF'
 <checks already run — the `Verification:` lines the caller (e.g. `gbase:go`) passed, as `- [x]` with
 their result and what was observed (evidence paths are local-only — gitignored — so say what the
 artifact showed, don't cite the path as proof) — then `- [ ]` items still left for a human>
+
+## Risk
+<low | medium | high> — <one line: which path or hazard set the tier>
+
+## How to revert
+<default: revert the squash commit. With compat-check ⚠️: its Rollback line, naming any
+point-of-no-return step (e.g. a destructive migration)>
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF

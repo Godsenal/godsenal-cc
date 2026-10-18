@@ -26,19 +26,19 @@ Invoking `go` is the go-ahead to reach a PR. Only two things may stop the flow b
 
 ### 1. Scope
 
-Uncommitted changes → target them. Clean tree → target the latest commit (`git show HEAD --name-only`); if later steps produce no edits there, there is nothing to PR — say so and stop. Report the scope in one line.
+Uncommitted changes → target them. Clean tree → target the latest commit (`git show HEAD --name-only`); if later steps produce no edits there, there is nothing to PR — say so and stop. Classify its risk the way `branch-pr` does — `high` if it touches a path `REVIEW.md` marks always-high (without one: auth, payments, migrations, CI/release workflows, app config), `low` for docs/copy/tests/flagged additive changes, else `medium`. Report scope and risk in one line.
 
 ### 2. Review (background) ∥ polish
 
 Launch the finder, then polish while it runs:
 
 ```
-Skill(skill: "code-review", args: "medium <scope from Step 1>")
+Skill(skill: "code-review", args: "<medium | high per Step 1 risk> <scope from Step 1>")
 Skill(skill: "gbase:polish", args: "<in-scope files>")
 ```
 
 - **Pass the scope explicitly.** With no target the built-in reviews the current diff, which is empty on the clean-tree path — it would report "nothing found" about a commit it never read.
-- `medium` unless the user asked for a deep pass; above it the built-in fans out to a multi-agent workflow on every shipped change.
+- `medium` by default; `high` when Step 1 rated the change high-risk or the user asked for a deep pass. Not higher by default — above `medium` the built-in fans out to a multi-agent workflow, worth it only where one missed bug is costly.
 - Never `--fix` (it would race polish for the same files), `--comment` (no PR yet), or `ultra` (user-triggered and billed).
 - Skip the finder on `--no-review` and on scopes review skips anyway (pure rename, dependency bump, generated code).
 
@@ -72,8 +72,8 @@ Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, 
 ### 5. Branch & PR
 
 ```
-Skill(skill: "gbase:branch-pr", args: "Verification: <Step 4 lines>")
-# invoked with --draft → args: "--draft Verification: <Step 4 lines>"
+Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <Step 4 lines>")
+# invoked with --draft → args: "--draft Risk: …; Verification: …"
 ```
 
 `branch-pr` owns branching, commit grouping, push, PR body, and its `compat-check` rollout section; all its safety rules apply.

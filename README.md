@@ -38,7 +38,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 - Analyzes current git changes
 - Decides the branch name and commit grouping itself (by layer, feature, or change type) — no "confirm?" prompts
-- Pushes and opens a PR with summary, changes, and test plan
+- Pushes and opens a PR with summary, changes, test plan (checks already run, with what they showed), **risk tier** (`low`/`medium`/`high`, set from the paths the change touches and compat-check), and **how to revert** — or fills the repo's own PR template and appends whichever of those it lacks
 - Calls **compat-check** before opening the PR; injects a `## Rollout / Deploy order` section when a sequenced rollout is needed
 - Stops only for the narrow "ask only when necessary" cases: a secret in the diff, unrelated WIP mixed in, an ambiguous PR split, a diverged branch, or remote ambiguity
 - Keeps the destructive-command guardrails (no `git reset --hard`, no plain `--force`) and a persistent backup stash
@@ -79,6 +79,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 - Packaged as a Skill (`plugins/base/skills/go/SKILL.md`), not a legacy command
 - Model-invocable — you can invoke `/gbase:go` explicitly, or Claude may auto-trigger it when you signal a change is done and want it shipped (sub-steps keep their own consent/safety gates)
+- **Risk-scaled review**: classifies the change `low`/`medium`/`high` from the paths it touches (`REVIEW.md`'s always-high paths, or auth/payments/migrations/CI/app config); high-risk changes get `code-review high`, everything else `medium`
 - **Launches the built-in `code-review` in the background, then runs `/gbase:polish` while it works.** Because the built-in forks to a background agent, review costs the ship path no wall-clock — and running it *before* the PR means fixes land in the initial commits instead of as churn on an open PR with a CI rerun per fix
 - Hands the findings to `/gbase:review` for skeptic verification and the clear-vs-ambiguous gate; clear fixes are applied to the working tree, judgment calls are **deferred** and raised after the PR is open
 - **Verification gate** — runs the project's *own* lint/typecheck/tests over the changed scope (from the `gbase:setup` verify block in `CLAUDE.md` when present), plus the repo's `verify-*` behavior skill for touched features when one exists; results land in the PR's `## Test plan` before anything is pushed (polish's check only validates polish's own edits, so a pre-existing failure would otherwise sail into CI). Biased toward shipping: pre-existing, flaky, and environment-dependent failures are noted and passed; only a diff-caused failure that resists two mechanical fix attempts stops the flow. `--no-verify` skips it
