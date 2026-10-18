@@ -20,7 +20,7 @@ Review runs *before* the PR so its fixes land in the initial commits — a revie
 
 ## The PR opens without asking
 
-Invoking `go` is the go-ahead to reach a PR. Only two things may stop the flow before it opens: a diff-caused verification failure that isn't mechanically fixable (Step 4), and `branch-pr`'s own "ask only when necessary" cases. Review findings that need a judgment call are carried and raised after the PR exists. Polish keeps its own confirmation for large structural moves.
+Invoking `go` is the go-ahead to reach a PR. Only two things may stop the flow before it opens: a diff-caused verification failure that isn't mechanically fixable (Step 4), and `branch-pr`'s own "ask only when necessary" cases. Review findings that need a judgment call are carried and raised after the PR exists. Polish keeps its own confirmation for large structural moves. Merging happens only with `--merge` — when the user passed it or `gbase:work` did; never add it on your own. Without it, `go` stops at a watched PR.
 
 ## Steps
 
@@ -81,12 +81,12 @@ Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <S
 ### 6. Monitor
 
 ```
-Skill(skill: "gbase:monitor", args: "--no-review")            # add --draft when invoked with --draft
+Skill(skill: "gbase:monitor", args: "--no-review")            # add --draft / --merge when invoked with them
 ```
 
 Drop `--no-review` if the pre-PR review didn't actually run (finder skipped, failed, or never returned), so monitor's self-review covers the diff.
 
-Then surface the deferred findings: a severity-ordered table (`file:line`, failure scenario, what the fix takes), with `AskUserQuestion` on any worth resolving before merge. Monitor never received them, so `go` applies, commits, and pushes any fix the user accepts. Under `--draft`, pass monitor the count of unresolved deferred findings so it holds the ready flip until they're resolved.
+Then surface the deferred findings: a severity-ordered table (`file:line`, failure scenario, what the fix takes), with `AskUserQuestion` on any worth resolving before merge. Monitor never received them, so `go` applies, commits, and pushes any fix the user accepts. Under `--draft`, pass monitor the count of unresolved deferred findings so it holds the ready flip until they're resolved. Under `--merge`, settle the deferred findings first (fix or decline each); pass `--merge` only once none remain open, plus `verified-locally` when Step 4 passed this run — otherwise drop `--merge` and say why the PR stays open.
 
 ## On failure
 
@@ -99,6 +99,7 @@ Then surface the deferred findings: a severity-ordered table (`file:line`, failu
 ```
 /gbase:go               # review ∥ polish → verify → PR → monitor
 /gbase:go --draft       # open a draft PR; monitor flips it to ready when CI is green
+/gbase:go --merge       # also merge once CI is green and nothing is outstanding
 /gbase:go --no-review   # skip the pre-PR review
 /gbase:go --no-verify   # skip the local check gate; let CI judge
 ```

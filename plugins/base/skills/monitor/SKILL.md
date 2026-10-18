@@ -1,6 +1,6 @@
 ---
 name: monitor
-description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles, surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). Use when the user wants a PR babysat to merge; also the tail of gbase:go."
+description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles, surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). With --merge, merges it once CI is green and nothing is outstanding. Use when the user wants a PR babysat to merge; also the tail of gbase:go."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
@@ -22,7 +22,7 @@ Keep the current branch's PR moving until merge or close. Human reviewers, revie
 - `git push --force-with-lease` and `git checkout --ours/--theirs` only while resolving the conflict types listed below; if the lease is rejected, stop.
 - One commit per autonomous fix. Stop and surface on any push/merge error instead of retrying destructively.
 - Never resolve threads, re-request review, dismiss approvals, or reply twice to the same comment.
-- `gh pr ready` only in the `--draft` flow below.
+- `gh pr ready` only in the `--draft` flow below; `gh pr merge` only in the `--merge` flow below.
 
 ## Loop
 
@@ -57,6 +57,16 @@ Skill(skill: "gbase:review", args: "<PR diff scope>")
 ## `--draft` flow
 
 Run `gh pr ready` once CI is green and every outstanding finding is resolved — from a self-review this run did, and from any deferred findings `gbase:go` reported. Flipping on CI green alone would announce the PR for review with a known defect still in it.
+
+## `--merge` flow
+
+Only when the user passed `--merge` or `gbase:work` → `gbase:go` did — never add it on your own. Merge when all hold: no required check failing; no unresolved finding from this run's self-review (`go` passes `--merge` only after its deferred findings are settled); no unanswered review comment asking for a change; mergeable state `CLEAN`, or `UNSTABLE` only because of checks that never started (below). Never merge with a failing required check, an unresolved `CHANGES_REQUESTED` review, or a conflict.
+
+- **A merge that deploys is a deploy — ask first.** If a workflow on the default branch deploys on push (EAS Update / OTA, a production web deploy, a release) and this PR's paths aren't excluded by its `paths` / `paths-ignore`, stop and ask before merging.
+- **A check that never started** for account reasons (annotation like "job was not started because recent account payments have failed or your spending limit needs to be increased") isn't a diff failure. Say so, and merge only if `go` passed `verified-locally` (its Step 4 gate passed this run); standalone, ask.
+- **Method**: the ones the repo allows (`gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`), and among those the one recent merges used (squash subjects end "(#N)", merge commits read "Merge pull request #N"). Pass `--delete-branch`.
+- **Stacked PRs first**: retarget every open PR whose base is this branch with `gh pr edit <n> --base <default>` before merging — deleting a base branch auto-closes the PRs on it. Don't rebase or push their branches; say they may need a rebase.
+- **After**: confirm with `gh pr view --json state,mergedAt`. Switch to the default branch and `git pull --ff-only` only if the tree is clean and the default branch isn't checked out in another worktree; otherwise say so.
 
 ## Conflicts
 
@@ -104,4 +114,5 @@ Surface links that let the user try the change — app builds and OTA previews (
 /gbase:monitor                 # watch + self-review
 /gbase:monitor --no-review     # watch only
 /gbase:monitor --draft         # also flip the draft to ready once CI is green and findings are resolved
+/gbase:monitor --merge         # also merge once CI is green and nothing is outstanding
 ```

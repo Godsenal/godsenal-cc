@@ -22,7 +22,7 @@ Read the prior trail; don't redo it. Ported from pstack's `session-pickup` playb
 2. **Reconstruct operational state** — branch, what landed (`git log`, `git diff` against the base), open todos, decisions made. The trail is authoritative input; resist re-deriving it.
 3. **Diff done vs. pending** and name the resume point. Don't re-run the prior repro or redo finished work — a "verify from scratch" pass treats the trail as untrustworthy when it's authoritative.
 4. **Verify inherited claims against the real artifact** before building on them — a passing self-report in the trail isn't proof. Check the one or two claims the next step depends on, not everything.
-5. **Continue** with the skill the remaining work fits (`gbase:bug-fix`, `gbase:go`, …). If the trail ended on pause commits, leave them — `gbase:go` ships them and `gbase:branch-pr` regroups them into real commits.
+5. **Continue** — when `gbase:work` called you, return to it at its route step, which ships. Otherwise continue with the skill the remaining work fits (`gbase:bug-fix`, `gbase:go`, …). If the trail ended on pause commits, leave them — `gbase:go` ships them and `gbase:branch-pr` regroups them into real commits.
 
 ## Reply
 

@@ -32,6 +32,7 @@ CONTRACTS = [
     ("defer, don't ask", [skill("go"), skill("review")]),
     ("--no-review", [skill("go"), skill("monitor")]),
     ("--draft", [skill("go"), skill("monitor")]),
+    ("--merge", [skill("work"), skill("go"), skill("monitor")]),
     ("gbase:verify", [skill("setup"), skill("go")]),
     ("verification:", [skill("go"), BRANCH_PR]),
     ("risk:", [skill("go"), BRANCH_PR]),
