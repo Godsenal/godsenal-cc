@@ -213,19 +213,24 @@ gh pr create --title "<PR title>" --body "$(cat <<'EOF'
 <exactly one sentence: the problem, and what becomes possible once this ships>
 
 ## Change outline
-<one or two diff sketches of the shape that changed — call tree, pseudocode, schema/contract, component
-or file tree — each under one line of text. `diff` for changes to an existing shape, a plain block when
-it's mostly new. Not a per-commit or per-file changelog: the Commits tab already is one>
+<one small view per concern, each under a bold one-line lead (e.g. **새 스킬**, **저장 흐름**, **스키마**):
+a table for 3+ parallel items (new endpoints, skills, screens), a `diff` sketch of a call tree / schema /
+component or file tree for a changed shape (~12 lines max, comments a few words), one-line bullets
+otherwise. Not a per-commit or per-file changelog: the Commits tab already is one>
 
 ## Evidence
-<before → after where there is one: the test that failed and now passes, the output that changed, what
-the screen showed. Then the checks already run — the `Verification:` lines the caller passed — as `- [x]`
-with what was observed (verify-* artifacts are gitignored, so describe them, don't cite the path), and
-`- [ ]` for what's left to a human>
+<before → after where there is one — a `| | Before | After |` table when there are two or more: the test
+that failed and now passes, the output that changed, what the screen showed. Then the checks already run
+(the `Verification:` lines the caller passed) as `- [x]` with what was observed — verify-* artifacts are
+gitignored, so describe them, don't cite the path — and `- [ ]` for what's left to a human>
 
 ## Merge danger
-<low | medium | high> <the path or hazard that set it> · **Door:** <two-way | one-way> · **Blast radius:** <what breaks if this is wrong, a few words>
-**Revert:** <revert the squash commit, plus anything left behind and why it's harmless — or, for a one-way door, the step after which only a restore works>
+| | |
+|---|---|
+| 위험도 | **<low / medium / high>** — <the path or hazard that set it> |
+| Door | <two-way / one-way> |
+| Blast radius | <what breaks if this is wrong, a few words> |
+| Revert | <revert the squash commit, plus anything left behind — or, one-way, the step after which only a restore works> |
 
 <!-- ## Rollout / Deploy order  ← only when compat-check returned ⚠️ -->
 
@@ -243,6 +248,9 @@ outlives the revert — a dropped column or rewritten data, a sent notification 
 submission, a removed public API; take the point of no return from compat-check's Rollback line.
 **Blast radius:** if `gbase:blast-radius` ran on this change, summarize its confirmed risks here.
 Merge danger informs the reviewer; it never blocks the PR.
+**Readable in a minute:** every section is skimmable — tables and one-line bullets, no paragraph over two
+lines. A Why that needs a second clause, or an outline that needs more than ~4 groups, usually means the
+PR should be split; say so in Notes.
 
 Return the PR URL to the user.
 
