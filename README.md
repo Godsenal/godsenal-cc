@@ -50,6 +50,14 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Emits a one-line verdict (`✅ No special deploy ordering needed` or `⚠️ Requires ordered rollout`) and, when needed, a numbered runbook (expand → migrate → backfill → deploy → ramp → follow-up contract PR) with a rollback note, each hazard mapped to `file:line`
 - Auto-invoked by **branch-pr** / **go** to drop a `## Rollout / Deploy order` section into the PR body; also runs standalone via `/gbase:compat-check`
 
+**bug-fix** (skill, model-invocable) — Fix a bug at its root cause, not where it surfaced. Ported from pstack's `principle-fix-root-causes` + `bug-fix` playbook (with `tdd` and `attack-the-premise` folded in).
+
+- Reproduces first on the failing surface (test, CLI, or the repo's `verify-*` skill); "passes alone, fails in the full run" is a lead to chase, not a verdict
+- Narrows the cause by ruling out hypotheses with runtime evidence; every shipped line must trace to that evidence
+- Before adding a guard, asks whether the triggering state is legitimate — guards, retries, raised timeouts, and swallowed errors are flagged as the usual ways to hide a bug; fixes every instance of the pattern
+- Failing regression test first (only when cheap), shown failing-then-passing in the PR's Evidence — not as a separate red commit, which pre-commit hooks, per-commit CI, and squash merges all defeat; two failed fixes on one premise → stop and test the premise
+- Asked only *why* something broke, it stops at the diagnosis; it suggests `/gbase:go` but never ships on its own
+
 **blast-radius** (skill, model-invocable) — What could this change break *outside* the diff? Ported from pstack's `blast-radius`.
 
 - Looks where grep stops: the called library's source at its pinned version (and local patches), execution timing, JSON/DB/wire formats, feature flags, code three hops downstream
@@ -175,6 +183,7 @@ After installation, the following are available:
 /gbase:branch-pr               # Autonomous branch + commit + PR from current changes (command)
 /gbase:compat-check [range]    # Flag backward-compat hazards + emit a deploy-order runbook (skill, model-invocable)
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
+/gbase:bug-fix                 # Fix a bug at its root cause — reproduce, narrow, verify on the same surface (skill, model-invocable)
 /gbase:blast-radius            # What could this break beyond the diff — proven by running code (skill)
 /gbase:review                  # Adversarial review — built-in code-review + skeptic verify (skill, model-invocable)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
