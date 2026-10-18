@@ -67,7 +67,7 @@ Bias toward shipping:
 
 **Behavior check.** If the repo has `.claude/skills/verify-*` (from `gbase:create-verify`) and the diff touches a feature in its `features/` map, run that skill for those features only. Same bias as above: an unreachable precondition (no simulator, no test account) is noted and passed; a diff-caused failure of the feature goes through the same fix-twice-then-ask rule.
 
-Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (artifacts/verify/<feature>/)`. Hand these lines to `branch-pr` as the PR's `## Test plan` evidence.
+Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (artifacts/verify/<feature>/)`. Hand these lines to `branch-pr` as the PR's `## Evidence`.
 
 ### 5. Branch & PR
 

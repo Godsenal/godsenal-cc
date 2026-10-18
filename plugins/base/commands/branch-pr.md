@@ -199,37 +199,50 @@ the change, not the author:
 
 If the repo has its own PR template (`.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/`,
 or `docs/pull_request_template.md`), fill that template's sections instead of the one below, and append
-whichever of `Test plan` / `Risk` / `How to revert` it lacks.
+whichever of `Evidence` / `Merge danger` it lacks.
 
 Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
 `gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
 
+The body is a briefing for a reviewer who has the diff — combined from humanlayer's `visual-pr` (Why,
+notes), Matt Pocock's `pr` (diff sketch, before/after, door) and gbase (risk, revert, rollout):
+
 ```bash
 gh pr create --title "<PR title>" --body "$(cat <<'EOF'
-## Summary
-<bullet point summary of changes>
+## Why
+<exactly one sentence: the problem, and what becomes possible once this ships>
 
-## Changes
-<changes organized by commit>
+## Change outline
+<one or two diff sketches of the shape that changed — call tree, pseudocode, schema/contract, component
+or file tree — each under one line of text. `diff` for changes to an existing shape, a plain block when
+it's mostly new. Not a per-commit or per-file changelog: the Commits tab already is one>
+
+## Evidence
+<before → after where there is one: the test that failed and now passes, the output that changed, what
+the screen showed. Then the checks already run — the `Verification:` lines the caller passed — as `- [x]`
+with what was observed (verify-* artifacts are gitignored, so describe them, don't cite the path), and
+`- [ ]` for what's left to a human>
+
+## Merge danger
+<low | medium | high> <the path or hazard that set it> · **Door:** <two-way | one-way> · **Blast radius:** <what breaks if this is wrong, a few words>
+**Revert:** <revert the squash commit, plus anything left behind and why it's harmless — or, for a one-way door, the step after which only a restore works>
 
 <!-- ## Rollout / Deploy order  ← only when compat-check returned ⚠️ -->
 
-## Test plan
-<checks already run — the `Verification:` lines the caller (e.g. `gbase:go`) passed, as `- [x]` with
-their result and what was observed (evidence paths are local-only — gitignored — so say what the
-artifact showed, don't cite the path as proof) — then `- [ ]` items still left for a human>
-
-## Risk
-<low | medium | high> — <one line: which path or hazard set the tier>
-
-## How to revert
-<default: revert the squash commit. With compat-check ⚠️: its Rollback line, naming any
-point-of-no-return step (e.g. a destructive migration)>
+## Notes
+<1–3 bullets a reviewer would otherwise trip on: a deliberate omission, a compatibility constraint, a
+surprising decision. Drop the section when there are none>
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```
+
+**Door:** two-way when reverting the squash commit restores the old behavior. One-way when something
+outlives the revert — a dropped column or rewritten data, a sent notification or email, a store
+submission, a removed public API; take the point of no return from compat-check's Rollback line.
+**Blast radius:** if `gbase:blast-radius` ran on this change, summarize its confirmed risks here.
+Merge danger informs the reviewer; it never blocks the PR.
 
 Return the PR URL to the user.
 
