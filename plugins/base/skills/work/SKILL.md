@@ -17,6 +17,10 @@ Start a task here. It picks a route, follows it, and hands the result to `go`. M
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../../references/headless.md) instead of asking.
+
 ## 0. Before the route
 
 - Unpushed `gbase:pause` commits on this branch (`wip:` subject, `Intent:` body) → `gbase:pickup` first, then pick the route for what's left.
@@ -37,7 +41,7 @@ Put the route's steps into the todo list verbatim, before task-specific items. A
 1. `gbase:how` over the area it touches.
 2. Name the data shape before writing logic.
 3. Build in small units, each verified before the next.
-4. Verify on the surface the user touches (the repo's `verify-*` skill, the CLI, the screen) — not only tests.
+4. Verify on the surface the user touches (the repo's verify skill, the CLI, the screen) — not only tests.
 
 **Refactor** — structure changes, behavior doesn't.
 1. Pin the current behavior first: a characterization test, snapshot, or before/after output diff. Type check and lint are not a pin.

@@ -53,11 +53,18 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 **bug-fix** (skill, model-invocable) — Fix a bug at its root cause, not where it surfaced. Ported from pstack's `principle-fix-root-causes` + `bug-fix` playbook (with `tdd` and `attack-the-premise` folded in).
 
-- Reproduces first on the failing surface (test, CLI, or the repo's `verify-*` skill); "passes alone, fails in the full run" is a lead to chase, not a verdict
+- Reproduces first with **reproduce** (a command that fails now, on the failing surface)
 - Narrows the cause by ruling out hypotheses with runtime evidence; every shipped line must trace to that evidence
 - Before adding a guard, asks whether the triggering state is legitimate — guards, retries, raised timeouts, and swallowed errors are flagged as the usual ways to hide a bug; fixes every instance of the pattern
 - Failing regression test first (only when cheap), shown failing-then-passing in the PR's Evidence — not as a separate red commit, which pre-commit hooks, per-commit CI, and squash merges all defeat; two failed fixes on one premise → stop and test the premise
 - Asked only *why* something broke, it stops at the diagnosis; it suggests `/gbase:go` but never ships on its own
+
+**reproduce** (skill, model-invocable) — Turn a bug report or an improvement request into an executable check that fails right now; never changes product code.
+
+- Bug → the repo's own test when a cheap test path exists (it becomes the regression test), else a script, `curl`, CLI run, or a journey through the repo's verify skill
+- Improvement request → a criterion the requester would accept, measured now and asserted against the target, so it fails with the current value in its output
+- Reports the command, the quoted failing lines, and the expected result; the check must fail *for the stated reason* (an import error or a refused connection is a broken check), run twice for stability, and production is read-only
+- `bug-fix` starts with it; with `AGENT_EVIDENCE_FILE` set it appends a `reproduce` evidence line
 
 **how** (skill, model-invocable) — Explain how a part of the codebase works, with real files and functions. Ported from pstack's `how`.
 
@@ -120,6 +127,8 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - **The PR still opens without asking.** Exactly two things can stop the flow before the PR exists: a diff-caused verification failure that isn't mechanically fixable, and branch-pr's narrow "ask only when necessary" cases. Everything else is carried and raised afterward
 - `--merge` (only when you ask, or the project's instructions say to merge) also merges once CI is green and nothing is outstanding — **asks first when the merge would deploy** (a push-to-main OTA/production workflow the PR's paths don't skip), uses a merge method the repo allows, retargets stacked PRs before the branch is deleted; a check that never started for account/billing reasons merges only if the local verify gate passed
 - Inherits all `branch-pr` safety rules — no force push, no hard reset
+- The behavior check recognizes both verify-skill layouts: `.claude/skills/verify-<app>/` (from `create-verify`) and `.claude/skills/verify/` (pstack's generator)
+- Under `AGENT_SHIP_OWNER=orchestrator` it stops after local commits and a PR body draft (no push, PR, image upload, or monitor) — see [Running gbase from an orchestrator](#running-gbase-from-an-orchestrator)
 
 **monitor** (skill) — Subscribe to the current branch's PR and keep it moving until merge/close.
 
@@ -135,6 +144,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - **Converges instead of looping** with automated reviewers: pre-existing findings get a one-line reply and no fix, repeats of handled findings are ignored, and after three rounds from the same reviewer it stops auto-applying and asks whether the approach needs rethinking
 - Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
 - Stops automatically when the PR reaches `MERGED` or `CLOSED`
+- `--until-settled` ends earlier, once the current head's checks and expected review bots have concluded, with one `settle: 수렴 | 미확정 | 사람 필요 @<sha>` line; it waits in short foreground polls (each returns within 5 minutes), gives up 30 minutes into a head, and never merges, rebases, or force-pushes
 
 **setup** (skill, model-invocable) — Prepare a repo for the ship loop in one pass; idempotent, one confirmation.
 
@@ -177,6 +187,20 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Re-auth walls on sensitive settings (API keys, billing) stay a human step: hand off, wait for confirmation, take over
 - Recovering an undocumented signature: call it wrong on purpose and read the error
 
+### Running gbase from an orchestrator
+
+A program that runs agents with no person attached (e.g. `claude -p` from a daemon) can slot gbase skills into its own steps. The contract is environment variables, files, greppable report lines, and a manifest; with none of the variables set, every skill behaves as it does interactively. Full spec: [`plugins/base/references/orchestrator.md`](plugins/base/references/orchestrator.md).
+
+| Variable | Effect |
+|---|---|
+| `AGENT_HEADLESS=1` | No skill asks. It applies its recommendation (or the reversible option that does less) and reports a `결정 필요:` line; irreversible steps (merge, deploy, force push, data deletion) are not taken. Rules: [`references/headless.md`](plugins/base/references/headless.md) |
+| `AGENT_ASK_CMD` | Under headless, each question goes to `sh -c "$AGENT_ASK_CMD \"\$@\"" ask "<question>" --recommend "<option>" --option "<option>"…`; non-empty stdout is the answer |
+| `AGENT_SHIP_OWNER=orchestrator` | `go` stops after local commits and a PR body draft; it never touches the remote |
+| `AGENT_PR_BODY_FILE` | Where that draft goes (line 1 title, line 2 empty, then the body); default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` |
+| `AGENT_EVIDENCE_FILE` | `go` and `reproduce` append `{"step","result","command","detail","cause"?}` JSON lines (`review`, `polish`, `checks`, `behavior`, `reproduce`) |
+
+The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`review`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `reproduce`) to an invocation, the variables it reads, and notes. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
+
 ### gapp
 
 App-building harness — takes a raw app idea all the way to an App Store submission, one skill per stage. Every stage reads/writes `docs/HARNESS.md` (a living pipeline document), and every stage **auto-continues into the next one** unless the user says stop — you should never wonder "what do I run now". Distilled from shipping a real Expo + Supabase app (somandlee) end to end. Delegates to best-in-class skills when installed (gstack `office-hours` for idea validation, gstack `design-consultation` + taste skills for design) instead of reimplementing them.
@@ -210,6 +234,7 @@ After installation, the following are available:
 /gbase:compat-check [range]    # Flag backward-compat hazards + emit a deploy-order runbook (skill, model-invocable)
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
 /gbase:bug-fix                 # Fix a bug at its root cause — reproduce, narrow, verify on the same surface (skill, model-invocable)
+/gbase:reproduce <bug|request> # Turn a bug or request into a check that fails now — command, failing output, expected (skill, model-invocable)
 /gbase:how                     # How does X work — explained with real files (skill, model-invocable)
 /gbase:why                     # Why is X this way — cited from git, PRs, and connected sources (skill, model-invocable)
 /gbase:pause                   # Stop cleanly with a wip commit whose body is the resume note (skill, explicit only)
@@ -219,6 +244,7 @@ After installation, the following are available:
 /gbase:work <task>             # Start a task: route → steps → go (merges only if asked) (skill, explicit)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
+/gbase:monitor --until-settled # Stop once this head's CI and review bots have concluded; never merges (skill)
 /gbase:setup                   # Record verify commands, seed REVIEW.md, add format hook (skill)
 /gbase:create-verify [--maintain]  # Generate/maintain a project-local behavior-verification skill (skill)
 /gbase:correct [--session]     # Turn recurring review/CI mistakes into checks; --session = retro on one session (skill)

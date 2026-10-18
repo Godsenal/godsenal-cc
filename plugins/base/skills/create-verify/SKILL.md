@@ -16,6 +16,10 @@ Lint, types, and unit tests prove the code compiles and units behave; they don't
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../../references/headless.md) instead of asking.
+
 ## 1. Interview the repo, not the user
 
 Answer from the codebase; ask only what can't be observed (test account credentials, a paid entitlement).
@@ -51,7 +55,7 @@ Add `artifacts/verify/` to `.gitignore`. Leave the skill uncommitted for `/gbase
 
 ## --maintain
 
-A feature map rots as the app changes. Locate `.claude/skills/verify-*/` (several → ask; none → stop and offer create mode).
+A feature map rots as the app changes. Locate `.claude/skills/verify-*/` or `.claude/skills/verify/` (several → ask, *headless:* each in turn; none → stop and offer create mode).
 
 1. **Index hygiene** — README index vs. feature files: missing, extra, dead entries.
 2. **Source wave** — one read-only sub-agent per feature file, in parallel, with `model: "sonnet"` (the live pass re-checks whatever they claim): how the feature works now from source, likely drift with `file:line`, one live recipe. They never drive the app or edit.

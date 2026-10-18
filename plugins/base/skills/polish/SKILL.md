@@ -16,6 +16,10 @@ Two behavior-preserving passes over the current diff. No bug fixes, contract cha
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../../references/headless.md) instead of asking.
+
 ## Posture — split by risk
 
 - **Reusing existing code, removing literal duplicates, deleting dead code** — low risk, high value: be aggressive. Leave such a finding only after grepping and confirming there is no existing helper or other copy.

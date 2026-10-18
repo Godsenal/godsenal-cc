@@ -16,6 +16,10 @@ Find and recommend Claude Code skills that match the current project's tech stac
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../references/headless.md) instead of asking.
+
 ### Arguments Parsing
 
 First, parse the arguments:

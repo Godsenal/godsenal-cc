@@ -6,7 +6,8 @@ A Claude Code plugin marketplace (`godsenal`) with two plugins — `gbase` (dev 
 
 ```
 .claude-plugin/marketplace.json     registry — one entry per plugin, with version
-plugins/base/  → gbase              .claude-plugin/plugin.json, skills/<name>/SKILL.md, commands/*.md (legacy)
+plugins/base/  → gbase              .claude-plugin/plugin.json, skills/<name>/SKILL.md, commands/*.md (legacy),
+                                    references/ (rules several skills share), .claude-plugin/factory.json (orchestrator slots)
 plugins/app/   → gapp               .claude-plugin/plugin.json, skills/<name>/SKILL.md (+ references/)
 scripts/check.py                    repo checks CI runs (.github/workflows/check.yml)
 ```
@@ -22,7 +23,9 @@ Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
   - `compat-check`'s verdict tokens (`✅ No special deploy ordering needed` / `⚠️ Requires ordered rollout`) are parsed by `branch-pr`.
   - `go` calls `gbase:review` with `pre-PR mode; defer, don't ask; … start at Stage 2`, and `gbase:monitor` with `--no-review` / `--draft`; monitor's `--draft` flip and `--merge` wait on the deferred-findings count `go` passes, and `work` ends with `go`, adding `--merge` only when the user or the project's instructions ask; `go` hands `branch-pr` its risk tier and check results as `Risk:` / `Verification:` lines, and both classify risk with the same rule (`high` / `medium` / `low`) — change them together.
   - `pause` leaves a `wip:` commit whose body is the resume note and starts with an `Intent:` line — the marker `pickup`, `go`, and `branch-pr` use to recognize it; `go` ships unpushed pause commits on a clean tree and `branch-pr` soft-resets all of them into real commits.
-  - `setup` writes the `<!-- gbase:verify -->` block in the target repo's `CLAUDE.md` that `go`'s verification gate reads; `create-verify` generates `.claude/skills/verify-*` that `go` runs for touched features.
+  - `setup` writes the `<!-- gbase:verify -->` block in the target repo's `CLAUDE.md` that `go`'s verification gate reads; `create-verify` generates `.claude/skills/verify-*` that `go` runs for touched features, and `go` also runs pstack's `.claude/skills/verify/`.
+  - Orchestrator contract (`plugins/base/references/orchestrator.md`, `headless.md`, `.claude-plugin/factory.json`): no orchestrator is ever named in plugin files — only `AGENT_*` variables, files, and report lines. Headless rules live once in `headless.md`; every skill or command that can `AskUserQuestion` points at it in one line (check.py enforces). `go` passes `branch-pr` `Ship-owner: orchestrator; PR-body-file:` and both print the `ship:` / `PR 본문 초안:` lines; `monitor --until-settled` ends with a `settle:` line; `go` and `reproduce` write the evidence file format; each `factory.json` slot names a skill that exists.
+  - `bug-fix` starts with `gbase:reproduce`, which only writes the failing check; the fix stays in `bug-fix`.
   - gapp stages auto-continue to the next stage and update `docs/HARNESS.md`; stage numbers (0 kickoff … 8 store-submit) must match across `kickoff`, each skill's description, and `README.md`.
 
 ## Writing skills

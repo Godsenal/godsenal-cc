@@ -18,6 +18,10 @@ Not polish — cleanup (reuse, dedup, clarity) is `gbase:polish`'s job. Not a Gi
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../../references/headless.md) instead of asking.
+
 ## Scope and mode
 
 Target: explicit paths / range / PR from the caller; else uncommitted changes; else the latest commit. Skip pure renames, dependency bumps, and generated code.

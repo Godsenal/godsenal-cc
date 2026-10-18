@@ -53,6 +53,18 @@ proceeds without asking:
 
 When none apply, run end to end silently except for progress reporting.
 
+Under `AGENT_HEADLESS=1` (check `printenv AGENT_HEADLESS` before asking) these cases don't ask: follow [headless.md](../references/headless.md). A secret is never committed — leave it out and record it.
+
+## Local mode
+
+When the args start with `Ship-owner: orchestrator; PR-body-file: <path>` (`gbase:go` under `AGENT_SHIP_OWNER=orchestrator`), another program pushes the branch and opens the PR. This run prepares both and touches no remote:
+
+- **Branch:** commit on the current branch; Steps 3–4 run only when it is the default branch. The caller owns its branch, so the diverged-branch and remote cases aren't questions here.
+- **Already committed:** a clean tree with commits ahead of the base skips Steps 2–6 instead of stopping.
+- **Remote untouched:** skip Step 7, `gh pr create`, and the `gbase-assets` upload; reference screenshots by their local `artifacts/verify/…` path.
+- **Body:** Step 8 as written. Invoke `gbase:compat-check` there even for a change that looks additive; it is the draft's only deploy-order review. Run it on `<base>...HEAD` (base = `origin/<default>` when it exists, else the local default branch). Write the title as line 1, an empty line 2, then the body, to the path (`mkdir -p` its directory; overwrite).
+- **Report** the lines the caller greps: `ship: local <branch> @<short-sha> — <n> commits, not pushed` and `PR 본문 초안: <path>` ([format](../references/orchestrator.md#report-lines)). Not pushing is the contract, not a decision: no `결정 필요:` line for the push or the PR.
+
 ## Execution Steps
 
 ### Step 1: Status Analysis (Read-Only)
@@ -90,7 +102,8 @@ Analyze changed files and compile the following:
 - Change type for each file (modified/added/deleted)
 - Logical grouping of files (by directory/feature)
 
-**Nothing to ship** (clean tree — no modified, staged, or untracked files) → stop here and tell the user.
+**Nothing to ship** (clean tree — no modified, staged, or untracked files) → stop here and tell the user;
+in [local mode](#local-mode), only when no commits are ahead of the base either.
 Do not proceed to Step 2: the backup `git stash push` would create nothing, and the `git stash apply`
 that follows would resurrect whatever unrelated stash the user already had at `stash@{0}`.
 
