@@ -38,6 +38,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 - Analyzes current git changes
 - Decides the branch name and commit grouping itself (by layer, feature, or change type) — no "confirm?" prompts
+- Runs the PR title and body through `unslop` when that skill is installed
 - Pushes and opens a PR whose body is a reviewer briefing — **Why** (one sentence), **Change outline** (a diff sketch of the shape that changed, not a changelog), **Evidence** (before → after, plus the checks already run), **Merge danger** (risk tier from the touched paths · one-way/two-way door · blast radius, and how to revert), rollout order when compat-check flags one, and optional **Notes**. Combines humanlayer `visual-pr`, Matt Pocock's `pr`, and gbase's own risk/rollout. Each view and evidence pair uses the form that shows that kind of change best — before/after screenshots for UI, a GIF for interaction, a mermaid sequence diagram for cross-component flow, a pseudocode diff plus fail→pass test for logic, a JSON diff for contracts, one number for performance. Screenshots come from the `verify-*` run and are uploaded to a separate `gbase-assets` branch (never the PR branch). Fills the repo's own PR template instead when one exists
 - Calls **compat-check** before opening the PR; injects a `## Rollout / Deploy order` section when a sequenced rollout is needed
 - Stops only for the narrow "ask only when necessary" cases: a secret in the diff, unrelated WIP mixed in, an ambiguous PR split, a diverged branch, or remote ambiguity
@@ -57,6 +58,23 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Before adding a guard, asks whether the triggering state is legitimate — guards, retries, raised timeouts, and swallowed errors are flagged as the usual ways to hide a bug; fixes every instance of the pattern
 - Failing regression test first (only when cheap), shown failing-then-passing in the PR's Evidence — not as a separate red commit, which pre-commit hooks, per-commit CI, and squash merges all defeat; two failed fixes on one premise → stop and test the premise
 - Asked only *why* something broke, it stops at the diagnosis; it suggests `/gbase:go` but never ships on its own
+
+**how** (skill, model-invocable) — Explain how a part of the codebase works, with real files and functions. Ported from pstack's `how`.
+
+- Narrow questions are answered directly; a subsystem-wide one fans out 2–4 read-only explorers (Sonnet) on separate angles, then one explainer reconciles them
+- Overview → Key Concepts → How It Works → Where Things Live → Gotchas, with a mermaid diagram only where the flow crosses components; also answers "where should this live"
+
+**why** (skill, model-invocable) — Find out why code is the way it is, with citations. Ported from pstack's `why`.
+
+- Anchors on `git blame`, file history, and the PRs behind it, then queries every connected evidence source in parallel — issue tracker, docs, chat, error tracking/observability/analytics MCPs (PostHog counts for two) — one investigator per source
+- Every claim is tiered Direct / Supported / Inferred / Speculative / Unknown and phrased to match; "What We Don't Know" and a per-source coverage line are mandatory, and a hypothesis embedded in the question is tested, not confirmed
+- Before a change, ends with a Preserve / Change / Avoid / Risk constraint set
+
+**pause** (skill, explicit only) / **pickup** (skill, model-invocable) — Stop cleanly and resume without redoing work. Ported from pstack's `pause-safely` / `session-pickup` playbooks.
+
+- `pause` (`/gbase:pause` only — it commits, so it never auto-triggers) finishes or backs out of the current step and leaves one `wip:` commit whose body is the resume note — intent, what's done and how it was verified, state, next action, gotchas; never commits to the default branch or secret-looking files, never pushes
+- `pickup` reads the trail newest-first — the `wip:` commit, the branch's PR, this project's Claude Code transcripts (only this project's), branches other agents pushed — treats it as authoritative, names the resume point, and re-verifies only the claims the next step depends on
+- `go` ships unpushed pause commits even on a clean tree, and `branch-pr` soft-resets all of them back into real commits (a hand-written `wip:` commit without the `Intent:` marker is left alone)
 
 **blast-radius** (skill, model-invocable) — What could this change break *outside* the diff? Ported from pstack's `blast-radius`.
 
@@ -184,6 +202,10 @@ After installation, the following are available:
 /gbase:compat-check [range]    # Flag backward-compat hazards + emit a deploy-order runbook (skill, model-invocable)
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
 /gbase:bug-fix                 # Fix a bug at its root cause — reproduce, narrow, verify on the same surface (skill, model-invocable)
+/gbase:how                     # How does X work — explained with real files (skill, model-invocable)
+/gbase:why                     # Why is X this way — cited from git, PRs, and connected sources (skill, model-invocable)
+/gbase:pause                   # Stop cleanly with a wip commit whose body is the resume note (skill, explicit only)
+/gbase:pickup                  # Resume from a wip commit, transcript, or another agent's branch (skill, model-invocable)
 /gbase:blast-radius            # What could this break beyond the diff — proven by running code (skill)
 /gbase:review                  # Adversarial review — built-in code-review + skeptic verify (skill, model-invocable)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
