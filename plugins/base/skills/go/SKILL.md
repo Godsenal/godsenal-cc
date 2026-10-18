@@ -20,7 +20,7 @@ Review runs *before* the PR so its fixes land in the initial commits — a revie
 
 ## The PR opens without asking
 
-Invoking `go` is the go-ahead to reach a PR. Only two things may stop the flow before it opens: a diff-caused verification failure that isn't mechanically fixable (Step 4), and `branch-pr`'s own "ask only when necessary" cases. Review findings that need a judgment call are carried and raised after the PR exists. Polish keeps its own confirmation for large structural moves. Merging happens only with `--merge` — when the user passed it or `gbase:work` did; never add it on your own. Without it, `go` stops at a watched PR.
+Invoking `go` is the go-ahead to reach a PR. Only two things may stop the flow before it opens: a diff-caused verification failure that isn't mechanically fixable (Step 4), and `branch-pr`'s own "ask only when necessary" cases. Review findings that need a judgment call are carried and raised after the PR exists. Polish keeps its own confirmation for large structural moves. Merging happens only with `--merge` — passed when the user asked to merge, or the project's instructions say to; never add it by default. Without it, `go` stops at a watched PR.
 
 ## Steps
 

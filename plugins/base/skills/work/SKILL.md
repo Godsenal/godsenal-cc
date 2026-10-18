@@ -1,6 +1,6 @@
 ---
 name: work
-description: "The front door for a task — classifies the request (investigation, bug, feature, refactor, perf, prototype, or run-until-done), copies that route's steps into the todo list, works them under a few core principles and subagent rules, and for code changes continues into gbase:go --merge so the change ends reviewed, verified, and merged. Use when starting a piece of work with /gbase:work <task>."
+description: "The front door for a task — classifies the request (investigation, bug, feature, refactor, perf, prototype, or run-until-done), copies that route's steps into the todo list, works them under a few core principles and subagent rules, and for code changes continues into gbase:go so the change ends reviewed, verified, and in an open, watched PR — merged too when the user or the project's instructions ask for that. Use when starting a piece of work with /gbase:work <task>."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent Skill
 disable-model-invocation: true
 ---
@@ -62,7 +62,7 @@ Put the route's steps into the todo list verbatim, before task-specific items. A
 
 ## 2. Ship
 
-Every route except Investigation and Prototype ends with `Skill(skill: "gbase:go", args: "--merge")` — review ∥ polish, verify, PR, monitor, and merge once CI is green and nothing is outstanding. `go`'s own gates still apply, and a merge that would deploy (push-to-main OTA, production deploy) stops for confirmation.
+Every route except Investigation and Prototype ends with `Skill(skill: "gbase:go")` — review ∥ polish, verify, PR, monitor. Add `--merge` only when the user asked for merging (this session) or the project's instructions say to merge PRs (its `CLAUDE.md`/`AGENTS.md`, or your memory for this project); otherwise stop at a merge-ready PR and say so. The default is not to merge — on a shared repo a merge is someone else's call. `go`'s own gates still apply, and a merge that would deploy (push-to-main OTA, production deploy) stops for confirmation.
 
 ## Principles
 
