@@ -30,9 +30,13 @@ Mode decides how fixes land:
 
 The caller's stated mode wins. Without one, a dirty tree means pre-PR even if a PR is open — committing would sweep the user's unrelated edits into a review commit.
 
+## Repo rules
+
+If the repo has a `REVIEW.md` (root or nearest ancestor of the changed files), it governs every stage: hand it to the finder and each skeptic, drop findings on its skip paths, apply its severity overrides and nit cap. Also flag code that breaks a convention `CLAUDE.md` states, and note when `CLAUDE.md` itself contradicts the code.
+
 ## Stage 1 — Find
 
-If the caller handed in findings (`gbase:go` does), skip to Stage 2. Otherwise:
+If the caller handed in findings (`gbase:go` passes `candidates already found — start at Stage 2`), skip to Stage 2. Otherwise:
 
 ```
 Skill(skill: "code-review", args: "medium <target>")
@@ -57,6 +61,10 @@ One skeptic for low/medium. High/critical (data loss, security, corruption, cras
 
 ## Stage 3 — Act
 
+**Pre-existing first.** If the defective line isn't in the diff's added/changed hunks (check `git blame` against the base when unsure), label it `pre-existing`: report it, never auto-fix it, and keep it out of the `S survived` / `K for you` counts (it still gets its own table row and ledger line). Fixing it widens the PR beyond its intent and pins an old bug on this change.
+
+**Fix the class, not the line.** When a survivor is a pattern (a missing `await`, an unchecked `null`, a wrong unit), grep the diff for every other instance and treat them as one finding — otherwise the next round finds the sibling.
+
 **Auto-fix** a survivor only when the fix is mechanical, local (one or two files, small), and fully determined by the finding — no design choice, dependency, schema/migration, API-contract change, or test added/removed. Land it per the mode. Run `gbase:polish` on the touched files before a non-trivial fix is committed or handed back — in pre-PR mode nothing else will polish it.
 
 **Everything else** goes in the report; raise the ones worth fixing before merge with `AskUserQuestion` (`file:line`, failure scenario, 2–3 options). When the caller says *defer, don't ask* (`gbase:go` does, so nothing blocks the PR), return them instead of asking.
@@ -65,7 +73,17 @@ If the PR merges before a fix lands, don't push to the merged branch — report 
 
 ## Report
 
-Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / noted)`, then `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
+Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / pre-existing / noted)`, then `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
+
+Append one line per survivor to the gbase ledger — `gbase:correct` mines it for mistakes that keep recurring:
+
+```bash
+u=$(git remote get-url origin 2>/dev/null || git rev-parse --show-toplevel)   # no origin → local path
+f=~/.claude/gbase/ledger/$(echo "$u" | sed -E 's#(\.git)?$##; s#.*[:/]([^/]+)/([^/]+)$#\1_\2#').tsv
+mkdir -p "$(dirname "$f")"; printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date +%F)" "<pr# or ->" review "<category>" "<file>" "<fixed|deferred|pre-existing|declined>" "<one-line finding>" >> "$f"
+```
+
+`category` is a short kebab-case defect class (`missing-await`, `unchecked-null`, `rls-gap`) — reuse an existing one from the file when it fits, so repeats group.
 
 ## Safety
 

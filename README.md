@@ -47,7 +47,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 - Packaged as a Skill (`plugins/base/skills/compat-check/SKILL.md`); read-only — never edits code, runs scripts, or deploys
 - Reads a diff (uncommitted, a commit range, or a PR) and flags **migrations** (column drops, `NOT NULL` without default, type narrowing), **API/contract** changes, **queue/event schema** changes, new required **env/secrets**, **feature flags**, **backfill scripts**, **cache/serialization** format changes, **mobile client version skew** (old app versions still in the wild), and **native changes** that can't ship over OTA
-- Emits a one-line verdict (`✅ no special ordering` or `⚠️ requires ordered rollout`) and, when needed, a numbered runbook (expand → migrate → backfill → deploy → ramp → follow-up contract PR) with a rollback note, each hazard mapped to `file:line`
+- Emits a one-line verdict (`✅ No special deploy ordering needed` or `⚠️ Requires ordered rollout`) and, when needed, a numbered runbook (expand → migrate → backfill → deploy → ramp → follow-up contract PR) with a rollback note, each hazard mapped to `file:line`
 - Auto-invoked by **branch-pr** / **go** to drop a `## Rollout / Deploy order` section into the PR body; also runs standalone via `/gbase:compat-check`
 
 **review** (skill, model-invocable) — Adversarial code review of the current change. The judgment layer on top of the built-in `code-review`: verification, and a gate deciding what may be fixed without asking.
@@ -55,7 +55,9 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Packaged as a Skill (`plugins/base/skills/review/SKILL.md`); read-only on GitHub — never comments, reviews, replies, or merges
 - **Stage 1 — Find** is *delegated* to the built-in `code-review` skill (`Skill(code-review, "medium")`), which runs in the background and returns findings labelled `CONFIRMED` / `PLAUSIBLE`. No hand-rolled finder — we inherit its dimensions and effort dial. `medium` is the default on purpose: above it the built-in routes to a multi-agent workflow fanning out to dozens of agents, and Stage 2 already recovers most of what the extra effort buys. Never `--fix` (it would bypass the gate below), never `--comment` (this skill is local-only), never `ultra` (user-triggered and billed). Falls back to an inline pass along the same dimensions if the built-in isn't available.
 - **Stage 2 — Adversarial verify**: `PLAUSIBLE` findings go to independent skeptics prompted to *refute* them with a concrete counter-scenario; low/medium face one skeptic, high/critical a 3-skeptic majority panel. A `CONFIRMED` finding skips the panel only if it will merely be *reported* — if it would be auto-fixed, or is high/critical, it still faces a skeptic, because the built-in's verify is a single non-adversarial pass and auto-fixing is the irreversible half. Anything refuted is dropped. Cleanup-category findings (reuse/simplification/efficiency) are filtered out before this stage — that's `polish`'s job, and they carry no failure scenario.
-- **Stage 3 — Classify & act**: clear+local survivors are auto-fixed; everything else comes back as a severity-ordered table + `review: F found, R refuted, S survived` tally. **Pre-PR mode** (from `go`) applies fixes as working-tree edits so `branch-pr` folds them into the initial commits, and *defers* judgment calls instead of asking; **post-PR mode** (from `monitor`) commits each fix separately.
+- **Repo rules**: a `REVIEW.md` (from `gbase:setup` or hand-written) governs every stage — skip paths, severity overrides, nit cap — and `CLAUDE.md` conventions are checked too
+- **Stage 3 — Classify & act**: a defect on a line the diff didn't add is labelled `pre-existing` and reported, never auto-fixed (it would widen the PR and pin an old bug on this change); a pattern finding is fixed across every instance in the diff at once; clear+local survivors are auto-fixed; everything else comes back as a severity-ordered table + `review: F found, R refuted, S survived` tally. **Pre-PR mode** (from `go`) applies fixes as working-tree edits so `branch-pr` folds them into the initial commits, and *defers* judgment calls instead of asking; **post-PR mode** (from `monitor`) commits each fix separately.
+- Each survivor is appended to the gbase ledger (`~/.claude/gbase/ledger/<owner>_<repo>.tsv`) for `gbase:correct`
 - Invoke via `/gbase:review`, from `go` before the PR opens, or let `monitor` run it on a PR it didn't ship
 
 **polish** (skill) — Two-pass behavior-preserving polish on the current diff. The polish role in `go` / `monitor`; distinct from the built-in `simplify` in its 3-lens fan-out, risk-split posture, recall gate, out-of-diff guard, and non-destructive revert.
@@ -73,7 +75,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Model-invocable — you can invoke `/gbase:go` explicitly, or Claude may auto-trigger it when you signal a change is done and want it shipped (sub-steps keep their own consent/safety gates)
 - **Launches the built-in `code-review` in the background, then runs `/gbase:polish` while it works.** Because the built-in forks to a background agent, review costs the ship path no wall-clock — and running it *before* the PR means fixes land in the initial commits instead of as churn on an open PR with a CI rerun per fix
 - Hands the findings to `/gbase:review` for skeptic verification and the clear-vs-ambiguous gate; clear fixes are applied to the working tree, judgment calls are **deferred** and raised after the PR is open
-- **Verification gate** — runs the project's *own* lint/typecheck/tests over the changed scope before anything is pushed (polish's check only validates polish's own edits, so a pre-existing failure would otherwise sail into CI). Biased toward shipping: pre-existing, flaky, and environment-dependent failures are noted and passed; only a diff-caused failure that resists two mechanical fix attempts stops the flow. `--no-verify` skips it
+- **Verification gate** — runs the project's *own* lint/typecheck/tests over the changed scope (from the `gbase:setup` verify block in `CLAUDE.md` when present), plus the repo's `verify-*` behavior skill for touched features when one exists; results land in the PR's `## Test plan` before anything is pushed (polish's check only validates polish's own edits, so a pre-existing failure would otherwise sail into CI). Biased toward shipping: pre-existing, flaky, and environment-dependent failures are noted and passed; only a diff-caused failure that resists two mechanical fix attempts stops the flow. `--no-verify` skips it
 - Then `/gbase:branch-pr` (backup → branch → grouped commits → push → PR), then `/gbase:monitor --no-review` to babysit CI + reviews until merge
 - **The PR still opens without asking.** Exactly two things can stop the flow before the PR exists: a diff-caused verification failure that isn't mechanically fixable, and branch-pr's narrow "ask only when necessary" cases. Everything else is carried and raised afterward
 - Inherits all `branch-pr` safety rules — no force push, no hard reset
@@ -89,8 +91,34 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Runs `/gbase:polish` on touched files before each auto-fix commit (skipped for pure lint/format output, verbatim `suggestion` block application, lockfile regen, and whitespace-only conflict resolution where polish would be a no-op)
 - Surfaces testable preview/deploy links (app builds and OTA previews — EAS/TestFlight/Firebase App Distribution — or web previews like Vercel/Storybook/staging) that CI or bots post — inline, with source + commit SHA, deduped — so you know exactly what to click and test (surface-only; it never opens the link or comments back)
 - Replies on every inline review comment it touches — `Addressed in <sha>.` for applied items, a one-line reason for declined ones, a "deferred to maintainer" note when waiting on a decision — so reviewers never wonder whether their comment was seen
+- **Converges instead of looping** with automated reviewers: pre-existing findings get a one-line reply and no fix, repeats of handled findings are ignored, and after three rounds from the same reviewer it stops auto-applying and asks whether the approach needs rethinking
+- Logs every CI failure fixed and review comment handled to the gbase ledger for `gbase:correct`
 - Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
 - Stops automatically when the PR reaches `MERGED` or `CLOSED`
+
+**setup** (skill, model-invocable) — Prepare a repo for the ship loop in one pass; idempotent, one confirmation.
+
+- Records the project's verify commands (lint/typecheck/test/format, scoped variants, CI-only, known-failing) in a marker block in `CLAUDE.md` — **each command is run once before it's recorded**, so `go` never trusts a command that doesn't work
+- Seeds a short `REVIEW.md` from repo evidence: what a defect means here, always-high-severity paths, skip paths, nit cap, `file:line` evidence required
+- Adds a PostToolUse formatter hook to `.claude/settings.json` when the repo has a formatter (merged, never clobbered)
+- Offers `create-verify` and `karpathy` when they're missing
+
+**create-verify** (skill, model-invocable) — Generate a project-local `verify-<app>` skill that drives the real app the way a user does (web, Expo/iOS simulator, CLI, API) and captures evidence. Adapted from pstack's `create-verification-skill`.
+
+- Interviews the repo, not the user: surface, run command, existing harness (Playwright/Maestro/Detox first), evidence, isolation
+- Generated skill has Launch / Doctor / Drive / Evidence / Cleanup sections plus a per-feature map (`features/`, four fixed sections per feature)
+- **Runs the generated skill end to end once** before handing it over — an unexecuted skill is reported as a draft
+- `--maintain` audits the map against source (one read-only sub-agent per feature) and a live pass; fixes doc/harness drift, reports real regressions instead of papering over them
+- `go` runs it for features the diff touches
+
+**correct** (skill, model-invocable) — Turn mistakes agents keep repeating into checks. Adapted from pstack's `/correct` and Matt Pocock's `retro`.
+
+- Mines the gbase ledger (review findings, CI failures, review comments recorded by `review` / `monitor`), reverts, and recent PR review comments; a class counts once it has happened twice
+- Fixes each class at the highest level that works — architecture → types → lint/CI check whose error names the fix → test → `CLAUDE.md`/`REVIEW.md` text last — after one multi-select confirmation
+- Proves each new check fails on a real past instance, then passes on current code
+- Judgment-call rules go to `REVIEW.md` (read by the reviewer, who has a diff and room), not `CLAUDE.md` (loaded into every session — pointers only); an existing-but-unwired check gets wired, not rebuilt
+- Keeps an `## Enforced rules` table in `REVIEW.md` pairing each rule with what enforces it, and proposes removing checks that mostly fire on good code
+- `--session` runs it as a retrospective on one session: slow navigation → a pointer, missing information → access (tee logs, read-only service access), expensive tool calls → a narrower command, checkable mistakes → the same ladder. Every candidate must cite a specific moment
 
 **karpathy** (skill, model-invocable) — Merge Andrej Karpathy's four behavioral coding-agent guidelines into a project's `CLAUDE.md` in one command.
 
@@ -143,6 +171,9 @@ After installation, the following are available:
 /gbase:review                  # Adversarial review — built-in code-review + skeptic verify (skill, model-invocable)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
+/gbase:setup                   # Record verify commands, seed REVIEW.md, add format hook (skill)
+/gbase:create-verify [--maintain]  # Generate/maintain a project-local behavior-verification skill (skill)
+/gbase:correct [--session]     # Turn recurring review/CI mistakes into checks; --session = retro on one session (skill)
 /gbase:karpathy [--user]       # Merge Karpathy's behavioral guidelines into CLAUDE.md — additive + idempotent (skill)
 /gbase:ego-profile             # Switch ego-browser to another account/profile (skill, model-invocable)
 

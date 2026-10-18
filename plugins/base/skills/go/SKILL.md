@@ -56,21 +56,24 @@ If the findings haven't arrived when polish finishes, go on to Step 4 and apply 
 
 ### 4. Verification gate
 
-Run the project's own checks over the changed scope — polish only validates its own edits, so this is what stops a red PR. Use the commands the repo defines (`CLAUDE.md`/`AGENTS.md`, `package.json` scripts, Makefile, CI workflows), narrowest scope that covers the diff. If the repo defines none, skip and say so; don't invent or install tools.
+Run the project's own checks over the changed scope — polish only validates its own edits, so this is what stops a red PR. Use the `<!-- gbase:verify -->` block in `CLAUDE.md` when present (written by `gbase:setup`, commands already proven to run); otherwise discover them (`CLAUDE.md`/`AGENTS.md`, `package.json` scripts, Makefile, CI workflows) and mention `/gbase:setup` once in the report. Narrowest scope that covers the diff. If the repo defines none, skip and say so; don't invent or install tools.
 
-Keep the gate to fast checks — lint, typecheck, unit tests. Native builds (`pod install`, `xcodebuild`, Gradle assemble), simulator/emulator runs, and E2E suites belong to CI; don't run them here.
+Keep the gate to fast checks — lint, typecheck, unit tests. Native builds (`pod install`, `xcodebuild`, Gradle assemble), simulator/emulator runs, and E2E suites belong to CI; don't run them here — the one exception is the repo's own verify skill below.
 
 Bias toward shipping:
 - Diff-caused and mechanical (type error, lint, missing import) → fix and re-run, at most twice.
 - Pre-existing (files the diff didn't touch), flaky, or environment-dependent (no DB, no device, missing env) → note and proceed.
 - Diff-caused and still failing after two attempts → `AskUserQuestion` with the output: fix now / open the PR anyway / abort.
 
-Skip on `--no-verify`. Report one line: `verify: <command> → pass`.
+**Behavior check.** If the repo has `.claude/skills/verify-*` (from `gbase:create-verify`) and the diff touches a feature in its `features/` map, run that skill for those features only. Same bias as above: an unreachable precondition (no simulator, no test account) is noted and passed; a diff-caused failure of the feature goes through the same fix-twice-then-ask rule.
+
+Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (artifacts/verify/<feature>/)`. Hand these lines to `branch-pr` as the PR's `## Test plan` evidence.
 
 ### 5. Branch & PR
 
 ```
-Skill(skill: "gbase:branch-pr")                    # or args: "--draft" when invoked with --draft
+Skill(skill: "gbase:branch-pr", args: "Verification: <Step 4 lines>")
+# invoked with --draft → args: "--draft Verification: <Step 4 lines>"
 ```
 
 `branch-pr` owns branching, commit grouping, push, PR body, and its `compat-check` rollout section; all its safety rules apply.

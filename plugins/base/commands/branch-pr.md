@@ -203,7 +203,9 @@ gh pr create --title "<PR title>" --body "$(cat <<'EOF'
 <!-- ## Rollout / Deploy order  ← only when compat-check returned ⚠️ -->
 
 ## Test plan
-- [ ] Test items
+<checks already run — the `Verification:` lines the caller (e.g. `gbase:go`) passed, as `- [x]` with
+their result and what was observed (evidence paths are local-only — gitignored — so say what the
+artifact showed, don't cite the path as proof) — then `- [ ]` items still left for a human>
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF

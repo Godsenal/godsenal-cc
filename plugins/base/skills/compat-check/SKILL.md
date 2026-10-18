@@ -21,7 +21,7 @@ scripts, or deploys. When it isn't sure a command is correct, it marks it `# ver
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
-PR 본문에 주입되는 `## Rollout / Deploy order` 섹션은 PR 산출물이므로 레포의 기존 PR 관례를 따르고, 한 줄 verdict 토큰(`✅ no special ordering` / `⚠️ requires ordered rollout`)은 `branch-pr`/`go`가 파싱하는 계약이라 그대로 둔다 — 사용자에게 말로 전하는 요약만 한국어.
+PR 본문에 주입되는 `## Rollout / Deploy order` 섹션은 PR 산출물이므로 레포의 기존 PR 관례를 따르고, 한 줄 verdict 토큰(`✅ No special deploy ordering needed` / `⚠️ Requires ordered rollout`)은 `branch-pr`가 파싱하는 계약이라 그대로 둔다 — 사용자에게 말로 전하는 요약만 한국어.
 
 ## Scope detection
 
