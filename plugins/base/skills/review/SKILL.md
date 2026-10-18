@@ -47,7 +47,7 @@ Skill(skill: "code-review", args: "medium <target>")
 - Never `--fix` (bypasses Stage 3), `--comment` (posts to GitHub), or `ultra` (user-triggered and billed — tell the user they can run `/code-review ultra` themselves).
 - Drop reuse/simplification/efficiency findings — they're polish's, carry no failure scenario, and would otherwise pass the auto-fix gate and undo restructurings polish chose not to make. Mention them as "noted"; never count or auto-apply them.
 
-If the built-in isn't available, review inline for correctness, error handling, and security across every changed file plus the surrounding code it interacts with; on a larger diff, split the work across parallel sub-agents. Every finding needs a concrete failure scenario at `file:line`. Treat these as unverified.
+If the built-in isn't available, review inline for correctness, error handling, and security across every changed file plus the surrounding code it interacts with; on a larger diff, split the work across parallel sub-agents on the session's model — finding is where model strength buys recall. Every finding needs a concrete failure scenario at `file:line`. Treat these as unverified.
 
 ## Stage 2 — Adversarial verify
 
@@ -57,7 +57,7 @@ Skeptic prompt:
 
 > Claimed defect: `<finding>` at `file:line`, failure scenario `<scenario>`. Try to refute it: read the code and its callers and find a concrete reason the scenario can't happen (guarded upstream, invariant holds, no caller passes that input, dead branch). Refute the scenario exactly as stated, not a weaker one. If you can't, concede it's real. When uncertain, call it refuted.
 
-One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–3 unrelated findings per skeptic so a large review doesn't spawn a dozen agents; each finding still gets its own verdict. High/critical (data loss, security, corruption, crash on a common path) gets three skeptics of its own with different angles; a majority refutation kills it. Refuted findings are dropped from the report; keep the count and one-line reasons.
+One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–3 unrelated findings per skeptic so a large review doesn't spawn a dozen agents; each finding still gets its own verdict. These run with `model: "sonnet"`. High/critical (data loss, security, corruption, crash on a common path) gets three skeptics of its own with different angles, on the session's model (omit `model`) — a wrong refutation silently drops a real bug; a majority refutation kills it. A model the user names for either tier wins. Refuted findings are dropped from the report; keep the count and one-line reasons.
 
 ## Stage 3 — Act
 

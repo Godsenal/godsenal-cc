@@ -31,7 +31,7 @@ Skip entirely: pure renames/moves, dependency bumps, generated code, reverts, in
 
 ## Pass 1 — three lenses in parallel
 
-Spawn three `general-purpose` sub-agents at once, each given the full diff and one lens. They return proposals (`file, line_range, before, after, rationale`) and edit nothing.
+Spawn three `general-purpose` sub-agents at once with `model: "sonnet"` (they only propose — the resolution step below is the gate; a model the user names wins), each given the full diff and one lens. They return proposals (`file, line_range, before, after, rationale`) and edit nothing.
 
 - **A — AI cruft & dead code:** comments that narrate the code or the task, defensive checks on trusted paths, `any`/`ignore` casts hiding type errors, handling for impossible cases, leftover scaffolding, compat shims with no callers.
 - **B — reuse & duplication:** unused imports/declarations, single-use variables, near-duplicate blocks (grep the repo and count every copy before proposing), logic that already exists in shared utils/hooks (search by behavior keyword, not just name), repeated literals, repeated computation.
@@ -46,7 +46,7 @@ Then resolve in the main agent:
 
 ## Pass 2 — structural
 
-One agent, whole-diff view, after Pass 1 lands. Look for restructurings that keep behavior and make the code simpler: helpers or layers the surrounding code makes unnecessary, one-caller wrappers and one-value parameters, conditional growth that wants a data structure, files that should split by responsibility, fixes applied at the wrong altitude (special cases stacked on shared infrastructure instead of fixing the mechanism).
+One agent on the session's model (omit `model` — this is the judgment pass), whole-diff view, after Pass 1 lands. Look for restructurings that keep behavior and make the code simpler: helpers or layers the surrounding code makes unnecessary, one-caller wrappers and one-value parameters, conditional growth that wants a data structure, files that should split by responsibility, fixes applied at the wrong altitude (special cases stacked on shared infrastructure instead of fixing the mechanism).
 
 Apply small contained edits directly. Anything that moves files, renames public APIs, or rewrites more than ~50 lines goes through `AskUserQuestion` with a one-line rationale first. Leave a restructuring that is only correct under an invariant the code doesn't enforce.
 

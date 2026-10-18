@@ -54,7 +54,7 @@ Add `artifacts/verify/` to `.gitignore`. Leave the skill uncommitted for `/gbase
 A feature map rots as the app changes. Locate `.claude/skills/verify-*/` (several → ask; none → stop and offer create mode).
 
 1. **Index hygiene** — README index vs. feature files: missing, extra, dead entries.
-2. **Source wave** — one read-only sub-agent per feature file, in parallel: how the feature works now from source, likely drift with `file:line`, one live recipe. They never drive the app or edit.
+2. **Source wave** — one read-only sub-agent per feature file, in parallel, with `model: "sonnet"` (the live pass re-checks whatever they claim): how the feature works now from source, likely drift with `file:line`, one live recipe. They never drive the app or edit.
 3. **Live pass** — required even when source looks clean. The main agent drives every feature at least once, doctor before the first drive and after any failure. An unreachable feature is reported with the missing prerequisite and the route tried.
 4. **Triage** — wrong description → fix the map; working behavior the harness can't drive → fix the harness and re-drive it; app actually broken → product regression, report it to the user and **don't paper over it in the map**.
 
