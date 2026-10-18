@@ -214,15 +214,13 @@ gh pr create --title "<PR title>" --body "$(cat <<'EOF'
 
 ## Change outline
 <one small view per concern, each under a bold one-line lead (e.g. **새 스킬**, **저장 흐름**, **스키마**):
-a table for 3+ parallel items (new endpoints, skills, screens), a `diff` sketch of a call tree / schema /
-component or file tree for a changed shape (~12 lines max, comments a few words), one-line bullets
-otherwise. Not a per-commit or per-file changelog: the Commits tab already is one>
+a table for 3+ parallel items (new endpoints, skills, screens), otherwise the form from the table below
+that fits the concern (~12 lines max, comments a few words). Not a per-commit or per-file changelog: the Commits tab already is one>
 
 ## Evidence
-<before → after where there is one — a `| | Before | After |` table when there are two or more: the test
-that failed and now passes, the output that changed, what the screen showed. Then the checks already run
-(the `Verification:` lines the caller passed) as `- [x]` with what was observed — verify-* artifacts are
-gitignored, so describe them, don't cite the path — and `- [ ]` for what's left to a human>
+<before → after in the form that shows this change best (table below) — a `| | Before | After |` table
+when there are two or more. Then the checks already run (the `Verification:` lines the caller passed) as
+`- [x]` with what was observed, and `- [ ]` for what's left to a human>
 
 ## Merge danger
 | | |
@@ -251,6 +249,40 @@ Merge danger informs the reviewer; it never blocks the PR.
 **Readable in a minute:** every section is skimmable — tables and one-line bullets, no paragraph over two
 lines. A Why that needs a second clause, or an outline that needs more than ~4 groups, usually means the
 PR should be split; say so in Notes.
+
+**Pick the form per change** — for each Outline view and each Evidence pair, the one a reviewer grasps fastest:
+
+| What changed | Show it as |
+|---|---|
+| How a screen looks (UI, layout, copy) | before/after screenshots side by side |
+| Interaction or animation | a short GIF |
+| A flow across components or services | a `mermaid` sequence diagram (GitHub renders it) |
+| Logic or an algorithm | a pseudocode `diff`, plus the test that failed and now passes |
+| An API, event, or RPC contract | a request/response JSON `diff` |
+| Schema | a table `diff`, plus what the migration does |
+| Performance | one number with its unit, before → after |
+| A refactor | a file-tree `diff`, plus "the same tests pass unchanged" |
+| CLI or script behavior | terminal output before/after |
+
+**Screenshots and GIFs** come from the run's `verify-*` artifacts (`artifacts/verify/<feature>/`, gitignored).
+"After" is always available; include "before" only when the run already captured it (e.g. it reproduced
+the bug first) — don't relaunch the old build just for a picture. A GIF needs `ffmpeg` to convert a
+recording (`xcrun simctl io booted recordVideo`, Playwright video); without it, use two or three stills.
+`gh` can't attach images to a PR body, so upload them to the `gbase-assets` branch with the contents API —
+never commit them to the PR branch, and touch nothing in the working tree:
+
+```bash
+repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$repo/git/ref/heads/gbase-assets" >/dev/null 2>&1 || \
+  gh api "repos/$repo/git/refs" -f ref=refs/heads/gbase-assets -f sha="$(git rev-list --max-parents=0 HEAD | tail -1)"
+# body via stdin — a screenshot's base64 can exceed the argument-length limit
+{ printf '{"branch":"gbase-assets","message":"assets: <branch-name>/<file>","content":"'
+  base64 < <local file> | tr -d '\n'; printf '"}'; } |
+  gh api -X PUT "repos/$repo/contents/<branch-name>/<file>" --input -
+# embed: ![after](https://github.com/<repo>/raw/gbase-assets/<branch-name>/<file>)
+```
+
+On a public repo those images are public — only upload screens with seeded demo data, never real user data.
 
 Return the PR URL to the user.
 
