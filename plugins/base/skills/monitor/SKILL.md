@@ -30,7 +30,7 @@ Keep the current branch's PR moving until merge or close. Human reviewers, revie
 2. Sweep current state — CI, inline comments, top-level reviews, PR conversation comments, mergeability, posted links — and act on every unresolved item before subscribing. Pre-existing reviews slipping past the loop is the most common miss.
 3. Start a persistent `Monitor` (~30s poll) that emits one event per state change, with watermarks, ignoring events authored by the current `gh` user.
 4. Unless `--no-review`, run the self-review once, now.
-5. On each event: classify, act, reply, log it to the ledger (below), surface new links. A `CONFLICTING` merge state comes first — CI keeps failing on the merge commit while it stands.
+5. On each event: classify, act, reply, surface new links. A `CONFLICTING` merge state comes first — CI keeps failing on the merge commit while it stands.
 6. On merge/close, print a one-line summary.
 
 ## Classification
@@ -42,13 +42,9 @@ Keep the current branch's PR moving until merge or close. Human reviewers, revie
 Same CI check failing twice after the same fix → stop auto-fixing it and ask.
 
 **Review rounds converge or stop.** An automated reviewer and monitor's fixes can loop indefinitely — each push triggers a fresh review that surfaces more. So:
-- An automated reviewer's finding on code the PR didn't add or change (`git blame` against the base) is pre-existing: reply `Pre-existing — not introduced by this PR; logged for follow-up.` and don't fix it. A human asking for a nearby fix is a request, not a finding — classify it normally.
+- An automated reviewer's finding on code the PR didn't add or change (`git blame` against the base) is pre-existing: reply `Pre-existing — not introduced by this PR; out of scope here.` and don't fix it. A human asking for a nearby fix is a request, not a finding — classify it normally.
 - A finding that repeats one already addressed or declined (same file, same claim) gets no new fix and no second reply.
 - After three rounds of new findings from the same reviewer, stop auto-applying its comments and ask whether the approach itself needs rethinking.
-
-## Ledger
-
-Append one line per CI failure fixed and per review comment handled to the gbase ledger (`~/.claude/gbase/ledger/<owner>_<repo>.tsv`, same slug command as `gbase:review` — `origin` URL, else the repo's local path; `mkdir -p` its directory first) — one tab-separated line: `date, pr, source, category, file, outcome, summary`, with source `ci` or `review-comment`, a short kebab-case `category` reused from the file when one fits, and outcome `fixed` / `declined` / `deferred` / `pre-existing`. `gbase:correct` mines it.
 
 ## Self-review
 

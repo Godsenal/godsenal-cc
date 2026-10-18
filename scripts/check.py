@@ -35,8 +35,6 @@ CONTRACTS = [
     ("gbase:verify", [skill("setup"), skill("go")]),
     ("verification:", [skill("go"), BRANCH_PR]),
     (".claude/skills/verify-", [skill("create-verify"), skill("go")]),
-    ("~/.claude/gbase/ledger/", [skill("review"), skill("monitor"),
-                                 skill("correct")]),
 ]
 
 errors = []

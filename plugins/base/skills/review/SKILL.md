@@ -61,7 +61,7 @@ One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–
 
 ## Stage 3 — Act
 
-**Pre-existing first.** If the defective line isn't in the diff's added/changed hunks (check `git blame` against the base when unsure), label it `pre-existing`: report it, never auto-fix it, and keep it out of the `S survived` / `K for you` counts (it still gets its own table row and ledger line). Fixing it widens the PR beyond its intent and pins an old bug on this change.
+**Pre-existing first.** If the defective line isn't in the diff's added/changed hunks (check `git blame` against the base when unsure), label it `pre-existing`: report it, never auto-fix it, and keep it out of the `S survived` / `K for you` counts (it still gets its own table row). Fixing it widens the PR beyond its intent and pins an old bug on this change.
 
 **Fix the class, not the line.** When a survivor is a pattern (a missing `await`, an unchecked `null`, a wrong unit), grep the diff for every other instance and treat them as one finding — otherwise the next round finds the sibling.
 
@@ -70,16 +70,6 @@ One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–
 **Everything else** goes in the report; raise the ones worth fixing before merge with `AskUserQuestion` (`file:line`, failure scenario, 2–3 options). When the caller says *defer, don't ask* (`gbase:go` does, so nothing blocks the PR), return them instead of asking.
 
 If the PR merges before a fix lands, don't push to the merged branch — report it as a follow-up.
-
-**Record each survivor** in the gbase ledger as you act on it — not at the end, where it gets skipped. `gbase:correct` mines it for mistakes that keep recurring:
-
-```bash
-u=$(git remote get-url origin 2>/dev/null || git rev-parse --show-toplevel)   # no origin → local path
-f=~/.claude/gbase/ledger/$(echo "$u" | sed -E 's#(\.git)?$##; s#.*[:/]([^/]+)/([^/]+)$#\1_\2#').tsv
-mkdir -p "$(dirname "$f")"; printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date +%F)" "<pr# or ->" review "<category>" "<file>" "<fixed|deferred|pre-existing|declined>" "<one-line finding>" >> "$f"
-```
-
-`category` is a short kebab-case defect class (`missing-await`, `unchecked-null`, `rls-gap`) — reuse an existing one from the file when it fits, so repeats group.
 
 ## Report
 

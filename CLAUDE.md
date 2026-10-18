@@ -22,7 +22,6 @@ Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
   - `compat-check`'s verdict tokens (`✅ No special deploy ordering needed` / `⚠️ Requires ordered rollout`) are parsed by `branch-pr`.
   - `go` calls `gbase:review` with `pre-PR mode; defer, don't ask; … start at Stage 2`, and `gbase:monitor` with `--no-review` / `--draft`; monitor's `--draft` flip waits on the deferred-findings count `go` passes; `go` hands `branch-pr` its check results as `Verification:` lines.
   - `setup` writes the `<!-- gbase:verify -->` block in the target repo's `CLAUDE.md` that `go`'s verification gate reads; `create-verify` generates `.claude/skills/verify-*` that `go` runs for touched features.
-  - `review` and `monitor` append to the ledger `~/.claude/gbase/ledger/<owner>_<repo>.tsv` (date, pr, source, category, file, outcome, summary) that `correct` mines — keep the columns in sync.
   - gapp stages auto-continue to the next stage and update `docs/HARNESS.md`; stage numbers (0 kickoff … 8 store-submit) must match across `kickoff`, each skill's description, and `README.md`.
 
 ## Writing skills

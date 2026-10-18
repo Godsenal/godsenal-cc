@@ -57,7 +57,6 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - **Stage 2 — Adversarial verify**: `PLAUSIBLE` findings go to independent skeptics prompted to *refute* them with a concrete counter-scenario; low/medium face one skeptic (batched 2–3 per skeptic when there are many, each still judged separately), high/critical a 3-skeptic majority panel. A `CONFIRMED` finding skips the panel only if it will merely be *reported* — if it would be auto-fixed, or is high/critical, it still faces a skeptic, because the built-in's verify is a single non-adversarial pass and auto-fixing is the irreversible half. Anything refuted is dropped. Cleanup-category findings (reuse/simplification/efficiency) are filtered out before this stage — that's `polish`'s job, and they carry no failure scenario.
 - **Repo rules**: a `REVIEW.md` (from `gbase:setup` or hand-written) governs every stage — skip paths, severity overrides, nit cap — and `CLAUDE.md` conventions are checked too
 - **Stage 3 — Classify & act**: a defect on a line the diff didn't add is labelled `pre-existing` and reported, never auto-fixed (it would widen the PR and pin an old bug on this change); a pattern finding is fixed across every instance in the diff at once; clear+local survivors are auto-fixed; everything else comes back as a severity-ordered table + `review: F found, R refuted, S survived` tally. **Pre-PR mode** (from `go`) applies fixes as working-tree edits so `branch-pr` folds them into the initial commits, and *defers* judgment calls instead of asking; **post-PR mode** (from `monitor`) commits each fix separately.
-- Each survivor is appended to the gbase ledger (`~/.claude/gbase/ledger/<owner>_<repo>.tsv`) for `gbase:correct`
 - Invoke via `/gbase:review`, from `go` before the PR opens, or let `monitor` run it on a PR it didn't ship
 
 **polish** (skill) — Two-pass behavior-preserving polish on the current diff. The polish role in `go` / `monitor`; distinct from the built-in `simplify` in its 3-lens fan-out, risk-split posture, recall gate, out-of-diff guard, and non-destructive revert.
@@ -92,7 +91,6 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Surfaces testable preview/deploy links (app builds and OTA previews — EAS/TestFlight/Firebase App Distribution — or web previews like Vercel/Storybook/staging) that CI or bots post — inline, with source + commit SHA, deduped — so you know exactly what to click and test (surface-only; it never opens the link or comments back)
 - Replies on every inline review comment it touches — `Addressed in <sha>.` for applied items, a one-line reason for declined ones, a "deferred to maintainer" note when waiting on a decision — so reviewers never wonder whether their comment was seen
 - **Converges instead of looping** with automated reviewers: pre-existing findings get a one-line reply and no fix, repeats of handled findings are ignored, and after three rounds from the same reviewer it stops auto-applying and asks whether the approach needs rethinking
-- Logs every CI failure fixed and review comment handled to the gbase ledger for `gbase:correct`
 - Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
 - Stops automatically when the PR reaches `MERGED` or `CLOSED`
 
@@ -113,11 +111,11 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 **correct** (skill, model-invocable) — Turn mistakes agents keep repeating into checks. Adapted from pstack's `/correct` and Matt Pocock's `retro`.
 
-- Mines the gbase ledger (review findings, CI failures, review comments recorded by `review` / `monitor`), reverts, and recent PR review comments; a class counts once it has happened twice
-- Fixes each class at the highest level that works — architecture → types → lint/CI check whose error names the fix → test → `CLAUDE.md`/`REVIEW.md` text last — after one multi-select confirmation
+- Mines recent commits, reverts, PR review comments, and past session transcripts (which hold pre-PR `review` reports that never reach GitHub); a class counts once it has happened twice
+- Fixes each class at the highest level that works — architecture → types → lint/CI check whose error names the fix → test → `REVIEW.md` text last — after one multi-select confirmation
 - Proves each new check fails on a real past instance, then passes on current code
 - Judgment-call rules go to `REVIEW.md` (read by the reviewer, who has a diff and room), not `CLAUDE.md` (loaded into every session — pointers only); an existing-but-unwired check gets wired, not rebuilt
-- Keeps an `## Enforced rules` table in `REVIEW.md` pairing each rule with what enforces it, and proposes removing checks that mostly fire on good code
+- Keeps an `## Enforced rules` table in `REVIEW.md` pairing each rule with what enforces it
 - `--session` runs it as a retrospective on one session: slow navigation → a pointer, missing information → access (tee logs, read-only service access), expensive tool calls → a narrower command, checkable mistakes → the same ladder. Every candidate must cite a specific moment
 
 **karpathy** (skill, model-invocable) — Merge Andrej Karpathy's four behavioral coding-agent guidelines into a project's `CLAUDE.md` in one command.
