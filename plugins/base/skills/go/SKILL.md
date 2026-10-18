@@ -56,9 +56,9 @@ If the findings haven't arrived when polish finishes, go on to Step 4 and apply 
 
 ### 4. Verification gate
 
-Run the project's own checks over the changed scope — polish only validates its own edits, so this is what stops a red PR. Use the `<!-- gbase:verify -->` block in `CLAUDE.md` when present (written by `gbase:setup`, commands already proven to run); otherwise discover them (`CLAUDE.md`/`AGENTS.md`, `package.json` scripts, Makefile, CI workflows) and mention `/gbase:setup` once in the report. Narrowest scope that covers the diff. If the repo defines none, skip and say so; don't invent or install tools.
+Run the project's own checks over the changed scope — polish only validates its own edits, so this is what stops a red PR. Use the `<!-- gbase:verify:start -->` block in `CLAUDE.md` or `AGENTS.md` when present (written by `gbase:setup`; every line was run once except `unverified locally`); otherwise discover them (`CLAUDE.md`/`AGENTS.md`, `package.json` scripts, Makefile, CI workflows) and mention `/gbase:setup` once in the report. Narrowest scope that covers the diff. If the repo defines none, skip and say so; don't invent or install tools.
 
-Keep the gate to fast checks — lint, typecheck, unit tests. Native builds (`pod install`, `xcodebuild`, Gradle assemble), simulator/emulator runs, and E2E suites belong to CI; don't run them here — the one exception is the repo's own verify skill below.
+Keep the gate to fast checks — lint, typecheck, unit tests. Native builds (`pod install`, `xcodebuild`, Gradle assemble), simulator/emulator runs, and E2E suites belong to CI; don't run them here. Two exceptions: a `typecheck (no CI)` line in the verify block — setup writes it only when no CI job builds the app, so it's the repo's only compile gate — and the repo's own verify skill below.
 
 Bias toward shipping:
 - Diff-caused and mechanical (type error, lint, missing import) → fix and re-run, at most twice.
