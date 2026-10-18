@@ -57,7 +57,7 @@ Skeptic prompt:
 
 > Claimed defect: `<finding>` at `file:line`, failure scenario `<scenario>`. Try to refute it: read the code and its callers and find a concrete reason the scenario can't happen (guarded upstream, invariant holds, no caller passes that input, dead branch). Refute the scenario exactly as stated, not a weaker one. If you can't, concede it's real. When uncertain, call it refuted.
 
-One skeptic for low/medium. High/critical (data loss, security, corruption, crash on a common path) gets three with different angles; a majority refutation kills it. Refuted findings are dropped from the report; keep the count and one-line reasons.
+One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–3 unrelated findings per skeptic so a large review doesn't spawn a dozen agents; each finding still gets its own verdict. High/critical (data loss, security, corruption, crash on a common path) gets three skeptics of its own with different angles; a majority refutation kills it. Refuted findings are dropped from the report; keep the count and one-line reasons.
 
 ## Stage 3 — Act
 
@@ -71,11 +71,7 @@ One skeptic for low/medium. High/critical (data loss, security, corruption, cras
 
 If the PR merges before a fix lands, don't push to the merged branch — report it as a follow-up.
 
-## Report
-
-Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / pre-existing / noted)`, then `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
-
-Append one line per survivor to the gbase ledger — `gbase:correct` mines it for mistakes that keep recurring:
+**Record each survivor** in the gbase ledger as you act on it — not at the end, where it gets skipped. `gbase:correct` mines it for mistakes that keep recurring:
 
 ```bash
 u=$(git remote get-url origin 2>/dev/null || git rev-parse --show-toplevel)   # no origin → local path
@@ -84,6 +80,10 @@ mkdir -p "$(dirname "$f")"; printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date +%F)" 
 ```
 
 `category` is a short kebab-case defect class (`missing-await`, `unchecked-null`, `rls-gap`) — reuse an existing one from the file when it fits, so repeats group.
+
+## Report
+
+Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / pre-existing / noted)`, then `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
 
 ## Safety
 

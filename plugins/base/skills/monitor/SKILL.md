@@ -30,7 +30,7 @@ Keep the current branch's PR moving until merge or close. Human reviewers, revie
 2. Sweep current state — CI, inline comments, top-level reviews, PR conversation comments, mergeability, posted links — and act on every unresolved item before subscribing. Pre-existing reviews slipping past the loop is the most common miss.
 3. Start a persistent `Monitor` (~30s poll) that emits one event per state change, with watermarks, ignoring events authored by the current `gh` user.
 4. Unless `--no-review`, run the self-review once, now.
-5. On each event: classify, act, reply, surface new links. A `CONFLICTING` merge state comes first — CI keeps failing on the merge commit while it stands.
+5. On each event: classify, act, reply, log it to the ledger (below), surface new links. A `CONFLICTING` merge state comes first — CI keeps failing on the merge commit while it stands.
 6. On merge/close, print a one-line summary.
 
 ## Classification
