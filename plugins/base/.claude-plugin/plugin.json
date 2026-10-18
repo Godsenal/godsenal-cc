@@ -1,7 +1,7 @@
 {
   "name": "gbase",
-  "version": "1.21.0",
-  "description": "Core productivity tools for Claude Code — skill discovery, fully-autonomous branch/PR workflows, backward-compat deploy-order checks, blast-radius analysis proven by running code, two-pass diff polish (3-lens fan-out + structural), one-shot review+polish → verify → PR → monitor, adversarial code review (delegated find + skeptic-verify), CI/review monitoring with self-review, one-command Karpathy CLAUDE.md guidelines merge, repo setup (verify commands + REVIEW.md + format hook), project-local behavior-verification skill generation, and a correct loop that turns recurring review/CI mistakes into enforced checks",
+  "version": "1.22.0",
+  "description": "Core productivity tools for Claude Code — skill discovery, fully-autonomous branch/PR workflows, backward-compat deploy-order checks, blast-radius analysis proven by running code, root-cause bug fixing, two-pass diff polish (3-lens fan-out + structural), one-shot review+polish → verify → PR → monitor, adversarial code review (delegated find + skeptic-verify), CI/review monitoring with self-review, one-command Karpathy CLAUDE.md guidelines merge, repo setup (verify commands + REVIEW.md + format hook), project-local behavior-verification skill generation, and a correct loop that turns recurring review/CI mistakes into enforced checks",
   "author": {
     "name": "godsenal",
     "url": "https://github.com/Godsenal"
@@ -47,6 +47,9 @@
     "lessons",
     "lint-rules",
     "blast-radius",
+    "bug-fix",
+    "root-cause",
+    "debugging",
     "korean",
     "i18n"
   ]
