@@ -50,6 +50,12 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Emits a one-line verdict (`✅ No special deploy ordering needed` or `⚠️ Requires ordered rollout`) and, when needed, a numbered runbook (expand → migrate → backfill → deploy → ramp → follow-up contract PR) with a rollback note, each hazard mapped to `file:line`
 - Auto-invoked by **branch-pr** / **go** to drop a `## Rollout / Deploy order` section into the PR body; also runs standalone via `/gbase:compat-check`
 
+**blast-radius** (skill, model-invocable) — What could this change break *outside* the diff? Ported from pstack's `blast-radius`.
+
+- Looks where grep stops: the called library's source at its pinned version (and local patches), execution timing, JSON/DB/wire formats, feature flags, code three hops downstream
+- Finds the one fact the change is safe because of and **proves it by running code** — every claim is graded on a 5-step evidence ladder (said so → `file:line` → walked the failure → ran a script → reproduced in the app), and an unproven one is labelled `unproven`
+- Deploy-ordering hazards are handed to `compat-check`; read-only on the repo (scratch scripts go to a temp dir)
+
 **review** (skill, model-invocable) — Adversarial code review of the current change. The judgment layer on top of the built-in `code-review`: verification, and a gate deciding what may be fixed without asking.
 
 - Packaged as a Skill (`plugins/base/skills/review/SKILL.md`); read-only on GitHub — never comments, reviews, replies, or merges
@@ -167,6 +173,7 @@ After installation, the following are available:
 /gbase:branch-pr               # Autonomous branch + commit + PR from current changes (command)
 /gbase:compat-check [range]    # Flag backward-compat hazards + emit a deploy-order runbook (skill, model-invocable)
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
+/gbase:blast-radius            # What could this break beyond the diff — proven by running code (skill)
 /gbase:review                  # Adversarial review — built-in code-review + skeptic verify (skill, model-invocable)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
