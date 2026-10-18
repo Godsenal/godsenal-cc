@@ -14,7 +14,7 @@ Review runs *before* the PR so its fixes land in the initial commits — a revie
 
 사용자에게 보이는 텍스트는 **한국어**로 쓴다 — 진행 보고, 요약, 리포트 표의 설명 칸, 집계/tally 라인, `AskUserQuestion`의 질문·헤더·옵션·설명까지 전부. 하위 에이전트를 띄울 때도, 결과가 사용자에게 그대로 노출되는 텍스트는 한국어로 돌려달라고 프롬프트에 적는다.
 
-영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름·PR 제목/본문 — 이건 이 규칙이 아니라 레포의 기존 관례(`git log`, 최근 PR)를 따른다.
+영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름 — 이건 레포의 기존 관례(`git log`)를 따른다. PR 제목·본문은 기본 **한국어**로 쓴다 — 섹션 제목 같은 템플릿 라벨은 영어로 두고, 레포가 분명히 다른 언어로 PR을 써 왔거나(예: 영어 오픈소스) 사용자가 요청하면 그 언어를 따른다.
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
@@ -26,19 +26,19 @@ Invoking `go` is the go-ahead to reach a PR. Only two things may stop the flow b
 
 ### 1. Scope
 
-Uncommitted changes → target them. Clean tree → target the latest commit (`git show HEAD --name-only`); if later steps produce no edits there, there is nothing to PR — say so and stop. Report the scope in one line.
+Uncommitted changes → target them. Clean tree → target the latest commit (`git show HEAD --name-only`); if later steps produce no edits there, there is nothing to PR — say so and stop. Classify its risk the way `branch-pr` does — `high` if it touches a path `REVIEW.md` marks always-high (without one: auth, payments, migrations, CI/release workflows, app config), `low` for docs/copy/tests/flagged additive changes, else `medium`. Report scope and risk in one line.
 
 ### 2. Review (background) ∥ polish
 
 Launch the finder, then polish while it runs:
 
 ```
-Skill(skill: "code-review", args: "medium <scope from Step 1>")
+Skill(skill: "code-review", args: "<medium | high per Step 1 risk> <scope from Step 1>")
 Skill(skill: "gbase:polish", args: "<in-scope files>")
 ```
 
 - **Pass the scope explicitly.** With no target the built-in reviews the current diff, which is empty on the clean-tree path — it would report "nothing found" about a commit it never read.
-- `medium` unless the user asked for a deep pass; above it the built-in fans out to a multi-agent workflow on every shipped change.
+- `medium` by default; `high` when Step 1 rated the change high-risk or the user asked for a deep pass. Not higher by default — above `medium` the built-in fans out to a multi-agent workflow, worth it only where one missed bug is costly.
 - Never `--fix` (it would race polish for the same files), `--comment` (no PR yet), or `ultra` (user-triggered and billed).
 - Skip the finder on `--no-review` and on scopes review skips anyway (pure rename, dependency bump, generated code).
 
@@ -56,21 +56,24 @@ If the findings haven't arrived when polish finishes, go on to Step 4 and apply 
 
 ### 4. Verification gate
 
-Run the project's own checks over the changed scope — polish only validates its own edits, so this is what stops a red PR. Use the commands the repo defines (`CLAUDE.md`/`AGENTS.md`, `package.json` scripts, Makefile, CI workflows), narrowest scope that covers the diff. If the repo defines none, skip and say so; don't invent or install tools.
+Run the project's own checks over the changed scope — polish only validates its own edits, so this is what stops a red PR. Use the `<!-- gbase:verify -->` block in `CLAUDE.md` when present (written by `gbase:setup`, commands already proven to run); otherwise discover them (`CLAUDE.md`/`AGENTS.md`, `package.json` scripts, Makefile, CI workflows) and mention `/gbase:setup` once in the report. Narrowest scope that covers the diff. If the repo defines none, skip and say so; don't invent or install tools.
 
-Keep the gate to fast checks — lint, typecheck, unit tests. Native builds (`pod install`, `xcodebuild`, Gradle assemble), simulator/emulator runs, and E2E suites belong to CI; don't run them here.
+Keep the gate to fast checks — lint, typecheck, unit tests. Native builds (`pod install`, `xcodebuild`, Gradle assemble), simulator/emulator runs, and E2E suites belong to CI; don't run them here — the one exception is the repo's own verify skill below.
 
 Bias toward shipping:
 - Diff-caused and mechanical (type error, lint, missing import) → fix and re-run, at most twice.
 - Pre-existing (files the diff didn't touch), flaky, or environment-dependent (no DB, no device, missing env) → note and proceed.
 - Diff-caused and still failing after two attempts → `AskUserQuestion` with the output: fix now / open the PR anyway / abort.
 
-Skip on `--no-verify`. Report one line: `verify: <command> → pass`.
+**Behavior check.** If the repo has `.claude/skills/verify-*` (from `gbase:create-verify`) and the diff touches a feature in its `features/` map, run that skill for those features only. Same bias as above: an unreachable precondition (no simulator, no test account) is noted and passed; a diff-caused failure of the feature goes through the same fix-twice-then-ask rule.
+
+Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (artifacts/verify/<feature>/)`. Hand these lines to `branch-pr` as the PR's `## Evidence`.
 
 ### 5. Branch & PR
 
 ```
-Skill(skill: "gbase:branch-pr")                    # or args: "--draft" when invoked with --draft
+Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <Step 4 lines>")
+# invoked with --draft → args: "--draft Risk: …; Verification: …"
 ```
 
 `branch-pr` owns branching, commit grouping, push, PR body, and its `compat-check` rollout section; all its safety rules apply.

@@ -14,7 +14,7 @@ Not polish — cleanup (reuse, dedup, clarity) is `gbase:polish`'s job. Not a Gi
 
 사용자에게 보이는 텍스트는 **한국어**로 쓴다 — 진행 보고, 요약, 리포트 표의 설명 칸, 집계/tally 라인, `AskUserQuestion`의 질문·헤더·옵션·설명까지 전부. 하위 에이전트를 띄울 때도, 결과가 사용자에게 그대로 노출되는 텍스트는 한국어로 돌려달라고 프롬프트에 적는다.
 
-영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름·PR 제목/본문 — 이건 이 규칙이 아니라 레포의 기존 관례(`git log`, 최근 PR)를 따른다.
+영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름 — 이건 레포의 기존 관례(`git log`)를 따른다. PR 제목·본문은 기본 **한국어**로 쓴다 — 섹션 제목 같은 템플릿 라벨은 영어로 두고, 레포가 분명히 다른 언어로 PR을 써 왔거나(예: 영어 오픈소스) 사용자가 요청하면 그 언어를 따른다.
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
@@ -30,9 +30,13 @@ Mode decides how fixes land:
 
 The caller's stated mode wins. Without one, a dirty tree means pre-PR even if a PR is open — committing would sweep the user's unrelated edits into a review commit.
 
+## Repo rules
+
+If the repo has a `REVIEW.md` (root or nearest ancestor of the changed files), it governs every stage: hand it to the finder and each skeptic, drop findings on its skip paths, apply its severity overrides and nit cap. Also flag code that breaks a convention `CLAUDE.md` states, and note when `CLAUDE.md` itself contradicts the code.
+
 ## Stage 1 — Find
 
-If the caller handed in findings (`gbase:go` does), skip to Stage 2. Otherwise:
+If the caller handed in findings (`gbase:go` passes `candidates already found — start at Stage 2`), skip to Stage 2. Otherwise:
 
 ```
 Skill(skill: "code-review", args: "medium <target>")
@@ -43,7 +47,7 @@ Skill(skill: "code-review", args: "medium <target>")
 - Never `--fix` (bypasses Stage 3), `--comment` (posts to GitHub), or `ultra` (user-triggered and billed — tell the user they can run `/code-review ultra` themselves).
 - Drop reuse/simplification/efficiency findings — they're polish's, carry no failure scenario, and would otherwise pass the auto-fix gate and undo restructurings polish chose not to make. Mention them as "noted"; never count or auto-apply them.
 
-If the built-in isn't available, review inline for correctness, error handling, and security across every changed file plus the surrounding code it interacts with; on a larger diff, split the work across parallel sub-agents. Every finding needs a concrete failure scenario at `file:line`. Treat these as unverified.
+If the built-in isn't available, review inline for correctness, error handling, and security across every changed file plus the surrounding code it interacts with; on a larger diff, split the work across parallel sub-agents on the session's model — finding is where model strength buys recall. Every finding needs a concrete failure scenario at `file:line`. Treat these as unverified.
 
 ## Stage 2 — Adversarial verify
 
@@ -53,9 +57,13 @@ Skeptic prompt:
 
 > Claimed defect: `<finding>` at `file:line`, failure scenario `<scenario>`. Try to refute it: read the code and its callers and find a concrete reason the scenario can't happen (guarded upstream, invariant holds, no caller passes that input, dead branch). Refute the scenario exactly as stated, not a weaker one. If you can't, concede it's real. When uncertain, call it refuted.
 
-One skeptic for low/medium. High/critical (data loss, security, corruption, crash on a common path) gets three with different angles; a majority refutation kills it. Refuted findings are dropped from the report; keep the count and one-line reasons.
+One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–3 unrelated findings per skeptic so a large review doesn't spawn a dozen agents; each finding still gets its own verdict. These run with `model: "sonnet"`. High/critical (data loss, security, corruption, crash on a common path) gets three skeptics of its own with different angles, on the session's model (omit `model`) — a wrong refutation silently drops a real bug; a majority refutation kills it. A model the user names for either tier wins. Refuted findings are dropped from the report; keep the count and one-line reasons.
 
 ## Stage 3 — Act
+
+**Pre-existing first.** If the defective line isn't in the diff's added/changed hunks (check `git blame` against the base when unsure), label it `pre-existing`: report it, never auto-fix it, and keep it out of the `S survived` / `K for you` counts (it still gets its own table row). Fixing it widens the PR beyond its intent and pins an old bug on this change.
+
+**Fix the class, not the line.** When a survivor is a pattern (a missing `await`, an unchecked `null`, a wrong unit), grep the diff for every other instance and treat them as one finding — otherwise the next round finds the sibling.
 
 **Auto-fix** a survivor only when the fix is mechanical, local (one or two files, small), and fully determined by the finding — no design choice, dependency, schema/migration, API-contract change, or test added/removed. Land it per the mode. Run `gbase:polish` on the touched files before a non-trivial fix is committed or handed back — in pre-PR mode nothing else will polish it.
 
@@ -65,7 +73,7 @@ If the PR merges before a fix lands, don't push to the merged branch — report 
 
 ## Report
 
-Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / noted)`, then `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
+Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / pre-existing / noted)`, then `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
 
 ## Safety
 

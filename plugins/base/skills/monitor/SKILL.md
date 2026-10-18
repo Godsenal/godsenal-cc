@@ -12,7 +12,7 @@ Keep the current branch's PR moving until merge or close. Human reviewers, revie
 
 사용자에게 보이는 텍스트는 **한국어**로 쓴다 — 진행 보고, 요약, 리포트 표의 설명 칸, 집계/tally 라인, `AskUserQuestion`의 질문·헤더·옵션·설명까지 전부. 하위 에이전트를 띄울 때도, 결과가 사용자에게 그대로 노출되는 텍스트는 한국어로 돌려달라고 프롬프트에 적는다.
 
-영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름·PR 제목/본문 — 이건 이 규칙이 아니라 레포의 기존 관례(`git log`, 최근 PR)를 따른다.
+영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름 — 이건 레포의 기존 관례(`git log`)를 따른다. PR 제목·본문은 기본 **한국어**로 쓴다 — 섹션 제목 같은 템플릿 라벨은 영어로 두고, 레포가 분명히 다른 언어로 PR을 써 왔거나(예: 영어 오픈소스) 사용자가 요청하면 그 언어를 따른다.
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
@@ -40,6 +40,11 @@ Keep the current branch's PR moving until merge or close. Human reviewers, revie
 **Ask** otherwise — design choices, tests added/removed, behavior changes, trade-offs, questions, hedged comments ("maybe", "consider"), or fixes touching files the reviewer didn't mention. Include reviewer, a one-line quote, `file:line`, and 2–3 options.
 
 Same CI check failing twice after the same fix → stop auto-fixing it and ask.
+
+**Review rounds converge or stop.** An automated reviewer and monitor's fixes can loop indefinitely — each push triggers a fresh review that surfaces more. So:
+- An automated reviewer's finding on code the PR didn't add or change (`git blame` against the base) is pre-existing: reply `Pre-existing — not introduced by this PR; out of scope here.` and don't fix it. A human asking for a nearby fix is a request, not a finding — classify it normally.
+- A finding that repeats one already addressed or declined (same file, same claim) gets no new fix and no second reply.
+- After three rounds of new findings from the same reviewer, stop auto-applying its comments and ask whether the approach itself needs rethinking.
 
 ## Self-review
 

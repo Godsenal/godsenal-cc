@@ -16,7 +16,7 @@ don't ask the user to ratify routine choices.
 
 사용자에게 보이는 텍스트는 **한국어**로 쓴다 — 진행 보고, 요약, 리포트 표의 설명 칸, 집계/tally 라인, `AskUserQuestion`의 질문·헤더·옵션·설명까지 전부. 하위 에이전트를 띄울 때도, 결과가 사용자에게 그대로 노출되는 텍스트는 한국어로 돌려달라고 프롬프트에 적는다.
 
-영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름·PR 제목/본문 — 이건 이 규칙이 아니라 레포의 기존 관례(`git log`, 최근 PR)를 따른다.
+영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름 — 이건 레포의 기존 관례(`git log`)를 따른다. PR 제목·본문은 기본 **한국어**로 쓴다 — 섹션 제목 같은 템플릿 라벨은 영어로 두고, 레포가 분명히 다른 언어로 PR을 써 왔거나(예: 영어 오픈소스) 사용자가 요청하면 그 언어를 따른다.
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
@@ -189,26 +189,100 @@ Skill(skill: "gbase:compat-check", args: "origin/<default-branch>...HEAD")
   body (below) and print its one-line summary to the user as a heads-up.
 - If it returns `✅`, omit the section entirely and say nothing extra.
 
+Classify the risk, unless the caller (e.g. `gbase:go`) passed a `Risk:` line — the tier is set from
+the change, not the author:
+
+- `high` — touches a path `REVIEW.md` marks always-high (without one: auth, payments/billing, migrations,
+  CI/release workflows, app config like `app.json`/`eas.json`/`Info.plist`), or compat-check returned ⚠️
+- `low` — docs, copy, tests, or an additive change behind a flag, and nothing above
+- `medium` — everything else
+
+If the repo has its own PR template (`.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/`,
+or `docs/pull_request_template.md`), fill that template's sections instead of the one below, and append
+whichever of `Evidence` / `Merge danger` it lacks.
+
 Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
 `gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
 
+The body is a briefing for a reviewer who has the diff — combined from humanlayer's `visual-pr` (Why,
+notes), Matt Pocock's `pr` (diff sketch, before/after, door) and gbase (risk, revert, rollout):
+
 ```bash
 gh pr create --title "<PR title>" --body "$(cat <<'EOF'
-## Summary
-<bullet point summary of changes>
+## Why
+<exactly one sentence: the problem, and what becomes possible once this ships>
 
-## Changes
-<changes organized by commit>
+## Change outline
+<one small view per concern, each under a bold one-line lead (e.g. **새 스킬**, **저장 흐름**, **스키마**):
+a table for 3+ parallel items (new endpoints, skills, screens), otherwise the form from the table below
+that fits the concern (~12 lines max, comments a few words). Not a per-commit or per-file changelog: the Commits tab already is one>
+
+## Evidence
+<before → after in the form that shows this change best (table below) — a `| | Before | After |` table
+when there are two or more. Then the checks already run (the `Verification:` lines the caller passed) as
+`- [x]` with what was observed, and `- [ ]` for what's left to a human>
+
+## Merge danger
+| | |
+|---|---|
+| 위험도 | **<low / medium / high>** — <the path or hazard that set it> |
+| Door | <two-way / one-way> |
+| Blast radius | <what breaks if this is wrong, a few words> |
+| Revert | <revert the squash commit, plus anything left behind — or, one-way, the step after which only a restore works> |
 
 <!-- ## Rollout / Deploy order  ← only when compat-check returned ⚠️ -->
 
-## Test plan
-- [ ] Test items
+## Notes
+<1–3 bullets a reviewer would otherwise trip on: a deliberate omission, a compatibility constraint, a
+surprising decision. Drop the section when there are none>
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```
+
+**Door:** two-way when reverting the squash commit restores the old behavior. One-way when something
+outlives the revert — a dropped column or rewritten data, a sent notification or email, a store
+submission, a removed public API; take the point of no return from compat-check's Rollback line.
+**Blast radius:** if `gbase:blast-radius` ran on this change, summarize its confirmed risks here.
+Merge danger informs the reviewer; it never blocks the PR.
+**Readable in a minute:** every section is skimmable — tables and one-line bullets, no paragraph over two
+lines. A Why that needs a second clause, or an outline that needs more than ~4 groups, usually means the
+PR should be split; say so in Notes.
+
+**Pick the form per change** — for each Outline view and each Evidence pair, the one a reviewer grasps fastest:
+
+| What changed | Show it as |
+|---|---|
+| How a screen looks (UI, layout, copy) | before/after screenshots side by side |
+| Interaction or animation | a short GIF |
+| A flow across components or services | a `mermaid` sequence diagram (GitHub renders it) |
+| Logic or an algorithm | a pseudocode `diff`, plus the test that failed and now passes |
+| An API, event, or RPC contract | a request/response JSON `diff` |
+| Schema | a table `diff`, plus what the migration does |
+| Performance | one number with its unit, before → after |
+| A refactor | a file-tree `diff`, plus "the same tests pass unchanged" |
+| CLI or script behavior | terminal output before/after |
+
+**Screenshots and GIFs** come from the run's `verify-*` artifacts (`artifacts/verify/<feature>/`, gitignored).
+"After" is always available; include "before" only when the run already captured it (e.g. it reproduced
+the bug first) — don't relaunch the old build just for a picture. A GIF needs `ffmpeg` to convert a
+recording (`xcrun simctl io booted recordVideo`, Playwright video); without it, use two or three stills.
+`gh` can't attach images to a PR body, so upload them to the `gbase-assets` branch with the contents API —
+never commit them to the PR branch, and touch nothing in the working tree:
+
+```bash
+repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$repo/git/ref/heads/gbase-assets" >/dev/null 2>&1 || \
+  gh api "repos/$repo/git/refs" -f ref=refs/heads/gbase-assets -f sha="$(git rev-list --max-parents=0 HEAD | tail -1)"
+# body via stdin — a screenshot's base64 can exceed the argument-length limit
+{ printf '{"branch":"gbase-assets","message":"assets: <branch-name>/<file>","content":"'
+  base64 < <local file> | tr -d '\n'; printf '"}'; } |
+  gh api -X PUT "repos/$repo/contents/<branch-name>/<file>" --input -
+# embed: ![after](https://github.com/<repo>/raw/gbase-assets/<branch-name>/<file>)
+```
+
+On a public repo those images are public — only upload screens with seeded demo data, never real user data.
 
 Return the PR URL to the user.
 

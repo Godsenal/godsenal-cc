@@ -12,7 +12,7 @@ Two behavior-preserving passes over the current diff. No bug fixes, contract cha
 
 사용자에게 보이는 텍스트는 **한국어**로 쓴다 — 진행 보고, 요약, 리포트 표의 설명 칸, 집계/tally 라인, `AskUserQuestion`의 질문·헤더·옵션·설명까지 전부. 하위 에이전트를 띄울 때도, 결과가 사용자에게 그대로 노출되는 텍스트는 한국어로 돌려달라고 프롬프트에 적는다.
 
-영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름·PR 제목/본문 — 이건 이 규칙이 아니라 레포의 기존 관례(`git log`, 최근 PR)를 따른다.
+영어 그대로 두는 것: 코드·식별자·파일 경로·명령어·스킬/툴 이름, 고정 라벨과 상태 키워드(`critical`/`high`/`medium`/`low`, `PASS`/`FAIL`, `✅`/`⚠️`), 그리고 커밋 메시지·브랜치 이름 — 이건 레포의 기존 관례(`git log`)를 따른다. PR 제목·본문은 기본 **한국어**로 쓴다 — 섹션 제목 같은 템플릿 라벨은 영어로 두고, 레포가 분명히 다른 언어로 PR을 써 왔거나(예: 영어 오픈소스) 사용자가 요청하면 그 언어를 따른다.
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
@@ -31,7 +31,7 @@ Skip entirely: pure renames/moves, dependency bumps, generated code, reverts, in
 
 ## Pass 1 — three lenses in parallel
 
-Spawn three `general-purpose` sub-agents at once, each given the full diff and one lens. They return proposals (`file, line_range, before, after, rationale`) and edit nothing.
+Spawn three `general-purpose` sub-agents at once with `model: "sonnet"` (they only propose — the resolution step below is the gate; a model the user names wins), each given the full diff and one lens. They return proposals (`file, line_range, before, after, rationale`) and edit nothing.
 
 - **A — AI cruft & dead code:** comments that narrate the code or the task, defensive checks on trusted paths, `any`/`ignore` casts hiding type errors, handling for impossible cases, leftover scaffolding, compat shims with no callers.
 - **B — reuse & duplication:** unused imports/declarations, single-use variables, near-duplicate blocks (grep the repo and count every copy before proposing), logic that already exists in shared utils/hooks (search by behavior keyword, not just name), repeated literals, repeated computation.
@@ -46,7 +46,7 @@ Then resolve in the main agent:
 
 ## Pass 2 — structural
 
-One agent, whole-diff view, after Pass 1 lands. Look for restructurings that keep behavior and make the code simpler: helpers or layers the surrounding code makes unnecessary, one-caller wrappers and one-value parameters, conditional growth that wants a data structure, files that should split by responsibility, fixes applied at the wrong altitude (special cases stacked on shared infrastructure instead of fixing the mechanism).
+One agent on the session's model (omit `model` — this is the judgment pass), whole-diff view, after Pass 1 lands. Look for restructurings that keep behavior and make the code simpler: helpers or layers the surrounding code makes unnecessary, one-caller wrappers and one-value parameters, conditional growth that wants a data structure, files that should split by responsibility, fixes applied at the wrong altitude (special cases stacked on shared infrastructure instead of fixing the mechanism).
 
 Apply small contained edits directly. Anything that moves files, renames public APIs, or rewrites more than ~50 lines goes through `AskUserQuestion` with a one-line rationale first. Leave a restructuring that is only correct under an invariant the code doesn't enforce.
 
