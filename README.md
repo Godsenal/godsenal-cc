@@ -82,6 +82,13 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Finds the one fact the change is safe because of and **proves it by running code** — every claim is graded on a 5-step evidence ladder (said so → `file:line` → walked the failure → ran a script → reproduced in the app), and an unproven one is labelled `unproven`
 - Deploy-ordering hazards are handed to `compat-check`; read-only on the repo (scratch scripts go to a temp dir)
 
+**work** (skill, explicit) — The front door for a task: `/gbase:work <task>`. Modeled on pstack's `poteto-mode`, without its personal style.
+
+- Checks first: resumes unpushed `pause` commits via `pickup`, mentions `setup` once if the repo has no verify block, fast-forwards a stale checkout
+- Picks one route and copies its steps into the todo list (skipped steps stay as `skip: <reason>`): **Investigation** (`how`/`why`, no code), **Bug** (`bug-fix`), **Feature** (data shape first, small verified units, verify on the real surface), **Refactor** (pin behavior first, subtract before adding, keep only if easier to follow), **Perf** (baseline first, cheapest fix first), **Prototype** (throwaway variants decide, then Feature), **Run until done** (a checkable exit predicate, revert what didn't help)
+- Seven core principles (prove it works, verify in small units, smallest change, fix root causes, test behavior, explain the number, don't block on reversible work) and subagent rules (bulk out / conclusions back, parallel by default, Sonnet for exploration, fresh agent per task, own their output)
+- Code routes end in `go --merge`: review ∥ polish → verify → PR → monitor → **merged** once CI is green and nothing is outstanding
+
 **review** (skill, model-invocable) — Adversarial code review of the current change. The judgment layer on top of the built-in `code-review`: verification, and a gate deciding what may be fixed without asking.
 
 - Packaged as a Skill (`plugins/base/skills/review/SKILL.md`); read-only on GitHub — never comments, reviews, replies, or merges
@@ -111,6 +118,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - **Verification gate** — runs the project's *own* lint/typecheck/tests over the changed scope (from the `gbase:setup` verify block in `CLAUDE.md`/`AGENTS.md` when present; a native build only when the block marks it as the repo's sole compile gate because no CI builds the app), plus the repo's `verify-*` behavior skill for touched features when one exists; results land in the PR's `## Evidence` before anything is pushed (polish's check only validates polish's own edits, so a pre-existing failure would otherwise sail into CI). Biased toward shipping: pre-existing, flaky, and environment-dependent failures are noted and passed; only a diff-caused failure that resists two mechanical fix attempts stops the flow. `--no-verify` skips it
 - Then `/gbase:branch-pr` (backup → branch → grouped commits → push → PR), then `/gbase:monitor --no-review` to babysit CI + reviews until merge
 - **The PR still opens without asking.** Exactly two things can stop the flow before the PR exists: a diff-caused verification failure that isn't mechanically fixable, and branch-pr's narrow "ask only when necessary" cases. Everything else is carried and raised afterward
+- `--merge` (what `work` passes; never added on its own) also merges once CI is green and nothing is outstanding — **asks first when the merge would deploy** (a push-to-main OTA/production workflow the PR's paths don't skip), uses a merge method the repo allows, retargets stacked PRs before the branch is deleted; a check that never started for account/billing reasons merges only if the local verify gate passed
 - Inherits all `branch-pr` safety rules — no force push, no hard reset
 
 **monitor** (skill) — Subscribe to the current branch's PR and keep it moving until merge/close.
@@ -208,6 +216,7 @@ After installation, the following are available:
 /gbase:pickup                  # Resume from a wip commit, transcript, or another agent's branch (skill, model-invocable)
 /gbase:blast-radius            # What could this break beyond the diff — proven by running code (skill)
 /gbase:review                  # Adversarial review — built-in code-review + skeptic verify (skill, model-invocable)
+/gbase:work <task>             # Start a task: route → steps → go --merge (skill, explicit)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
 /gbase:setup                   # Record verify commands, seed REVIEW.md, add format hook (skill)

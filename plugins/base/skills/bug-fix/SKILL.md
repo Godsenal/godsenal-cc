@@ -39,4 +39,4 @@ Show the failing-then-passing run in the PR's Evidence. Don't split it into a se
 
 ## Reply
 
-Include why the triggering state was or wasn't legitimate, and paste the failing-then-passing output verbatim. Suggest `/gbase:go` to ship — don't run it; pushing is the user's call.
+Include why the triggering state was or wasn't legitimate, and paste the failing-then-passing output verbatim. Suggest `/gbase:go` to ship — don't run it; pushing is the user's call. Under `gbase:work`, return to it instead; its Ship step ships.
