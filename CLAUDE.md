@@ -21,6 +21,7 @@ Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
 - **Cross-skill contracts — change both sides together:**
   - `compat-check`'s verdict tokens (`✅ No special deploy ordering needed` / `⚠️ Requires ordered rollout`) are parsed by `branch-pr`.
   - `go` calls `gbase:review` with `pre-PR mode; defer, don't ask; … start at Stage 2`, and `gbase:monitor` with `--no-review` / `--draft`; monitor's `--draft` flip waits on the deferred-findings count `go` passes; `go` hands `branch-pr` its risk tier and check results as `Risk:` / `Verification:` lines, and both classify risk with the same rule (`high` / `medium` / `low`) — change them together.
+  - `pause` leaves a `wip:` commit whose body is the resume note and starts with an `Intent:` line — the marker `pickup`, `go`, and `branch-pr` use to recognize it; `go` ships unpushed pause commits on a clean tree and `branch-pr` soft-resets all of them into real commits.
   - `setup` writes the `<!-- gbase:verify -->` block in the target repo's `CLAUDE.md` that `go`'s verification gate reads; `create-verify` generates `.claude/skills/verify-*` that `go` runs for touched features.
   - gapp stages auto-continue to the next stage and update `docs/HARNESS.md`; stage numbers (0 kickoff … 8 store-submit) must match across `kickoff`, each skill's description, and `README.md`.
 

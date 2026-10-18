@@ -57,6 +57,20 @@ When none apply, run end to end silently except for progress reporting.
 
 ### Step 1: Status Analysis (Read-Only)
 
+First, unwrap `gbase:pause` checkpoints so the analysis below sees their changes. A pause commit has a `wip:` subject
+**and** an `Intent:` body line; a hand-written `wip:` commit without it is the user's and stays. Count the unpushed
+pause commits at the tip, keep their bodies (the resume notes — read them for the PR's Why), then soft-reset:
+
+```bash
+n=0
+while git log -1 --format=%s "HEAD~$n" 2>/dev/null | grep -q '^wip:' \
+  && git log -1 --format=%b "HEAD~$n" | grep -q '^Intent:' \
+  && [ -z "$(git branch -r --contains "HEAD~$n")" ]; do n=$((n+1)); done
+[ "$n" -gt 0 ] && git log -"$n" --format=%B && git reset --soft "HEAD~$n"
+```
+
+A pushed pause commit is never reset. Then analyze:
+
 ```bash
 # Check current changes
 git status
@@ -203,6 +217,8 @@ whichever of `Evidence` / `Merge danger` it lacks.
 
 Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
 `gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
+
+If an `unslop` skill is installed, run the drafted title and body through it before creating the PR.
 
 The body is a briefing for a reviewer who has the diff — combined from humanlayer's `visual-pr` (Why,
 notes), Matt Pocock's `pr` (diff sketch, before/after, door) and gbase (risk, revert, rollout):
