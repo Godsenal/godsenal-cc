@@ -1,6 +1,6 @@
 ---
 name: monitor
-description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles, surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). With --merge, merges it once CI is green and nothing is outstanding. Use when the user wants a PR babysat to merge; also the tail of gbase:go."
+description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles, surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). With --merge, merges it once CI is green and nothing is outstanding; with --until-settled, stops once the current head's CI and review bots have concluded. Use when the user wants a PR babysat to merge; also the tail of gbase:go."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
 ---
 
@@ -28,10 +28,26 @@ Keep the current branch's PR moving until merge or close. Human reviewers, revie
 
 1. Resolve the PR for the current branch; stop if it's already merged or closed.
 2. Sweep current state — CI, inline comments, top-level reviews, PR conversation comments, mergeability, posted links — and act on every unresolved item before subscribing. Pre-existing reviews slipping past the loop is the most common miss.
-3. Start a persistent `Monitor` (~30s poll) that emits one event per state change, with watermarks, ignoring events authored by the current `gh` user.
+3. Start a persistent `Monitor` (~30s poll) that emits one event per state change, with watermarks, ignoring events authored by the current `gh` user. Not under `--until-settled` (below).
 4. Unless `--no-review`, run the self-review once, now.
 5. On each event: classify, act, reply, surface new links. A `CONFLICTING` merge state comes first — CI keeps failing on the merge commit while it stands.
 6. On merge/close, print a one-line summary.
+
+## Headless
+
+Under `AGENT_HEADLESS=1` (check `printenv AGENT_HEADLESS` before asking) nothing is asked: follow [headless.md](../../references/headless.md). A merge whose gate would ask isn't made.
+
+## `--until-settled`
+
+For a caller that only needs the current head judged. Same sweep, classification, fixes, self-review, and replies as the loop, but it ends once the head settles, not at merge:
+
+- **Settled** = every check on the head has concluded, and every expected automated reviewer has finished on it: a review, a comment, or an edit to its own comment created after you started waiting on this head, or its check run concluded. Expected = bot accounts that reviewed this PR earlier or one of the repo's last 5 merged PRs, plus bots with a pending review request.
+- **Each fix you push is a new head**; the wait starts over for it.
+- **Wait in short foreground calls**, no persistent `Monitor` (a headless run can end before it fires). Each Bash call polls `gh` and returns within 5 minutes with a status line — a caller may kill a run that prints nothing for ~10 minutes. Checks can take a minute to register after a push.
+- **Give up at 30 minutes** into the wait on one head; whatever hasn't concluded is reported.
+- **Never merges** (`--merge` is ignored), **rebases, or force-pushes** — a merge conflict is reported, not resolved.
+
+It ends with one `settle: 수렴 | 미확정 | 사람 필요 @<short-sha>` line, format and meaning in [orchestrator.md](../../references/orchestrator.md#settle).
 
 ## Classification
 
@@ -115,4 +131,5 @@ Surface links that let the user try the change — app builds and OTA previews (
 /gbase:monitor --no-review     # watch only
 /gbase:monitor --draft         # also flip the draft to ready once CI is green and findings are resolved
 /gbase:monitor --merge         # also merge once CI is green and nothing is outstanding
+/gbase:monitor --until-settled # stop once this head's CI and review bots have concluded; never merges
 ```

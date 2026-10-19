@@ -22,6 +22,10 @@ content, and re-running it updates the managed block in place instead of duplica
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../../references/headless.md) instead of asking.
+
 **예외 — 삽입되는 블록 본문은 절대 번역하지 않는다.** [The block](#the-block-embedded-verbatim)의 Karpathy 가이드라인 텍스트는 원문(영어) 그대로 `CLAUDE.md`에 들어간다. 미리보기·확인 질문·요약만 한국어로 쓴다.
 
 ## Provenance & safety

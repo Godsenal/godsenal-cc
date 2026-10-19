@@ -1,6 +1,6 @@
 ---
 name: bug-fix
-description: "Fixes a bug at its root cause, not where it surfaced — reproduces it first, narrows the cause by ruling out hypotheses with runtime evidence, asks whether the triggering state is legitimate before adding any guard, fixes every instance of the pattern, and verifies on the same surface it failed on. Use when asked to fix a bug, when a test or CI fails for a reason that isn't mechanical, or when something 'randomly' breaks or is flaky. When only asked why something broke, it stops at the diagnosis."
+description: "Fixes a bug at its root cause, not where it surfaced — reproduces it first (via gbase:reproduce), narrows the cause by ruling out hypotheses with runtime evidence, asks whether the triggering state is legitimate before adding any guard, fixes every instance of the pattern, and verifies on the same surface it failed on. Use when asked to fix a bug, when a test or CI fails for a reason that isn't mechanical, or when something 'randomly' breaks or is flaky. When only asked why something broke, it stops at the diagnosis."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent Skill
 ---
 
@@ -16,13 +16,17 @@ Fix the fault, not the place it became visible. The symptom is where a wrong sta
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../../references/headless.md) instead of asking.
+
 ## Every shipped line traces to runtime evidence
 
 A change that "might help" is a hypothesis, not a fix — it doesn't ship. When evidence refutes a hypothesis, revert what it motivated. The smallest change the evidence justifies ships, nothing more.
 
 ## Steps
 
-1. **Reproduce it yourself** on the surface where it fails — the test, the CLI, the repo's `verify-*` skill for app behavior. If it won't reproduce, tighten conditions or instrument until it fires; ask the user only with a specific reason the surface can't be reached. "Passes alone, fails in the full run" is a reproduction, not a verdict — find out what differs (load, order, cold cache, shared state).
+1. **Reproduce it yourself** with `Skill(skill: "gbase:reproduce", args: "<the bug>")` — it returns a command that fails now for the reported reason, on the surface where it fails. If it won't reproduce, tighten conditions or instrument until it fires; ask the user only with a specific reason the surface can't be reached.
 2. **Narrow the cause** by ruling hypotheses out with runtime evidence (the actual error, the actual state), until the answer is a wrong decision in the code, not a consequence of an earlier one. If the user only asked *why* it broke, stop here and report the diagnosis — don't change code unasked.
 3. **Is the triggering state legitimate?** If the system may be in that state, the code that broke on it is the root cause, and handling the state there is the fix. If the state should never exist, a check where it broke hides the bug — find what produced it. Guards, retries, swallowed errors, clamped values, raised timeouts, and discarded state are the usual ways to hide one.
 4. **Fix the pattern**, not the instance: find every place with the same fault and fix them together. A workaround that needs a paragraph-long comment means the code is wrong.
@@ -33,7 +37,7 @@ A change that "might help" is a hypothesis, not a fix — it doesn't ship. When 
 
 ## Regression test
 
-When there's a cheap local test path, write the failing test first, run it, and confirm it fails *for the intended reason* before touching the code. Skip it when the test would need broad harness setup, brittle mocks, timing, or production-only state — prefer no test over a bad one, and use the closest rerunnable check (a script, a repro command) instead.
+The step 1 reproduction is the regression check: when it's a test, it ships with the fix. `reproduce` writes a test only on a cheap local test path; when one would need broad harness setup, brittle mocks, timing, or production-only state, its script or request stands in — prefer no test over a bad one.
 
 Show the failing-then-passing run in the PR's Evidence. Don't split it into a separate red commit: pre-commit hooks that run tests reject it, per-commit CI and `git bisect` trip on it, and a squash merge erases the order anyway.
 

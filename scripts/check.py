@@ -23,6 +23,8 @@ def skill(name):
 
 
 BRANCH_PR = "plugins/base/commands/branch-pr.md"
+ORCHESTRATOR = "plugins/base/references/orchestrator.md"
+HEADLESS = "plugins/base/references/headless.md"
 CONTRACTS = [
     ("⚠️ requires ordered rollout", [skill("compat-check"), BRANCH_PR]),
     # compat-check's output template itself, not just prose that mentions the tokens
@@ -39,7 +41,21 @@ CONTRACTS = [
     ("intent:", [skill("pause"), skill("pickup"), skill("go"), BRANCH_PR]),
     ("git reset --soft", [BRANCH_PR]),
     (".claude/skills/verify-", [skill("create-verify"), skill("go")]),
+    (".claude/skills/verify/", [skill("create-verify"), skill("go"), skill("setup")]),
+    ("ship-owner: orchestrator", [skill("go"), BRANCH_PR]),
+    ("pr-body-file:", [skill("go"), BRANCH_PR]),
+    ("ship: local", [BRANCH_PR, ORCHESTRATOR]),
+    ("pr 본문 초안:", [skill("go"), BRANCH_PR, ORCHESTRATOR]),
+    ("--until-settled", [skill("monitor"), ORCHESTRATOR]),
+    ("settle: 수렴", [skill("monitor"), ORCHESTRATOR]),
+    ("결정 필요:", [HEADLESS, ORCHESTRATOR]),
+    ("agent_evidence_file", [skill("go"), skill("reproduce"), ORCHESTRATOR]),
+    ("gbase:reproduce", [skill("bug-fix"), skill("reproduce")]),
 ]
+
+# a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
+SLOT_REQUIRED = {"invoke", "env", "notes"}
+SLOT_OPTIONAL = {"setup", "reads"}
 
 errors = []
 
@@ -95,6 +111,7 @@ def check_plugins():
             fail(MARKETPLACE, f"{entry['name']} version {entry.get('version')} != plugin.json {manifest.get('version')}")
         versions[entry["name"]] = (pdir, entry.get("version"))
         check_skills(pdir)
+        check_factory(pdir)
     return versions
 
 
@@ -117,12 +134,72 @@ def check_skills(pdir):
             fail(skill, f"{lines} lines (keep under {MAX_SKILL_LINES}; move reference material out)")
         if LANG_BLOCK not in text:
             fail(skill, f"missing `{LANG_BLOCK}` block")
-        for ref in re.findall(r"\]\(((?:references|scripts)/[^)#\s]+)\)", text):
-            if not (skill.parent / ref).exists():
-                fail(skill, f"links missing file {ref}")
+        check_links(skill, text)
     for cmd in sorted(pdir.glob("commands/*.md")):
-        if LANG_BLOCK not in cmd.read_text(encoding="utf-8"):
+        text = cmd.read_text(encoding="utf-8")
+        if LANG_BLOCK not in text:
             fail(cmd, f"missing `{LANG_BLOCK}` block")
+        check_links(cmd, text)
+
+
+def check_links(path, text):
+    for ref in re.findall(r"\]\(((?:\.\./)+[^)#\s]+|(?:references|scripts)/[^)#\s]+)", text):
+        if not (path.parent / ref).exists():
+            fail(path, f"links missing file {ref}")
+
+
+def allowed_tools(text):
+    m = re.search(r"^allowed-tools:(.*)$", text, re.M)
+    return m.group(1) if m else ""
+
+
+def check_factory(pdir):
+    """A plugin that ships .claude-plugin/factory.json promises orchestrators headless skills and real slots."""
+    path = pdir / ".claude-plugin" / "factory.json"
+    if not path.exists():
+        return
+    manifest = load_json(path)
+    if not manifest:
+        return
+    if manifest.get("schema") != 1:
+        fail(path, f"schema {manifest.get('schema')!r} != 1")
+    contract = pdir / str(manifest.get("contract", ""))
+    if not contract.is_file():
+        fail(path, f"contract {manifest.get('contract')!r} is not a file in the plugin")
+    env = manifest.get("env", {})
+    contract_text = contract.read_text(encoding="utf-8") if contract.is_file() else ""
+    for name, meaning in env.items():
+        if not isinstance(meaning, str) or not meaning:
+            fail(path, f"env {name} needs a one-line meaning")
+        if f"`{name}`" not in contract_text:
+            fail(path, f"env {name} is not documented in {manifest.get('contract')}")
+    plugin = load_json(pdir / ".claude-plugin" / "plugin.json") or {}
+    for slot, spec in manifest.get("slots", {}).items():
+        keys = set(spec)
+        if SLOT_REQUIRED - keys or keys - SLOT_REQUIRED - SLOT_OPTIONAL:
+            fail(path, f"slot {slot}: fields {sorted(keys)}, want {sorted(SLOT_REQUIRED)} + optional {sorted(SLOT_OPTIONAL)}")
+        for var in spec.get("env", []):
+            if var not in env:
+                fail(path, f"slot {slot}: env {var} isn't declared in the top-level env")
+        if not spec.get("notes"):
+            fail(path, f"slot {slot}: empty notes")
+        if spec.get("invoke") is None and not spec.get("reads"):
+            fail(path, f"slot {slot}: invoke null needs reads")
+        for field in ("invoke", "setup"):
+            cmd = spec.get(field)
+            if cmd is None:
+                continue
+            m = re.match(rf"/{re.escape(plugin.get('name', ''))}:([a-z0-9-]+)", cmd)
+            if not m:
+                fail(path, f"slot {slot}: {field} {cmd!r} isn't a /{plugin.get('name')}:<skill> command")
+            elif not (pdir / "skills" / m.group(1) / "SKILL.md").exists() and not (pdir / "commands" / f"{m.group(1)}.md").exists():
+                fail(path, f"slot {slot}: {field} names missing skill {m.group(1)}")
+    for md in sorted(pdir.glob("skills/*/SKILL.md")) + sorted(pdir.glob("commands/*.md")):
+        text = md.read_text(encoding="utf-8")
+        # a command with no allowed-tools line can ask too; the 출력 언어 block's own mention doesn't count
+        can_ask = "AskUserQuestion" in allowed_tools(text) or "AskUserQuestion" in text.replace("`AskUserQuestion`의 질문", "")
+        if can_ask and "references/headless.md" not in text:
+            fail(md, "can ask but doesn't point at references/headless.md (orchestrators run it with AGENT_HEADLESS=1)")
 
 
 def check_contracts():

@@ -28,7 +28,7 @@ For each fact the change's safety depends on, get it as far down this list as is
 2. You pointed at the line — a real `file:line`, or the library's own source.
 3. You showed the bad case can't happen — walked the failure step by step and it doesn't reach.
 4. You ran it — a script or test that calls the real code and fails loud if you're wrong.
-5. You reproduced it in the running app (the repo's `verify-*` skill, if it has one).
+5. You reproduced it in the running app (the repo's verify skill — `verify/` or `verify-*` — if it has one).
 
 Step 4 is usually one small script that imports the same library the app ships and calls the exact function you're worried about.
 

@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "contract": "references/orchestrator.md",
+  "env": {
+    "AGENT_HEADLESS": "1 = no person attached; skills decide instead of asking and report each decision as a `결정 필요:` line",
+    "AGENT_ASK_CMD": "shell command that receives each question under AGENT_HEADLESS=1: <cmd> ask \"<question>\" --recommend \"<option>\" [--option \"<option>\"]...; non-empty stdout is the answer",
+    "AGENT_SHIP_OWNER": "orchestrator = go stops after local commits and a PR body draft (no push, PR, or monitor); agent or unset = go pushes, opens the PR, and monitors it",
+    "AGENT_PR_BODY_FILE": "where go writes the PR draft (line 1 title, line 2 empty, then the body) when AGENT_SHIP_OWNER=orchestrator; default $(git rev-parse --absolute-git-dir)/gbase/pr-body.md",
+    "AGENT_EVIDENCE_FILE": "JSON Lines file go and reproduce append check results to: {step, result, command, detail, cause?}"
+  },
+  "slots": {
+    "review": {
+      "invoke": "/gbase:review pre-PR mode; defer, don't ask",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
+      "notes": "Adversarial review of the uncommitted changes, else the latest commit. Clear, local fixes come back as uncommitted working-tree edits; findings that need a decision come back in a severity table. Never posts to GitHub."
+    },
+    "polish": {
+      "invoke": "/gbase:polish",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
+      "notes": "Behavior-preserving cleanup of the current diff, applied as uncommitted edits inside the diff only; edits outside the diff and large structural moves are reported, not applied, when headless."
+    },
+    "checks": {
+      "invoke": null,
+      "setup": "/gbase:setup",
+      "reads": ["CLAUDE.md", "AGENTS.md"],
+      "env": [],
+      "notes": "The target repo's fast checks are the lines between <!-- gbase:verify:start --> and <!-- gbase:verify:end --> in CLAUDE.md (or AGENTS.md), one `- <label>: <command in backticks>` line each. Run lint, typecheck, test and `typecheck (no CI)`, preferring the `scoped:` variant; skip CI-only, format, `unverified locally` and `known failing on main` lines. /gbase:setup writes the block after running each command once."
+    },
+    "behavior": {
+      "invoke": null,
+      "setup": "/gbase:create-verify",
+      "reads": [".claude/skills/verify/SKILL.md", ".claude/skills/verify-*/SKILL.md"],
+      "env": [],
+      "notes": "The target repo's own verify skill drives the real app. Invoke it by its frontmatter name (/verify or /verify-<app>) for the features in its features/ map that the change touches; evidence lands in the directory the skill names. gbase:go already runs it inside its verification gate."
+    },
+    "ship": {
+      "invoke": "/gbase:go",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
+      "notes": "Review and polish in parallel, review fixes, verification gate, then commits. With AGENT_SHIP_OWNER=orchestrator it ends with `ship:` and `PR 본문 초안:` lines and never touches the remote; otherwise it pushes, opens the PR, and monitors it."
+    },
+    "settle": {
+      "invoke": "/gbase:monitor --until-settled",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
+      "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. Never merges, rebases, or force-pushes."
+    },
+    "learn": {
+      "invoke": "/gbase:correct",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
+      "notes": "Turns mistakes that recur in the repo's history into enforced checks, each proven to fail on a past instance; /gbase:correct --session runs it as a retrospective on one session. Edits are left uncommitted for the ship slot."
+    },
+    "reproduce": {
+      "invoke": "/gbase:reproduce <bug report or improvement request>",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_EVIDENCE_FILE"],
+      "notes": "Writes an executable check that fails now (a test, script, HTTP request, or verify-skill journey) and reports its command, the quoted failing output, and the expected result. Never changes product code; an added test or script is left uncommitted."
+    }
+  }
+}

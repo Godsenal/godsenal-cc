@@ -22,11 +22,17 @@ Review runs *before* the PR so its fixes land in the initial commits — a revie
 
 Invoking `go` is the go-ahead to reach a PR. Only two things may stop the flow before it opens: a diff-caused verification failure that isn't mechanically fixable (Step 4), and `branch-pr`'s own "ask only when necessary" cases. Review findings that need a judgment call are carried and raised after the PR exists. Polish keeps its own confirmation for large structural moves. Merging happens only with `--merge` — passed when the user asked to merge, or the project's instructions say to; never add it by default. Without it, `go` stops at a watched PR.
 
+## Run by an orchestrator
+
+Step 1 reads the `AGENT_*` variables once (`printenv | grep '^AGENT_'`); with none set, nothing in this section or the `AGENT_*` notes below applies. They are defined in [orchestrator.md](../../references/orchestrator.md). Under `AGENT_HEADLESS=1` nothing is asked: follow [headless.md](../../references/headless.md), using the defaults marked *headless:* below.
+
 ## Steps
 
 ### 1. Scope
 
 Uncommitted changes → target them. Clean tree with unpushed `gbase:pause` commits at the tip (`wip:` subject + `Intent:` body) → target their combined diff and ship it — `branch-pr` regroups them. Otherwise clean tree → target the latest commit (`git show HEAD --name-only`); if later steps produce no edits there, there is nothing to PR — say so and stop. Classify its risk the way `branch-pr` does — `high` if it touches a path `REVIEW.md` marks always-high (without one: auth, payments, migrations, CI/release workflows, app config), `low` for docs/copy/tests/flagged additive changes, else `medium`. Report scope and risk in one line.
+
+Under `AGENT_SHIP_OWNER=orchestrator` a clean tree targets every commit on the branch that isn't in the base (`<base>...HEAD`; base = `origin/<default>` when it exists, else the local default branch) — the orchestrator's agent may have committed as it worked.
 
 ### 2. Review (background) ∥ polish
 
@@ -52,7 +58,7 @@ Skill(skill: "gbase:review", args: "pre-PR mode; defer, don't ask; candidates al
 
 Clear fixes come back as working-tree edits (no commits — `branch-pr` groups them); judgment calls come back deferred. Polish rewrote these files after the finder read them, so locate each finding by the code it quotes, not by `file:line`, and re-judge any whose quoted code is gone. Where a review fix and polish collide, the review fix wins.
 
-If the findings haven't arrived when polish finishes, go on to Step 4 and apply them when they land — post-PR mode if the PR is open by then. Skip this step when the finder was skipped. Tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`.
+If the findings haven't arrived when polish finishes, go on to Step 4 and apply them when they land — post-PR mode if the PR is open by then. Under `AGENT_SHIP_OWNER=orchestrator` wait for them before Step 5 instead: no PR will exist to apply them to, and the run ends at Step 5. Skip this step when the finder was skipped. Tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`.
 
 ### 4. Verification gate
 
@@ -63,11 +69,13 @@ Keep the gate to fast checks — lint, typecheck, unit tests. Native builds (`po
 Bias toward shipping:
 - Diff-caused and mechanical (type error, lint, missing import) → fix and re-run, at most twice.
 - Pre-existing (files the diff didn't touch), flaky, or environment-dependent (no DB, no device, missing env) → note and proceed.
-- Diff-caused and still failing after two attempts → `AskUserQuestion` with the output: fix now / open the PR anyway / abort.
+- Diff-caused and still failing after two attempts → `AskUserQuestion` with the output: fix now / open the PR anyway / abort. *headless:* open it anyway with the failure in Evidence — as a `--draft` PR when the agent owns the PR.
 
-**Behavior check.** If the repo has `.claude/skills/verify-*` (from `gbase:create-verify`) and the diff touches a feature in its `features/` map, run that skill for those features only. Same bias as above: an unreachable precondition (no simulator, no test account) is noted and passed; a diff-caused failure of the feature goes through the same fix-twice-then-ask rule.
+**Behavior check.** If the repo has a verify skill — `.claude/skills/verify-*/` (from `gbase:create-verify`) or `.claude/skills/verify/` (pstack's generator), at the root or in the touched package — and the diff touches a feature in its `features/` map, run that skill for those features only. Same bias as above: an unreachable precondition (no simulator, no test account) is noted and passed; a diff-caused failure of the feature goes through the same fix-twice-then-ask rule.
 
-Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (artifacts/verify/<feature>/)`. Hand these lines to `branch-pr` as the PR's `## Evidence`.
+Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (<evidence dir>)`. Hand these lines to `branch-pr` as the PR's `## Evidence`.
+
+With `AGENT_EVIDENCE_FILE` set, append the [evidence lines](../../references/orchestrator.md#evidence-file) as results become final: one per check command and per behavior feature, plus one each for review (after Step 3) and polish. A skipped step still gets its `skip` line.
 
 ### 5. Branch & PR
 
@@ -77,6 +85,8 @@ Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <S
 ```
 
 `branch-pr` owns branching, commit grouping, push, PR body, and its `compat-check` rollout section; all its safety rules apply.
+
+Under `AGENT_SHIP_OWNER=orchestrator` the args start with `Ship-owner: orchestrator; PR-body-file: <$AGENT_PR_BODY_FILE, else $(git rev-parse --absolute-git-dir)/gbase/pr-body.md>; ` and `branch-pr` commits locally and writes the draft instead of pushing. Append the deferred findings to the draft's `## Notes`, then stop: no Step 6. The report ends with branch-pr's `ship:` and `PR 본문 초안:` lines and the deferred-findings table.
 
 ### 6. Monitor
 
@@ -90,7 +100,7 @@ Then surface the deferred findings: a severity-ordered table (`file:line`, failu
 
 ## On failure
 
-- Polish fails → surface it; ask whether to continue without it or abort.
+- Polish fails → surface it; ask whether to continue without it or abort. *headless:* continue without it.
 - `branch-pr` fails → stop, print `git status`, and point at the backup stash (`git stash apply stash@{0}`, not `pop`).
 - Monitor can't start (no `gh` auth, no PR) → surface and stop; the PR is already up.
 
@@ -100,6 +110,7 @@ Then surface the deferred findings: a severity-ordered table (`file:line`, failu
 /gbase:go               # review ∥ polish → verify → PR → monitor
 /gbase:go --draft       # open a draft PR; monitor flips it to ready when CI is green
 /gbase:go --merge       # also merge once CI is green and nothing is outstanding
+AGENT_SHIP_OWNER=orchestrator claude -p "/gbase:go"   # stop after local commits + a PR body draft; another program pushes
 /gbase:go --no-review   # skip the pre-PR review
 /gbase:go --no-verify   # skip the local check gate; let CI judge
 ```

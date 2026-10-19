@@ -18,6 +18,10 @@ Assume every contributor is an agent that sees only the files it opened, copies 
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../../references/headless.md) instead of asking.
+
 ## Find the mistake classes
 
 Read recent commits, reverts, PR review comments (`gh api repos/{owner}/{repo}/pulls/<n>/comments`), agent instruction files, and comments that explain workarounds. Past session transcripts (`~/.claude/projects/<cwd-slug>/*.jsonl`) also hold `gbase:review` reports — the fixes made before a PR opened, which never reach GitHub. Group the mistakes into classes. A class counts once it has happened twice.
@@ -41,7 +45,7 @@ Every candidate must point at a specific moment in the session. Discard any you 
 3. **Test the behavior.** Fix or delete any test that still passes when the behavior it checks breaks, or that fails when only the internals change.
 4. **Write text last, only for judgment calls — in `REVIEW.md`.** `gbase:review` reads it with only a diff in hand; the implementing agent is under the most context pressure and is the wrong place for standards. `CLAUDE.md` loads into every session, so it keeps navigation pointers and the verify block; propose moving other steering out of it.
 
-Show the classes as `class | evidence | level | why not higher` and confirm with `AskUserQuestion` (multiSelect) which to fix now — this changes how every future change here is judged.
+Show the classes as `class | evidence | level | why not higher` and confirm with `AskUserQuestion` (multiSelect) which to fix now — this changes how every future change here is judged. *headless:* fix every class whose check you can prove on a past instance; the rest become `결정 필요:` lines.
 
 ## Fix and prove
 

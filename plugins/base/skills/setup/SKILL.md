@@ -16,9 +16,13 @@ Gives the repo what `go` / `review` / `monitor` otherwise re-guess every run: wh
 
 사용자가 다른 언어로 요청하면 그 언어를 따른다.
 
+## Headless
+
+Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1`, follow [headless.md](../../references/headless.md) instead of asking.
+
 ## What it writes
 
-All four are optional. Ask at most two questions: one before detecting, only if a prerequisite is missing (a checkout behind its upstream, uninstalled dependencies), and one preview to confirm before writing (`AskUserQuestion`: apply all / choose / cancel). Never touch content outside the managed markers. On a re-run, update blocks in place and report "no change" when current.
+All four are optional. Ask at most two questions: one before detecting, only if a prerequisite is missing (a checkout behind its upstream, uninstalled dependencies), and one preview to confirm before writing (`AskUserQuestion`: apply all / choose / cancel). *headless:* fast-forward when it is one, install from the lockfile, and apply all — every write stays uncommitted. Never touch content outside the managed markers. On a re-run, update blocks in place and report "no change" when current.
 
 **Detect on current code.** `git fetch` first; if the branch is behind its upstream, offer to fast-forward before detecting — a stale checkout reports stale CI and commands (it has: a repo "with no CI" whose workflows were seven commits ahead). If dependencies aren't installed, offer to install them in the same question; if declined, record the commands as unverified.
 
@@ -71,7 +75,7 @@ Restrict the formatter to the file types it handles (`--ignore-unknown` for pret
 
 ### 4. Offers (ask, don't push)
 
-- No `.claude/skills/verify-*` and the repo has a runnable surface (an app, CLI, or service — not a library or docs-only repo) → offer `gbase:create-verify` so `go` can prove behavior, not just types.
+- No `.claude/skills/verify-*` or `.claude/skills/verify/` and the repo has a runnable surface (an app, CLI, or service — not a library or docs-only repo) → offer `gbase:create-verify` so `go` can prove behavior, not just types.
 - The target file is `CLAUDE.md` and has no Karpathy block → offer `gbase:karpathy` (it writes `CLAUDE.md`, so skip the offer in an `AGENTS.md`-only repo).
 
 ## Report
