@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+"""gbase-run — run one gbase orchestrator slot headless with `claude -p` and write result.json.
+
+A thin wrapper over plugins/base/references/orchestrator.md: it resolves the slot's invoke from
+factory.json, sets the AGENT_* variables, runs claude, and parses the column-0 report lines.
+Skill behavior lives in the skills, not here.
+
+  gbase-run --repo <path> --slot <slot> [--task "..."] [--worktree <name>] [--model opus|sonnet]
+            [--ship-owner orchestrator|agent] [--answers <file>]
+  gbase-run status <run-id>     # result.json; "status": "running" while the run is going
+  gbase-run list                # one JSON line per run, newest first
+
+The last stdout line of a run is the absolute path of its result.json.
+
+Env: GBASE_CLAUDE (claude binary), GBASE_HOME (default ~/.gbase; runs/ and worktrees/ live there),
+GBASE_PLUGIN_DIR (default: plugins/base of this checkout), GBASE_PERMISSION_MODE (default
+bypassPermissions), GBASE_ASK_CMD (AGENT_ASK_CMD for the child; default records questions only).
+"""
+import argparse
+import hashlib
+import json
+import os
+import re
+import secrets
+import shlex
+import signal
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+PLUGIN_DIR = Path(os.environ.get("GBASE_PLUGIN_DIR") or ROOT / "plugins" / "base").resolve()
+HOME = Path(os.environ.get("GBASE_HOME") or "~/.gbase").expanduser().resolve()
+RUNS = HOME / "runs"
+SEVERITY = ["critical", "high", "medium", "low"]
+PROCS = []  # running claude children, terminated when the runner is stopped
+
+# report lines at column 0 of the final message (orchestrator.md#report-lines)
+DECISION = re.compile(r"^결정 필요: .*$", re.M)
+SHIP = re.compile(r"^ship: .*$", re.M)
+PR_BODY = re.compile(r"^PR 본문 초안: (.+)$", re.M)
+SETTLE = re.compile(r"^settle: .*$", re.M)
+
+
+def claude_bin():
+    if os.environ.get("GBASE_CLAUDE"):
+        return os.environ["GBASE_CLAUDE"]
+    local = Path("~/.claude/local/claude").expanduser()
+    return str(local) if local.exists() else "claude"
+
+
+def now():
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
+def write_json(path, data):
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)  # atomic, so a poller never reads half a file
+
+
+def read_jsonl(path):
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def git(cwd, *args):
+    r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def build_prompt(slot, spec, task, answers):
+    invoke = spec["invoke"]
+    if invoke is None:
+        # a file slot (checks, behavior): the manifest's notes say what filling it means
+        prompt = (f"Fill the `{slot}` slot of {PLUGIN_DIR / '.claude-plugin/factory.json'} for this repo: {spec['notes']} "
+                  f"Append one `{slot}` line per command to $AGENT_EVIDENCE_FILE in the format of "
+                  f"{PLUGIN_DIR / 'references/orchestrator.md'} (Evidence file). Don't change files. Report in Korean.")
+        if task:
+            prompt += f"\n\n{task}"
+    elif task and re.search(r"<[^>]+>", invoke):
+        prompt = re.sub(r"<[^>]+>", lambda _: task, invoke, count=1)
+    else:
+        prompt = f"{invoke} {task}".strip() if task else invoke
+    if answers and answers.get("answers"):
+        src = f"이전 실행 {answers['run_id']}에서" if answers.get("run_id") else "이전 실행에서"
+        lines = "\n".join(f"- {a['decision']} → {a['answer']}" for a in answers["answers"])
+        prompt += (f"\n\n{src} 사람이 답한 결정이다. 같은 결정이 다시 나오면 묻지 말고 이 답을 적용하고, "
+                   f"그 결정에는 `결정 필요:` 줄을 쓰지 않는다.\n{lines}")
+    return prompt
+
+
+def report(text):
+    pr = PR_BODY.findall(text)
+    return {
+        "decisions": DECISION.findall(text),
+        "ship": (SHIP.findall(text) or [None])[-1],
+        "pr_body_line": pr[-1].strip() if pr else None,
+        "settle": (SETTLE.findall(text) or [None])[-1],
+    }
+
+
+def review_rows(text):
+    """Rows of gbase:review's table `# | severity | file:line | finding | action`."""
+    rows = []
+    for line in text.splitlines():
+        cells = [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
+        if len(cells) < 5 or cells[1].strip("*").lower() not in SEVERITY:
+            continue
+        rows.append({"severity": cells[1].strip("*").lower(), "location": cells[2].strip("` "),
+                     "finding": cells[3], "action": cells[4]})
+    return rows
+
+
+def same_place(a, b):
+    """Same file, lines at most 3 apart — two reviewers rarely cite the identical line."""
+    ma, mb = re.match(r"(.+?):(\d+)", a), re.match(r"(.+?):(\d+)", b)
+    if ma and mb:
+        return ma.group(1) == mb.group(1) and abs(int(ma.group(2)) - int(mb.group(2))) <= 3
+    return a == b
+
+
+def merge_reviews(by_model):
+    """{model: final text} → findings with found_by, most severe first."""
+    merged = []
+    for model, text in by_model.items():
+        for row in review_rows(text):
+            hit = next((m for m in merged if model not in m["found_by"] and same_place(m["location"], row["location"])), None)
+            if hit:
+                hit["found_by"].append(model)
+                hit["severity"] = min(hit["severity"], row["severity"], key=SEVERITY.index)
+            else:
+                merged.append({**row, "found_by": [model]})
+    merged.sort(key=lambda m: (SEVERITY.index(m["severity"]), -len(m["found_by"])))
+    return merged
+
+
+def review_md(findings, models):
+    out = ["| # | severity | file:line | finding | found_by |", "|---|---|---|---|---|"]
+    for i, f in enumerate(findings, 1):
+        who = "both" if len(f["found_by"]) == len(models) > 1 else "/".join(f["found_by"])
+        out.append(f"| {i} | {f['severity']} | `{f['location']}` | {f['finding']} | {who} |")
+    both = sum(len(f["found_by"]) == len(models) for f in findings)
+    per = ", ".join(f"{m}만 {sum(f['found_by'] == [m] for f in findings)}" for m in models)
+    out.append(f"\nreview2: {len(findings)}건 — 둘 다 {both}, {per}")
+    return "\n".join(out) + "\n"
+
+
+def run_claude(prompt, cwd, env, model, log_path):
+    cmd = [claude_bin(), "-p", prompt, "--output-format", "stream-json", "--verbose",
+           "--plugin-dir", str(PLUGIN_DIR),
+           "--permission-mode", os.environ.get("GBASE_PERMISSION_MODE", "bypassPermissions")]
+    if model:
+        cmd += ["--model", model]
+    info = {"log_path": str(log_path), "final": "", "session_id": None, "model": model, "cost_usd": None}
+    with open(log_path, "w", encoding="utf-8") as log:
+        proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+        PROCS.append(proc)
+        for line in proc.stdout:
+            log.write(line)
+            log.flush()
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") == "system" and event.get("subtype") == "init":
+                info["session_id"], info["model"] = event.get("session_id"), event.get("model")
+            elif event.get("type") == "result":
+                info["final"] = event.get("result") or ""
+                info["cost_usd"] = event.get("total_cost_usd")
+        info["exit_code"] = proc.wait()
+    return info
+
+
+def ensure_worktree(repo, name):
+    # the path hash keeps two repos with the same basename from sharing a worktree
+    path = HOME / "worktrees" / f"{repo.name}-{hashlib.sha1(str(repo).encode()).hexdigest()[:6]}-{name}"
+    if not path.exists():
+        branch = f"gbase/{name}"
+        exists = git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}") is not None
+        args = ["worktree", "add", str(path), branch] if exists else ["worktree", "add", "-b", branch, str(path)]
+        r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"gbase-run: git worktree add failed: {r.stderr.strip()}")
+    return path
+
+
+def cmd_run(argv):
+    p = argparse.ArgumentParser(prog="gbase-run", description="Run one gbase orchestrator slot headless.")
+    p.add_argument("--repo")
+    p.add_argument("--slot")
+    p.add_argument("--task", default="")
+    p.add_argument("--worktree")
+    p.add_argument("--model")
+    p.add_argument("--ship-owner", choices=["orchestrator", "agent"], default="orchestrator")
+    p.add_argument("--answers")
+    a = p.parse_args(argv)
+
+    answers, prev = None, {}
+    if a.answers:
+        answers = json.loads(Path(a.answers).read_text(encoding="utf-8"))
+        if answers.get("run_id"):
+            prev_path = RUNS / answers["run_id"] / "result.json"
+            if not prev_path.exists():
+                sys.exit(f"gbase-run: no run {answers['run_id']}")
+            prev = json.loads(prev_path.read_text(encoding="utf-8"))
+    repo, slot = a.repo or prev.get("repo"), a.slot or prev.get("slot")
+    task, model = a.task or prev.get("task", ""), a.model or prev.get("model")
+    if not repo or not slot:
+        p.error("--repo and --slot are required (or --answers naming a previous run_id)")
+    repo = Path(repo).expanduser().resolve()
+    if git(repo, "rev-parse", "--git-dir") is None:
+        sys.exit(f"gbase-run: {repo} is not a git repository")
+
+    manifest = json.loads((PLUGIN_DIR / ".claude-plugin" / "factory.json").read_text(encoding="utf-8"))
+    spec = manifest["slots"].get(slot)
+    if spec is None:
+        sys.exit(f"gbase-run: unknown slot {slot!r}; factory.json has {', '.join(manifest['slots'])}")
+    if not task and re.search(r"<[^>]+>", spec["invoke"] or ""):
+        sys.exit(f"gbase-run: slot {slot} needs --task for {spec['invoke']!r}")
+    if spec.get("models") and model:
+        print(f"gbase-run: slot {slot} runs {', '.join(spec['models'])}; --model {model} ignored", file=sys.stderr)
+
+    # a follow-up run continues in the previous run's checkout, where its edits are
+    same_repo = prev.get("repo") == str(repo)
+    cwd = ensure_worktree(repo, a.worktree) if a.worktree else Path(prev["cwd"] if same_repo else repo)
+    run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{slot}-{secrets.token_hex(3)}"
+    run_dir = RUNS / run_id
+    run_dir.mkdir(parents=True)
+    result_path = run_dir / "result.json"
+    prompt = build_prompt(slot, spec, task, answers)
+    (run_dir / "prompt.txt").write_text(prompt + "\n", encoding="utf-8")
+    if answers:
+        write_json(run_dir / "answers.json", answers)
+
+    env = {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}  # a stale token breaks gh here
+    env.update({
+        "AGENT_HEADLESS": "1",
+        "AGENT_SHIP_OWNER": a.ship_owner,
+        "AGENT_PR_BODY_FILE": str(run_dir / "pr-body.md"),
+        "AGENT_EVIDENCE_FILE": str(run_dir / "evidence.jsonl"),
+        "AGENT_ASK_CMD": os.environ.get("GBASE_ASK_CMD")
+        or f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} question {run_id}",
+    })
+    (run_dir / "evidence.jsonl").touch()
+
+    models = spec.get("models") or [model]
+    result = {
+        "run_id": run_id, "status": "running", "slot": slot, "task": task, "repo": str(repo), "cwd": str(cwd),
+        "worktree": a.worktree, "model": model, "ship_owner": a.ship_owner,
+        "answers_from": (answers or {}).get("run_id"), "pid": os.getpid(), "started_at": now(),
+        "finished_at": None, "run_dir": str(run_dir), "prompt_path": str(run_dir / "prompt.txt"),
+        "log_path": str(run_dir / ("log.jsonl" if len(models) == 1 else f"log-{models[0]}.jsonl")),
+    }
+    write_json(result_path, result)
+
+    def stop(signum, _frame):  # end the children too; the threads then finish and finally records the run
+        result["stopped_by"] = signal.Signals(signum).name
+        for proc in PROCS:
+            proc.terminate()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    sessions = {}
+    try:
+        def one(m):
+            log = run_dir / ("log.jsonl" if len(models) == 1 else f"log-{m}.jsonl")
+            try:
+                sessions[m or "default"] = run_claude(prompt, cwd, env, m, log)
+            except OSError as e:  # claude binary missing or not executable
+                sessions[m or "default"] = {"log_path": str(log), "final": "", "exit_code": 127, "error": str(e)}
+
+        threads = [threading.Thread(target=one, args=(m,)) for m in models]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        sessions = {k: sessions[k] for k in (m or "default" for m in models) if k in sessions}  # manifest order
+        finals = {m: s.pop("final") for m, s in sessions.items()}
+        for m, text in finals.items():
+            name = "final.md" if len(models) == 1 else f"final-{m}.md"
+            (run_dir / name).write_text(text, encoding="utf-8")
+            sessions[m]["final_path"] = str(run_dir / name)
+        parsed = [report(t) for t in finals.values()]
+        decisions = list(dict.fromkeys(d for r in parsed for d in r["decisions"]))
+        pr_line = next((r["pr_body_line"] for r in parsed if r["pr_body_line"]), None)
+        pr_draft = run_dir / "pr-body.md"
+        exit_code = max((s.get("exit_code", 1) for s in sessions.values()), default=1)
+        result.update({
+            "status": "done" if exit_code == 0 and len(sessions) == len(models) else "failed",
+            "finished_at": now(),
+            "exit_code": exit_code,
+            "branch": git(cwd, "rev-parse", "--abbrev-ref", "HEAD"),
+            "head_sha": git(cwd, "rev-parse", "HEAD"),
+            "decisions": decisions,
+            "questions": read_jsonl(run_dir / "questions.jsonl"),
+            "ship": next((r["ship"] for r in parsed if r["ship"]), None),
+            "pr_body_file": pr_line or (str(pr_draft) if pr_draft.exists() else None),
+            "settle": next((r["settle"] for r in parsed if r["settle"]), None),
+            "evidence": read_jsonl(run_dir / "evidence.jsonl"),
+            "sessions": sessions,
+        })
+        if len(models) > 1:
+            findings = merge_reviews(finals)
+            (run_dir / "review.md").write_text(review_md(findings, models), encoding="utf-8")
+            result.update({"findings": findings, "report_file": str(run_dir / "review.md")})
+        write_json(result_path, result)
+        print(result_path)
+    return 0 if result["status"] == "done" else 1
+
+
+def pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, TypeError):
+        return False
+
+
+def load_result(run_id):
+    path = RUNS / run_id / "result.json"
+    if not path.exists():
+        return None
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("status") == "running" and not pid_alive(result.get("pid")):
+        result["status"] = "dead"  # the runner died before writing its final result
+    return result
+
+
+def cmd_status(argv):
+    if len(argv) != 1:
+        sys.exit("usage: gbase-run status <run-id>")
+    result = load_result(argv[0])
+    if result is None:
+        sys.exit(f"gbase-run: no run {argv[0]}")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_list(_argv):
+    for d in sorted(RUNS.glob("*/result.json"), reverse=True):
+        r = load_result(d.parent.name)
+        print(json.dumps({k: r.get(k) for k in ("run_id", "status", "slot", "repo", "started_at", "exit_code")},
+                         ensure_ascii=False))
+
+
+def cmd_question(argv):
+    """AGENT_ASK_CMD for runs: `question <run-id> [ask] "<q>" --recommend "<o>" [--option "<o>"]...`
+    (headless.md's `sh -c` form passes `ask` as $0, so the verb usually doesn't arrive).
+    Records the question and answers it only from the run's --answers file (exact match); otherwise
+    prints nothing, so the skill applies its recommendation and writes a `결정 필요:` line."""
+    run_dir = RUNS / argv[0]
+    q = argparse.ArgumentParser()
+    q.add_argument("words", nargs="+")
+    q.add_argument("--recommend")
+    q.add_argument("--option", action="append", default=[])
+    a, _ = q.parse_known_args(argv[1:])
+    a.question = a.words[-1]
+    with open(run_dir / "questions.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"question": a.question, "recommend": a.recommend, "options": a.option}, ensure_ascii=False) + "\n")
+    answers = run_dir / "answers.json"
+    if answers.exists():
+        for ans in json.loads(answers.read_text(encoding="utf-8")).get("answers", []):
+            if ans.get("decision", "").strip() == a.question.strip():
+                print(ans["answer"])
+                return
+
+
+def main():
+    argv = sys.argv[1:]
+    commands = {"status": cmd_status, "list": cmd_list, "question": cmd_question}
+    if argv and argv[0] in commands:
+        return commands[argv[0]](argv[1:]) or 0
+    return cmd_run(argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

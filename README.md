@@ -202,7 +202,19 @@ A program that runs agents with no person attached (e.g. `claude -p` from a daem
 | `AGENT_PR_BODY_FILE` | Where that draft goes (line 1 title, line 2 empty, then the body); default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` |
 | `AGENT_EVIDENCE_FILE` | `go` and `reproduce` append `{"step","result","command","detail","cause"?}` JSON lines (`review`, `polish`, `checks`, `behavior`, `reproduce`) |
 
-The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`review`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `reproduce`) to an invocation, the variables it reads, and notes. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
+The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`review`, `review2`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `reproduce`) to an invocation, the variables it reads, and notes. `review2` runs `gbase:review` in report-only mode on Opus and Sonnet at once and merges the two tables, marking each finding `opus`, `sonnet`, or `both`. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
+
+**Runner.** [`scripts/gbase-run`](scripts/gbase-run) runs one slot headless from a checkout of this repo and writes a `result.json` a poller can read:
+
+```
+scripts/gbase-run --repo ~/code/app --slot ship --task "로그인 500 수정" --worktree login-fix
+scripts/gbase-run --repo ~/code/app --slot review2
+scripts/gbase-run --answers answers.json        # 이전 실행의 결정 필요: 줄에 답하고 이어서 실행
+scripts/gbase-run status <run-id>               # 진행 중이면 "status": "running"
+scripts/gbase-run list
+```
+
+It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads the plugin from the checkout with `--plugin-dir`, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
 
 ### gapp
 

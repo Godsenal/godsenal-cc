@@ -89,7 +89,8 @@ When more than one applies, `사람 필요` wins over `미확정`. The head sha 
       "env": ["<VARIABLE>"],
       "notes": "<what it returns and what it leaves behind>",
       "setup": "<slash command>",
-      "reads": ["<path or glob in the target repo>"]
+      "reads": ["<path or glob in the target repo>"],
+      "models": ["<model>", "<model>"]
     }
   }
 }
@@ -103,5 +104,57 @@ When more than one applies, `사람 필요` wins over `미확정`. The head sha 
 - `slots.<slot>.notes` — what the caller gets back and what is left in the working tree.
 - `slots.<slot>.setup` — optional: the command that creates what the slot depends on in a target repo.
 - `slots.<slot>.reads` — optional: target-repo files the slot depends on.
+- `slots.<slot>.models` — optional: run `invoke` once per model, in independent sessions at the same time, and merge their reports. Only `review2` has it: `gbase:review` in *report only* mode, so neither session edits the tree, merged by `file:line` (same file, lines at most 3 apart) with each finding marked by the model(s) that found it.
 
 A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. There is no `plan` slot: `gbase:how` explains the code a task touches, but it doesn't decide scope or acceptance criteria.
+
+## Runner
+
+`scripts/gbase-run` in this repo is one way to be the caller: it runs a single slot with `claude -p` and leaves a result file for a poller. It reads the manifest and this contract and adds no skill behavior.
+
+```
+gbase-run --repo <path> --slot <slot> [--task "..."] [--worktree <name>] [--model opus|sonnet]
+          [--ship-owner orchestrator|agent] [--answers <file>]
+gbase-run status <run-id>
+gbase-run list
+```
+
+- The prompt is the slot's `invoke`, with `--task` replacing a `<placeholder>` or appended. A slot whose `invoke` is `null` gets a prompt built from its `notes`.
+- The child runs with `AGENT_HEADLESS=1`, `AGENT_SHIP_OWNER` from `--ship-owner` (default `orchestrator`, so nothing leaves the machine), `AGENT_PR_BODY_FILE` and `AGENT_EVIDENCE_FILE` in the run directory, `GITHUB_TOKEN` removed, and the plugin loaded with `--plugin-dir` from the same checkout. `AGENT_ASK_CMD` is `$GBASE_ASK_CMD` when set; otherwise `gbase-run question <run-id>`, which records each question in `questions.jsonl` and gives no answer, so the skill applies its recommendation and writes a `결정 필요:` line.
+- `--model` is passed to claude; a `models` slot ignores it and runs its own list.
+- `--worktree <name>` runs in `$GBASE_HOME/worktrees/<repo>-<path hash>-<name>` on branch `gbase/<name>`, created from the repo's `HEAD` on first use and reused after.
+- The last stdout line is the absolute path of `result.json`. Exit 0 when every session exited 0. SIGTERM or SIGINT stops the claude sessions and still writes the result (`failed`, with `stopped_by`).
+- A slot whose `invoke` has a `<placeholder>` (`reproduce`) needs `--task`.
+
+Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`): `prompt.txt`, `log.jsonl` (the `stream-json` events; `log-<model>.jsonl` per session for a `models` slot), `final.md` (the final message; `final-<model>.md`), `evidence.jsonl`, `pr-body.md` when `go` drafted one, `questions.jsonl`, `answers.json`, `review.md` for a `models` slot, and `result.json`:
+
+| Field | Value |
+|---|---|
+| `run_id`, `slot`, `task`, `repo`, `cwd`, `worktree`, `model`, `ship_owner` | the inputs; `cwd` is where claude ran |
+| `status` | `running` until the runner finishes, then `done` or `failed`; `status` reports `dead` for a `running` file whose runner process is gone |
+| `pid`, `started_at`, `finished_at`, `run_dir`, `prompt_path`, `log_path` | bookkeeping |
+| `exit_code` | the highest exit code of the claude sessions |
+| `branch`, `head_sha` | of `cwd` after the run |
+| `decisions` | every `결정 필요:` line, in order |
+| `ship`, `settle` | the `ship:` / `settle:` line, or `null` |
+| `pr_body_file` | the path from `PR 본문 초안:`, else `pr-body.md` if it exists, else `null` |
+| `evidence` | the parsed evidence lines |
+| `questions` | each `{question, recommend, options}` sent to the default `AGENT_ASK_CMD` |
+| `sessions` | per model: `session_id`, `model`, `exit_code`, `cost_usd`, `log_path`, `final_path` |
+| `answers_from` | the run the answers file named; `model` is inherited from it too |
+| `findings`, `report_file` | `models` slots only: `{severity, location, finding, action, found_by}` and the merged table |
+
+A follow-up run answers a run's decisions with `--answers <file>`:
+
+```json
+{
+  "run_id": "<run whose decisions these answer>",
+  "answers": [
+    { "decision": "<the 결정 필요: line, or a question from questions.jsonl>", "answer": "<option label or instruction>" }
+  ]
+}
+```
+
+`run_id` is optional; when given, `--repo`, `--slot`, and `--task` default to that run's, and the run continues in that run's `cwd` (its worktree, where its edits are). The answers go into the prompt as decisions already made, and a question asked again with exactly the same text gets its answer from `AGENT_ASK_CMD`.
+
+Environment of the runner itself: `GBASE_CLAUDE` (default `~/.claude/local/claude`, else `claude` on `PATH`), `GBASE_HOME`, `GBASE_PLUGIN_DIR` (default `plugins/base` of the checkout), `GBASE_PERMISSION_MODE` (default `bypassPermissions`; the child has no person to approve tools), `GBASE_ASK_CMD`.

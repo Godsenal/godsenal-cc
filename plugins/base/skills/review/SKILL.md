@@ -71,6 +71,8 @@ One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–
 
 **Auto-fix** a survivor only when the fix is mechanical, local (one or two files, small), and fully determined by the finding — no design choice, dependency, schema/migration, API-contract change, or test added/removed. Land it per the mode. Run `gbase:polish` on the touched files before a non-trivial fix is committed or handed back — in pre-PR mode nothing else will polish it.
 
+When the caller says *report only* (the orchestrator's `review2` slot runs two reviewers on one tree at once), auto-fix nothing: every survivor goes in the report as `needs decision`, so neither reviewer edits under the other.
+
 **Everything else** goes in the report; raise the ones worth fixing before merge with `AskUserQuestion` (`file:line`, failure scenario, 2–3 options). When the caller says *defer, don't ask* (`gbase:go` does, so nothing blocks the PR), return them instead of asking.
 
 If the PR merges before a fix lands, don't push to the merged branch — report it as a follow-up.
