@@ -231,7 +231,7 @@ whichever of `Evidence` / `Merge danger` it lacks.
 Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
 `gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
 
-If an `unslop` skill is installed, run the drafted title and body through it before creating the PR.
+Run the drafted title and body through `gbase:unslop` before creating the PR.
 
 The body is a briefing for a reviewer who has the diff — combined from humanlayer's `visual-pr` (Why,
 notes), Matt Pocock's `pr` (diff sketch, before/after, door) and gbase (risk, revert, rollout):
