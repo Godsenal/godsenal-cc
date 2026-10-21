@@ -28,7 +28,6 @@ import subprocess
 import sys
 import threading
 import time
-import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -379,11 +378,15 @@ def cmd_question(argv):
             print((exact or list(fuzzy))[0])
 
 
+SENTENCE_PUNCT = set("?!,.:;'\"？！，。：；、‘’“”「」")
+
+
 def normalize_decision(text):
-    """Drops a leading `결정 필요:`, casefolds, and turns each run of whitespace and punctuation
-    into one space, so `v1.2.0` and `v12.0` stay apart while `Use the cache?` matches `use the cache`."""
+    """Drops a leading `결정 필요:`, casefolds, and turns each run of whitespace and sentence punctuation
+    into one space, so `v1.2.0` and `v12.0` stay apart while `Use the cache?` matches `use the cache`.
+    Symbols that carry meaning (`-`, `#`, `%`, `_`) stay, so `-1` and `1` or `C#` and `C` don't match."""
     text = re.sub(r"^\s*결정\s*필요\s*[:：]", "", text).casefold()
-    text = "".join(" " if c.isspace() or unicodedata.category(c).startswith("P") else c for c in text)
+    text = "".join(" " if c.isspace() or c in SENTENCE_PUNCT else c for c in text)
     return " ".join(text.split())
 
 

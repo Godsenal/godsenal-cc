@@ -93,6 +93,7 @@ class GbaseRunTest(unittest.TestCase):
             {"decision": "Use the cache?", "answer": "exact"},
             {"decision": "결정 필요： Bump to v1.2.0", "answer": "yes"},
             {"decision": "Drop logs?", "answer": "no"}, {"decision": "drop LOGS", "answer": "yes"},
+            {"decision": "Set retries to -1?", "answer": "unlimited"}, {"decision": "Port it to C#?", "answer": "csharp"},
             {"decision": None, "answer": "x"}, {"decision": "?!", "answer": "empty"}]}, ensure_ascii=False))
 
         def ask(q):
@@ -105,6 +106,10 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(ask("drop logs"), "")  # two different answers normalize alike
         self.assertEqual(ask("Use a cache?"), "")
         self.assertEqual(ask("..."), "")
+        self.assertEqual(ask("set retries to -1"), "unlimited")
+        self.assertEqual(ask("Set retries to 1?"), "")
+        self.assertEqual(ask("port it to c#"), "csharp")
+        self.assertEqual(ask("Port it to C?"), "")
 
     def test_review2_runs_both_models_and_merges_by_location(self):
         r, out = self.run_cli("--repo", str(self.repo), "--slot", "review2")
