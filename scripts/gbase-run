@@ -99,10 +99,44 @@ def build_prompt(slot, spec, task, answers):
     return prompt
 
 
+DECISION_KEYS = {"추천": "recommend", "다른 선택지": "options", "사람이 할 일": "human"}
+DECISION_PREFIX = re.compile(r"\s*결정\s*필요\s*[:：]\s*")
+DECISION_KEY = rf"(?:{'|'.join(DECISION_KEYS)})\s*[:：]"
+DECISION_PARTS = re.compile(rf"\s*[;；]\s*(?={DECISION_KEY})")
+
+
+def opening_paren(s):
+    """Index of the `(` that closes at the end of s, nested parentheses allowed; -1 when unbalanced."""
+    depth = 0
+    for i in range(len(s) - 1, -1, -1):
+        depth += (s[i] == ")") - (s[i] == "(")
+        if depth == 0:
+            return i
+    return -1
+
+
+def parse_decision(line):
+    """`결정 필요: <q> → <applied> (추천: <r>; 다른 선택지: <a> / <b>) · AGENT_ASK_CMD 에 넘김` (headless.md) →
+    {text, question, applied, recommend, options, human}; parts a line lacks are null (options: [])."""
+    d = {"text": line, "question": None, "applied": None, "recommend": None, "options": [], "human": None}
+    rest = DECISION_PREFIX.sub("", line, count=1).strip()
+    rest = re.sub(r"\s+·\s+AGENT_ASK_CMD\s*에\s*넘김$", "", rest)
+    start = opening_paren(rest) if rest.endswith(")") else -1
+    if start >= 0 and re.match(rf"\s*{DECISION_KEY}", rest[start + 1:-1]):
+        for part in DECISION_PARTS.split(rest[start + 1:-1].strip()):
+            key, value = re.split(r"\s*[:：]\s*", part, maxsplit=1)
+            field = DECISION_KEYS[key.strip()]
+            d[field] = [o.strip() for o in value.split(" / ") if o.strip()] if field == "options" else value.strip()
+        rest = rest[:start].rstrip()
+    question, arrow, applied = rest.rpartition(" → ")
+    d["question"], d["applied"] = (question.strip(), applied.strip()) if arrow else (rest, None)
+    return d
+
+
 def report(text):
     pr = PR_BODY.findall(text)
     return {
-        "decisions": DECISION.findall(text),
+        "decisions": [parse_decision(line) for line in DECISION.findall(text)],
         "ship": (SHIP.findall(text) or [None])[-1],
         "pr_body_line": pr[-1].strip() if pr else None,
         "settle": (SETTLE.findall(text) or [None])[-1],
@@ -293,7 +327,7 @@ def cmd_run(argv):
             (run_dir / name).write_text(text, encoding="utf-8")
             sessions[m]["final_path"] = str(run_dir / name)
         parsed = [report(t) for t in finals.values()]
-        decisions = list(dict.fromkeys(d for r in parsed for d in r["decisions"]))
+        decisions = list({d["text"]: d for r in parsed for d in r["decisions"]}.values())
         pr_line = next((r["pr_body_line"] for r in parsed if r["pr_body_line"]), None)
         pr_draft = run_dir / "pr-body.md"
         exit_code = max((s.get("exit_code", 1) for s in sessions.values()), default=1)
@@ -382,10 +416,12 @@ SENTENCE_PUNCT = set("?!,.:;'\"？！，。：；、‘’“”「」")
 
 
 def normalize_decision(text):
-    """Drops a leading `결정 필요:`, casefolds, and turns each run of whitespace and sentence punctuation
+    """Keeps only the question of a pasted `결정 필요:` line (no prefix, `→` tail, or `(…)` group), casefolds, and turns each run of whitespace and sentence punctuation
     into one space, so `v1.2.0` and `v12.0` stay apart while `Use the cache?` matches `use the cache`.
     Symbols that carry meaning (`-`, `#`, `%`, `_`) stay, so `-1` and `1` or `C#` and `C` don't match."""
-    text = re.sub(r"^\s*결정\s*필요\s*[:：]", "", text).casefold()
+    if DECISION_PREFIX.match(text):
+        text = parse_decision(text)["question"]
+    text = text.casefold()
     text = "".join(" " if c.isspace() or c in SENTENCE_PUNCT else c for c in text)
     return " ".join(text.split())
 

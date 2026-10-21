@@ -1,4 +1,6 @@
 """Tests for scripts/gbase-run against a fake claude. Run: python3 -m unittest discover -s scripts"""
+import importlib.machinery
+import importlib.util
 import json
 import os
 import subprocess
@@ -9,6 +11,9 @@ import unittest
 from pathlib import Path
 
 RUNNER = Path(__file__).resolve().parent / "gbase-run"
+_loader = importlib.machinery.SourceFileLoader("gbase_run", str(RUNNER))
+gbase_run = importlib.util.module_from_spec(importlib.util.spec_from_loader("gbase_run", _loader))
+_loader.exec_module(gbase_run)
 
 # Stands in for `claude -p --output-format stream-json`: asks one question through AGENT_ASK_CMD,
 # appends an evidence line, and ends with a final message chosen by --model.
@@ -27,8 +32,10 @@ FAKE_CLAUDE = textwrap.dedent('''\
                 "| 1 | high | `a.py:10` | null deref in `a \\\\| b` | needs decision |\\n| 2 | low | `b.py:3` | typo | needs decision |\\n",
         "sonnet": "| # | severity | file:line | finding | action |\\n|---|---|---|---|---|\\n"
                   "| 1 | medium | `a.py:12` | None not handled | needs decision |\\n",
+        "settle": "ship: local feat/x @def5678 — 1 commits, not pushed\\nPR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"]
+                  + "\\nsettle: 미확정 @abc1234 — 푸시 대기: 1 commits\\n",
     }
-    final = finals.get(model, "done\\n결정 필요: x → y (다른 선택지: z)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
+    final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
     print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-" + model, "model": model}))
     print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.01}))
@@ -50,6 +57,16 @@ class GbaseRunTest(unittest.TestCase):
                     "GITHUB_TOKEN": "stale"}
         self.env.pop("GBASE_ASK_CMD", None)
 
+    def seed_answers(self, answers):
+        run_dir = self.tmp / "home" / "runs" / "r1"
+        run_dir.mkdir(parents=True)
+        (run_dir / "answers.json").write_text(json.dumps({"answers": answers}, ensure_ascii=False))
+
+    def ask(self, q, run_id="r1"):
+        """What the run's AGENT_ASK_CMD prints for q."""
+        return subprocess.run([sys.executable, str(RUNNER), "question", run_id, "ask", q, "--recommend", "A"],
+                              env=self.env, capture_output=True, text=True).stdout.strip()
+
     def run_cli(self, *args):
         r = subprocess.run([sys.executable, str(RUNNER), *args], env=self.env, capture_output=True, text=True)
         return r, r.stdout.strip().splitlines()
@@ -60,7 +77,8 @@ class GbaseRunTest(unittest.TestCase):
         result = json.loads(Path(out[-1]).read_text())
         self.assertEqual(result["status"], "done")
         self.assertEqual(result["branch"], "main")
-        self.assertEqual(result["decisions"], ["결정 필요: x → y (다른 선택지: z)"])
+        self.assertEqual(result["decisions"], [{"text": "결정 필요: x → y (추천: z; 다른 선택지: z / w)", "question": "x",
+                                                "applied": "y", "recommend": "z", "options": ["z", "w"], "human": None}])
         self.assertTrue(result["ship"].startswith("ship: local feat/x"))
         self.assertEqual(result["pr_body_file"], str(Path(result["run_dir"]) / "pr-body.md"))
         self.assertEqual(result["evidence"][0]["detail"], "haiku")
@@ -70,6 +88,14 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(status["status"], "done")
         listed = [json.loads(line) for line in self.run_cli("list")[1]]
         self.assertEqual(listed[0]["run_id"], result["run_id"])
+
+    def test_settle_reports_local_fixes_without_pushing(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "settle", "--model", "settle")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["ship_owner"], "orchestrator")
+        self.assertEqual(result["ship"], "ship: local feat/x @def5678 — 1 commits, not pushed")
+        self.assertEqual(result["settle"], "settle: 미확정 @abc1234 — 푸시 대기: 1 commits")
+        self.assertEqual(result["pr_body_file"], str(Path(result["run_dir"]) / "pr-body.md"))
 
     def test_answers_feed_prompt_inherit_run_and_answer_exact_question(self):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "reproduce", "--task", "login 500s", "--model", "x")
@@ -81,35 +107,49 @@ class GbaseRunTest(unittest.TestCase):
         second = json.loads(Path(out[-1]).read_text())
         self.assertEqual((second["slot"], second["task"], second["answers_from"]), ("reproduce", "login 500s", first["run_id"]))
         self.assertIn("- Q? → B", Path(second["prompt_path"]).read_text())
-        ask = subprocess.run([sys.executable, str(RUNNER), "question", second["run_id"], "ask", "Q?", "--recommend", "A"],
-                             env=self.env, capture_output=True, text=True)
-        self.assertEqual(ask.stdout.strip(), "B")
+        self.assertEqual(self.ask("Q?", second["run_id"]), "B")
 
     def test_question_matches_answer_despite_spacing_punctuation_case_and_prefix(self):
-        run_dir = self.tmp / "home" / "runs" / "r1"
-        run_dir.mkdir(parents=True)
-        (run_dir / "answers.json").write_text(json.dumps({"answers": [
+        self.seed_answers([
             {"decision": "결정 필요:  Use  the CACHE", "answer": "fuzzy"},
             {"decision": "Use the cache?", "answer": "exact"},
             {"decision": "결정 필요： Bump to v1.2.0", "answer": "yes"},
             {"decision": "Drop logs?", "answer": "no"}, {"decision": "drop LOGS", "answer": "yes"},
             {"decision": "Set retries to -1?", "answer": "unlimited"}, {"decision": "Port it to C#?", "answer": "csharp"},
-            {"decision": None, "answer": "x"}, {"decision": "?!", "answer": "empty"}]}, ensure_ascii=False))
+            {"decision": None, "answer": "x"}, {"decision": "?!", "answer": "empty"}])
 
-        def ask(q):
-            return subprocess.run([sys.executable, str(RUNNER), "question", "r1", "ask", q, "--recommend", "A"],
-                                  env=self.env, capture_output=True, text=True).stdout.strip()
+        self.assertEqual(self.ask("Use the cache?"), "exact")
+        self.assertEqual(self.ask("bump to v1.2.0?"), "yes")
+        self.assertEqual(self.ask("Bump to v12.0?"), "")
+        self.assertEqual(self.ask("drop logs"), "")  # two different answers normalize alike
+        self.assertEqual(self.ask("Use a cache?"), "")
+        self.assertEqual(self.ask("..."), "")
+        self.assertEqual(self.ask("set retries to -1"), "unlimited")
+        self.assertEqual(self.ask("Set retries to 1?"), "")
+        self.assertEqual(self.ask("port it to c#"), "csharp")
+        self.assertEqual(self.ask("Port it to C?"), "")
 
-        self.assertEqual(ask("Use the cache?"), "exact")
-        self.assertEqual(ask("bump to v1.2.0?"), "yes")
-        self.assertEqual(ask("Bump to v12.0?"), "")
-        self.assertEqual(ask("drop logs"), "")  # two different answers normalize alike
-        self.assertEqual(ask("Use a cache?"), "")
-        self.assertEqual(ask("..."), "")
-        self.assertEqual(ask("set retries to -1"), "unlimited")
-        self.assertEqual(ask("Set retries to 1?"), "")
-        self.assertEqual(ask("port it to c#"), "csharp")
-        self.assertEqual(ask("Port it to C?"), "")
+    def test_decision_lines_parse_into_parts(self):
+        lines = ["결정 필요: rename a → b? → 열어둠 (draft) (추천: 고침; 다른 선택지: x → y / z (w)) · AGENT_ASK_CMD 에 넘김",
+                 "결정 필요: x → y (다른 선택지: z)", "결정 필요: merge → 하지 않음 (사람이 할 일: gh pr merge 7)",
+                 "결정 필요: no arrow (aside)", "결정 필요: Pick A · B? → A · B"]
+        parsed = [gbase_run.parse_decision(line) for line in lines]
+        self.assertEqual([d.pop("text") for d in parsed], lines)
+        self.assertEqual(parsed, [
+            {"question": "rename a → b?", "applied": "열어둠 (draft)", "recommend": "고침", "options": ["x → y", "z (w)"], "human": None},
+            {"question": "x", "applied": "y", "recommend": None, "options": ["z"], "human": None},
+            {"question": "merge", "applied": "하지 않음", "recommend": None, "options": [], "human": "gh pr merge 7"},
+            {"question": "no arrow (aside)", "applied": None, "recommend": None, "options": [], "human": None},
+            {"question": "Pick A · B?", "applied": "A · B", "recommend": None, "options": [], "human": None}])
+
+    def test_question_matches_a_pasted_full_report_line(self):
+        self.seed_answers([
+            {"decision": "결정 필요: Use the cache? → 안 씀 (추천: 안 씀; 다른 선택지: 씀) · AGENT_ASK_CMD 에 넘김", "answer": "씀"},
+            {"decision": "Rename a → b?", "answer": "yes"}])
+
+        self.assertEqual(self.ask("Use the cache?"), "씀")
+        self.assertEqual(self.ask("rename a → b"), "yes")  # a bare question keeps its arrow
+        self.assertEqual(self.ask("Rename a?"), "")
 
     def test_review2_runs_both_models_and_merges_by_location(self):
         r, out = self.run_cli("--repo", str(self.repo), "--slot", "review2")
