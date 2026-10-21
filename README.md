@@ -147,7 +147,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - **Converges instead of looping** with automated reviewers: pre-existing findings get a one-line reply and no fix, repeats of handled findings are ignored, and after three rounds from the same reviewer it stops auto-applying and asks whether the approach needs rethinking
 - Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
 - Stops automatically when the PR reaches `MERGED` or `CLOSED`
-- `--until-settled` ends earlier, once the current head's checks and expected review bots have concluded, with one `settle: 수렴 | 미확정 | 사람 필요 @<sha>` line; it waits in short foreground polls (each returns within 5 minutes), gives up 30 minutes into a head, and never merges, rebases, or force-pushes
+- `--until-settled` ends earlier, once the current head's checks and expected review bots have concluded, with one `settle: 수렴 | 미확정 | 사람 필요 @<sha>` line; it waits in short foreground polls (each returns within 5 minutes), gives up 30 minutes into a head, and never merges, rebases, or force-pushes; under `AGENT_SHIP_OWNER=orchestrator` it pushes nothing and reports its local fix commits and a refreshed PR draft
 
 **setup** (skill, model-invocable) — Prepare a repo for the ship loop in one pass; idempotent, one confirmation.
 
@@ -198,9 +198,9 @@ A program that runs agents with no person attached (e.g. `claude -p` from a daem
 |---|---|
 | `AGENT_HEADLESS=1` | No skill asks. It applies its recommendation (or the reversible option that does less) and reports a `결정 필요:` line; irreversible steps (merge, deploy, force push, data deletion) are not taken. Rules: [`references/headless.md`](plugins/base/references/headless.md) |
 | `AGENT_ASK_CMD` | Under headless, each question goes to `sh -c "$AGENT_ASK_CMD \"\$@\"" ask "<question>" --recommend "<option>" --option "<option>"…`; non-empty stdout is the answer |
-| `AGENT_SHIP_OWNER=orchestrator` | `go` stops after local commits and a PR body draft; it never touches the remote |
+| `AGENT_SHIP_OWNER=orchestrator` | `go` stops after local commits and a PR body draft; `monitor --until-settled` commits its fixes locally and refreshes that draft. Neither touches the remote |
 | `AGENT_PR_BODY_FILE` | Where that draft goes (line 1 title, line 2 empty, then the body); default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` |
-| `AGENT_EVIDENCE_FILE` | `go` and `reproduce` append `{"step","result","command","detail","cause"?}` JSON lines (`review`, `polish`, `checks`, `behavior`, `reproduce`) |
+| `AGENT_EVIDENCE_FILE` | `go`, `reproduce`, and `monitor --until-settled` append `{"step","result","command","detail","cause"?}` JSON lines (`review`, `polish`, `checks`, `behavior`, `reproduce`, `settle`); `result` is `pass`, `fail`, `skip`, or `open` (findings or a wait still open, not a failure) |
 
 The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`review`, `review2`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `reproduce`) to an invocation, the variables it reads, and notes. `review2` runs `gbase:review` in report-only mode on Opus and Sonnet at once and merges the two tables, marking each finding `opus`, `sonnet`, or `both`. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
 
@@ -214,7 +214,7 @@ scripts/gbase-run status <run-id>               # 진행 중이면 "status": "ru
 scripts/gbase-run list
 ```
 
-It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads the plugin from the checkout with `--plugin-dir`, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
+It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads the plugin from the checkout with `--plugin-dir`, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. `decisions` in it are parsed `결정 필요:` lines (`{text, question, applied, recommend, options, human}`). Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
 
 ### gapp
 

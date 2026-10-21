@@ -47,12 +47,19 @@ CONTRACTS = [
     (".claude/skills/verify/", [skill("create-verify"), skill("go"), skill("setup")]),
     ("ship-owner: orchestrator", [skill("go"), BRANCH_PR]),
     ("pr-body-file:", [skill("go"), BRANCH_PR]),
-    ("ship: local", [BRANCH_PR, ORCHESTRATOR]),
-    ("pr 본문 초안:", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER]),
+    ("ship: local", [BRANCH_PR, ORCHESTRATOR, skill("monitor")]),
+    ("pr 본문 초안:", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, skill("monitor")]),
     ("--until-settled", [skill("monitor"), ORCHESTRATOR]),
     ("settle: 수렴", [skill("monitor"), ORCHESTRATOR]),
     ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
-    ("agent_evidence_file", [skill("go"), skill("reproduce"), ORCHESTRATOR]),
+    # the runner splits decision lines on these keys into recommend / options / human
+    ("(추천:", [HEADLESS, RUNNER]),
+    ("다른 선택지", [HEADLESS, RUNNER]),
+    ("사람이 할 일", [HEADLESS, RUNNER]),
+    # settle keeps fixes local and pushes only when the agent owns shipping
+    ("agent_ship_owner=orchestrator", [skill("go"), skill("monitor"), skill("review"), ORCHESTRATOR]),
+    ("푸시 대기:", [skill("monitor"), ORCHESTRATOR]),
+    ("agent_evidence_file", [skill("go"), skill("reproduce"), skill("monitor"), ORCHESTRATOR]),
     ("gbase:reproduce", [skill("bug-fix"), skill("reproduce")]),
     # the session hook routes to work and names the agent types work dispatches
     ("`gbase:work`", [SESSION_HOOK]),

@@ -42,12 +42,20 @@ Under `AGENT_HEADLESS=1` (check `printenv AGENT_HEADLESS` before asking) nothing
 For a caller that only needs the current head judged. Same sweep, classification, fixes, self-review, and replies as the loop, but it ends once the head settles, not at merge:
 
 - **Settled** = every check on the head has concluded, and every expected automated reviewer has finished on it: a review, a comment, or an edit to its own comment created after you started waiting on this head, or its check run concluded. Expected = bot accounts that reviewed this PR earlier or one of the repo's last 5 merged PRs, plus bots with a pending review request.
-- **Each fix you push is a new head**; the wait starts over for it.
+- **Each fix you push is a new head**; the wait starts over for it. Under `AGENT_SHIP_OWNER=orchestrator` nothing is pushed — see below.
 - **Wait in short foreground calls**, no persistent `Monitor` (a headless run can end before it fires). Each Bash call polls `gh` and returns within 5 minutes with a status line — a caller may kill a run that prints nothing for ~10 minutes. Checks can take a minute to register after a push.
 - **Give up at 30 minutes** into the wait on one head; whatever hasn't concluded is reported.
 - **Never merges** (`--merge` is ignored), **rebases, or force-pushes** — a merge conflict is reported, not resolved.
 
 It ends with one `settle: 수렴 | 미확정 | 사람 필요 @<short-sha>` line, format and meaning in [orchestrator.md](../../references/orchestrator.md#settle).
+
+**`AGENT_SHIP_OWNER=orchestrator`** (check `printenv AGENT_SHIP_OWNER`; only `--until-settled` runs under it): another program owns the remote, so nothing leaves the machine.
+- Fixes are committed locally, one per fix, and **never pushed**. Nothing is posted either: no reply, comment, or `gh pr ready`. The replies you would have posted go in the report.
+- The wait covers the pushed head only and doesn't start over. A failure or comment fixed by a local commit counts as handled, but with local commits the verdict is never `수렴`: it's `settle: 미확정 @<pushed sha> — 푸시 대기: <n> commits`, unless `사람 필요` applies.
+- With local commits, write an updated PR draft to `AGENT_PR_BODY_FILE` (default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md`) in the [draft format](../../references/orchestrator.md#ship-owner-orchestrator): the title and body from `gh pr view --json title,body`, with `## Evidence` (and `## Change outline` if the shape changed) updated for the new commits. Before the `settle:` line, report `ship: local <branch> @<short-sha> — <n> commits, not pushed` and `PR 본문 초안: <path>`.
+- Pushing is opt-in: `AGENT_SHIP_OWNER=agent` gives the push-and-reply flow above.
+
+With `AGENT_EVIDENCE_FILE` set, append [evidence lines](../../references/orchestrator.md#evidence-file): one `checks` line per command you ran to verify a fix, a `review` line when the self-review ran, and one `settle` line.
 
 ## Classification
 
