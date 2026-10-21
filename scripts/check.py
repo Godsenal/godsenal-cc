@@ -26,6 +26,8 @@ BRANCH_PR = "plugins/base/commands/branch-pr.md"
 ORCHESTRATOR = "plugins/base/references/orchestrator.md"
 HEADLESS = "plugins/base/references/headless.md"
 SESSION_HOOK = "plugins/base/hooks/session-start.md"
+FACTORY = "plugins/base/.claude-plugin/factory.json"
+RUNNER = "scripts/gbase-run"
 CONTRACTS = [
     ("⚠️ requires ordered rollout", [skill("compat-check"), BRANCH_PR]),
     # compat-check's output template itself, not just prose that mentions the tokens
@@ -46,10 +48,10 @@ CONTRACTS = [
     ("ship-owner: orchestrator", [skill("go"), BRANCH_PR]),
     ("pr-body-file:", [skill("go"), BRANCH_PR]),
     ("ship: local", [BRANCH_PR, ORCHESTRATOR]),
-    ("pr 본문 초안:", [skill("go"), BRANCH_PR, ORCHESTRATOR]),
+    ("pr 본문 초안:", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER]),
     ("--until-settled", [skill("monitor"), ORCHESTRATOR]),
     ("settle: 수렴", [skill("monitor"), ORCHESTRATOR]),
-    ("결정 필요:", [HEADLESS, ORCHESTRATOR]),
+    ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
     ("agent_evidence_file", [skill("go"), skill("reproduce"), ORCHESTRATOR]),
     ("gbase:reproduce", [skill("bug-fix"), skill("reproduce")]),
     # the session hook routes to work and names the agent types work dispatches
@@ -58,11 +60,15 @@ CONTRACTS = [
     ("gbase:worker", [skill("work"), SESSION_HOOK]),
     ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
     ("gbase:unslop", [BRANCH_PR, skill("work")]),
+    # review2 runs review twice on one tree; report only keeps the two sessions from editing
+    ("report only", [skill("review"), FACTORY]),
+    # the runner merges review2 by parsing review's report table
+    ("# | severity | file:line | finding | action", [skill("review"), RUNNER]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
 SLOT_REQUIRED = {"invoke", "env", "notes"}
-SLOT_OPTIONAL = {"setup", "reads"}
+SLOT_OPTIONAL = {"setup", "reads", "models"}
 
 errors = []
 
@@ -228,6 +234,9 @@ def check_factory(pdir):
         for var in spec.get("env", []):
             if var not in env:
                 fail(path, f"slot {slot}: env {var} isn't declared in the top-level env")
+        models = spec.get("models")
+        if models is not None and not (isinstance(models, list) and len(models) >= 2 and all(isinstance(m, str) and m for m in models)):
+            fail(path, f"slot {slot}: models must list two or more model names")
         if not spec.get("notes"):
             fail(path, f"slot {slot}: empty notes")
         if spec.get("invoke") is None and not spec.get("reads"):

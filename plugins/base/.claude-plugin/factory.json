@@ -14,6 +14,12 @@
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
       "notes": "Adversarial review of the uncommitted changes, else the latest commit. Clear, local fixes come back as uncommitted working-tree edits; findings that need a decision come back in a severity table. Never posts to GitHub."
     },
+    "review2": {
+      "invoke": "/gbase:review pre-PR mode; defer, don't ask; report only",
+      "models": ["opus", "sonnet"],
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
+      "notes": "The same review run once per model in independent sessions on the same tree; report only, so nothing is edited. The caller merges the two severity tables by file:line and marks each finding opus, sonnet, or both."
+    },
     "polish": {
       "invoke": "/gbase:polish",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],

@@ -11,6 +11,7 @@ plugins/base/  → gbase              .claude-plugin/plugin.json, skills/<name>/
                                     agents/*.md (subagent types, registered as gbase:<name>), hooks/ (SessionStart routing rule)
 plugins/app/   → gapp               .claude-plugin/plugin.json, skills/<name>/SKILL.md (+ references/)
 scripts/check.py                    repo checks CI runs (.github/workflows/check.yml)
+scripts/gbase-run                   headless runner for factory.json slots (claude -p → result.json); tests in scripts/test_gbase_run.py
 ```
 
 Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
@@ -26,6 +27,7 @@ Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
   - `pause` leaves a `wip:` commit whose body is the resume note and starts with an `Intent:` line — the marker `pickup`, `go`, and `branch-pr` use to recognize it; `go` ships unpushed pause commits on a clean tree and `branch-pr` soft-resets all of them into real commits.
   - `setup` writes the `<!-- gbase:verify -->` block in the target repo's `CLAUDE.md` that `go`'s verification gate reads; `create-verify` generates `.claude/skills/verify-*` that `go` runs for touched features, and `go` also runs pstack's `.claude/skills/verify/`.
   - Orchestrator contract (`plugins/base/references/orchestrator.md`, `headless.md`, `.claude-plugin/factory.json`): no orchestrator is ever named in plugin files — only `AGENT_*` variables, files, and report lines. Headless rules live once in `headless.md`; every skill or command that can `AskUserQuestion` points at it in one line (check.py enforces). `go` passes `branch-pr` `Ship-owner: orchestrator; PR-body-file:` and both print the `ship:` / `PR 본문 초안:` lines; `monitor --until-settled` ends with a `settle:` line; `go` and `reproduce` write the evidence file format; each `factory.json` slot names a skill that exists.
+  - `scripts/gbase-run` parses the report lines above and gbase:review's table `# | severity | file:line | finding | action`; the `review2` slot's `report only` is a `review` mode — change the runner with them.
   - `bug-fix` starts with `gbase:reproduce`, which only writes the failing check; the fix stays in `bug-fix`.
   - `hooks/session-start.md` routes tasks to `gbase:work` with the same criteria as `work`'s description, and names the `gbase:scout` / `gbase:worker` agent types that `work`'s Subagents section dispatches; the hook's promise that `work` "asks before anything leaves the machine" is kept by `work`'s Ship gate — change both together. `branch-pr` and `work` use `gbase:unslop`.
   - gapp stages auto-continue to the next stage and update `docs/HARNESS.md`; stage numbers (0 kickoff … 8 store-submit) must match across `kickoff`, each skill's description, and `README.md`.
@@ -45,6 +47,7 @@ Follow Anthropic's skill-authoring guidance (platform.claude.com/docs/en/agents-
 <!-- gbase:verify:start -->
 ## Verify
 
+- tests: `python3 -m unittest discover -s scripts` — the runner against a fake `claude` (CI runs it too).
 - check: `python3 scripts/check.py --base main` — JSON validity, version sync and bump, frontmatter, line/description limits, `## 출력 언어` blocks, and the cross-skill contract tokens above. CI runs it on every PR (`.github/workflows/check.yml`); when you add a contract, add its token to `CONTRACTS` in the script.
 - trigger test (manual, not run by `go`): `/plugin marketplace add ./`, `/plugin install gbase@godsenal`, then `/reload-plugins` and give Claude a task that should trigger the skill — confirm it loads the skill rather than improvising.
 <!-- gbase:verify:end -->
