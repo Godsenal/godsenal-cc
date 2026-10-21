@@ -150,7 +150,7 @@ A follow-up run answers a run's decisions with `--answers <file>`:
 {
   "run_id": "<run whose decisions these answer>",
   "answers": [
-    { "decision": "<the 결정 필요: line, or a question from questions.jsonl>", "answer": "<option label or instruction>" }
+    { "decision": "<the question of a 결정 필요: line (before its →), or a question from questions.jsonl>", "answer": "<option label or instruction>" }
   ]
 }
 ```
