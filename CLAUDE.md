@@ -7,7 +7,8 @@ A Claude Code plugin marketplace (`godsenal`) with two plugins — `gbase` (dev 
 ```
 .claude-plugin/marketplace.json     registry — one entry per plugin, with version
 plugins/base/  → gbase              .claude-plugin/plugin.json, skills/<name>/SKILL.md, commands/*.md (legacy),
-                                    references/ (rules several skills share), .claude-plugin/factory.json (orchestrator slots)
+                                    references/ (rules several skills share), .claude-plugin/factory.json (orchestrator slots),
+                                    agents/*.md (subagent types, registered as gbase:<name>), hooks/ (SessionStart routing rule)
 plugins/app/   → gapp               .claude-plugin/plugin.json, skills/<name>/SKILL.md (+ references/)
 scripts/check.py                    repo checks CI runs (.github/workflows/check.yml)
 ```
@@ -26,6 +27,7 @@ Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
   - `setup` writes the `<!-- gbase:verify -->` block in the target repo's `CLAUDE.md` that `go`'s verification gate reads; `create-verify` generates `.claude/skills/verify-*` that `go` runs for touched features, and `go` also runs pstack's `.claude/skills/verify/`.
   - Orchestrator contract (`plugins/base/references/orchestrator.md`, `headless.md`, `.claude-plugin/factory.json`): no orchestrator is ever named in plugin files — only `AGENT_*` variables, files, and report lines. Headless rules live once in `headless.md`; every skill or command that can `AskUserQuestion` points at it in one line (check.py enforces). `go` passes `branch-pr` `Ship-owner: orchestrator; PR-body-file:` and both print the `ship:` / `PR 본문 초안:` lines; `monitor --until-settled` ends with a `settle:` line; `go` and `reproduce` write the evidence file format; each `factory.json` slot names a skill that exists.
   - `bug-fix` starts with `gbase:reproduce`, which only writes the failing check; the fix stays in `bug-fix`.
+  - `hooks/session-start.md` routes tasks to `gbase:work` with the same criteria as `work`'s description, and names the `gbase:scout` / `gbase:worker` agent types that `work`'s Subagents section dispatches; the hook's promise that `work` "asks before anything leaves the machine" is kept by `work`'s Ship gate — change both together. `branch-pr` and `work` use `gbase:unslop`.
   - gapp stages auto-continue to the next stage and update `docs/HARNESS.md`; stage numbers (0 kickoff … 8 store-submit) must match across `kickoff`, each skill's description, and `README.md`.
 
 ## Writing skills
