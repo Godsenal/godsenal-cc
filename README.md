@@ -38,7 +38,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 - Analyzes current git changes
 - Decides the branch name and commit grouping itself (by layer, feature, or change type) — no "confirm?" prompts
-- Runs the PR title and body through `unslop` when that skill is installed
+- Runs the PR title and body through `gbase:unslop`
 - Pushes and opens a PR whose body is a reviewer briefing — **Why** (one sentence), **Change outline** (a diff sketch of the shape that changed, not a changelog), **Evidence** (before → after, plus the checks already run), **Merge danger** (risk tier from the touched paths · one-way/two-way door · blast radius, and how to revert), rollout order when compat-check flags one, and optional **Notes**. Combines humanlayer `visual-pr`, Matt Pocock's `pr`, and gbase's own risk/rollout. Each view and evidence pair uses the form that shows that kind of change best — before/after screenshots for UI, a GIF for interaction, a mermaid sequence diagram for cross-component flow, a pseudocode diff plus fail→pass test for logic, a JSON diff for contracts, one number for performance. Screenshots come from the `verify-*` run and are uploaded to a separate `gbase-assets` branch (never the PR branch). Fills the repo's own PR template instead when one exists
 - Calls **compat-check** before opening the PR; injects a `## Rollout / Deploy order` section when a sequenced rollout is needed
 - Stops only for the narrow "ask only when necessary" cases: a secret in the diff, unrelated WIP mixed in, an ambiguous PR split, a diverged branch, or remote ambiguity
@@ -89,12 +89,15 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Finds the one fact the change is safe because of and **proves it by running code** — every claim is graded on a 5-step evidence ladder (said so → `file:line` → walked the failure → ran a script → reproduced in the app), and an unproven one is labelled `unproven`
 - Deploy-ordering hazards are handed to `compat-check`; read-only on the repo (scratch scripts go to a temp dir)
 
-**work** (skill, explicit) — The front door for a task: `/gbase:work <task>`. Modeled on pstack's `poteto-mode`, without its personal style.
+**work** (skill, model-invocable + session hook) — The front door for a task. Starts on its own for qualifying tasks, or as `/gbase:work <task>`. Modeled on pstack's `poteto-mode`, without its personal style — gbase now covers what pstack was used for, so pstack can be uninstalled.
 
+- **Session hook** (`hooks/session-start.sh`): at startup, resume, clear, and compact it adds the routing rule in `hooks/session-start.md`, which sends qualifying tasks to `work` and specific intents straight to `bug-fix` / `reproduce` / `how` / `why` / `blast-radius` / `go`. Off with `GBASE_SESSION_HOOK=off`; silent under `AGENT_HEADLESS=1` (the caller names each skill). If pstack is installed, turn its hook off (`session hook: off` in `~/.claude/pstack-models.md`) or uninstall it, since both hooks route the same tasks
 - Checks first: resumes unpushed `pause` commits via `pickup`, mentions `setup` once if the repo has no verify block, fast-forwards a stale checkout
 - Picks one route and copies its steps into the todo list (skipped steps stay as `skip: <reason>`): **Investigation** (`how`/`why`, no code), **Bug** (`bug-fix`), **Feature** (data shape first, small verified units, verify on the real surface), **Refactor** (pin behavior first, subtract before adding, keep only if easier to follow), **Perf** (baseline first, cheapest fix first), **Prototype** (throwaway variants decide, then Feature), **Run until done** (a checkable exit predicate, revert what didn't help)
-- Seven core principles (prove it works, verify in small units, smallest change, fix root causes, test behavior, explain the number, don't block on reversible work) and subagent rules (bulk out / conclusions back, parallel by default, Sonnet for exploration, fresh agent per task, own their output)
-- Code routes end in `go`: review ∥ polish → verify → PR → monitor. **Not merged by default** — `--merge` is added only when you ask for it or the project's own instructions (`CLAUDE.md`, memory) say to merge, so a shared/company repo stops at a merge-ready PR
+- Eight core principles (prove it works, verify in small units, smallest change, fix root causes, model the domain, test behavior, explain the number, don't block on reversible work), reply rules (impact first, every claim labelled 확인함/추정/미확인, `unslop` as you write, candor), and subagent rules on gbase's own agent types (`agents/*.md`): `gbase:scout` (read-only, Sonnet; sweeps files, logs, CI output, or transcripts and returns the conclusion with `path:line` evidence) and `gbase:worker` (one self-contained code unit per agent, launched in parallel worktrees when units are independent, proven on the real artifact, never ships)
+- Code routes end in `go`: review ∥ polish → verify → PR → monitor. **Ship gate:** when `work` started on its own and you haven't asked to ship, it asks once before `go` pushes and opens the PR. **Not merged by default** — `--merge` is added only when you ask for it or the project's own instructions (`CLAUDE.md`, memory) say to merge, so a shared/company repo stops at a merge-ready PR
+
+**unslop** (skill, model-invocable) — Rewrite prose to remove AI writing tells. Ported from pstack's `unslop`, with Korean tells (번역투, empty openers and closers, noun-stacked compression, layered honorifics) added. `work` writes replies by its rules.
 
 **review** (skill, model-invocable) — Adversarial code review of the current change. The judgment layer on top of the built-in `code-review`: verification, and a gate deciding what may be fixed without asking.
 
@@ -241,7 +244,8 @@ After installation, the following are available:
 /gbase:pickup                  # Resume from a wip commit, transcript, or another agent's branch (skill, model-invocable)
 /gbase:blast-radius            # What could this break beyond the diff — proven by running code (skill)
 /gbase:review                  # Adversarial review — built-in code-review + skeptic verify (skill, model-invocable)
-/gbase:work <task>             # Start a task: route → steps → go (merges only if asked) (skill, explicit)
+/gbase:work <task>             # Start a task: route → steps → go (merges only if asked) (skill, model-invocable + session hook)
+/gbase:unslop                  # Remove AI writing tells from prose, Korean included (skill, model-invocable)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
 /gbase:monitor --until-settled # Stop once this head's CI and review bots have concluded; never merges (skill)

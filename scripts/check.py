@@ -25,6 +25,7 @@ def skill(name):
 BRANCH_PR = "plugins/base/commands/branch-pr.md"
 ORCHESTRATOR = "plugins/base/references/orchestrator.md"
 HEADLESS = "plugins/base/references/headless.md"
+SESSION_HOOK = "plugins/base/hooks/session-start.md"
 CONTRACTS = [
     ("⚠️ requires ordered rollout", [skill("compat-check"), BRANCH_PR]),
     # compat-check's output template itself, not just prose that mentions the tokens
@@ -51,6 +52,12 @@ CONTRACTS = [
     ("결정 필요:", [HEADLESS, ORCHESTRATOR]),
     ("agent_evidence_file", [skill("go"), skill("reproduce"), ORCHESTRATOR]),
     ("gbase:reproduce", [skill("bug-fix"), skill("reproduce")]),
+    # the session hook routes to work and names the agent types work dispatches
+    ("`gbase:work`", [SESSION_HOOK]),
+    ("gbase:scout", [skill("work"), SESSION_HOOK]),
+    ("gbase:worker", [skill("work"), SESSION_HOOK]),
+    ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
+    ("gbase:unslop", [BRANCH_PR, skill("work")]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
@@ -111,6 +118,9 @@ def check_plugins():
             fail(MARKETPLACE, f"{entry['name']} version {entry.get('version')} != plugin.json {manifest.get('version')}")
         versions[entry["name"]] = (pdir, entry.get("version"))
         check_skills(pdir)
+        check_agents(pdir)
+        check_hooks(pdir)
+        check_references(pdir)
         check_factory(pdir)
     return versions
 
@@ -118,16 +128,10 @@ def check_plugins():
 def check_skills(pdir):
     for skill in sorted(pdir.glob("skills/*/SKILL.md")):
         text = skill.read_text(encoding="utf-8")
-        fm = frontmatter(text)
-        if fm is None:
-            fail(skill, "missing YAML frontmatter")
+        desc = check_frontmatter(skill, text, skill.parent.name)
+        if desc is None:
             continue
-        if fm.get("name") != skill.parent.name:
-            fail(skill, f"frontmatter name {fm.get('name')!r} != directory {skill.parent.name!r}")
-        desc = fm.get("description", "")
-        if not desc:
-            fail(skill, "missing description")
-        elif len(desc) > MAX_DESCRIPTION:
+        if len(desc) > MAX_DESCRIPTION:
             fail(skill, f"description is {len(desc)} chars (listing truncates at {MAX_DESCRIPTION})")
         lines = text.count("\n") + 1
         if lines > MAX_SKILL_LINES:
@@ -140,6 +144,49 @@ def check_skills(pdir):
         if LANG_BLOCK not in text:
             fail(cmd, f"missing `{LANG_BLOCK}` block")
         check_links(cmd, text)
+
+
+def check_frontmatter(path, text, name):
+    """Frontmatter exists, its name matches, and it has a description; returns the description, or None without frontmatter."""
+    fm = frontmatter(text)
+    if fm is None:
+        fail(path, "missing YAML frontmatter")
+        return None
+    if fm.get("name") != name:
+        fail(path, f"frontmatter name {fm.get('name')!r} != {name!r}")
+    desc = fm.get("description", "")
+    if not desc:
+        fail(path, "missing description")
+    return desc
+
+
+def check_agents(pdir):
+    for agent in sorted(pdir.glob("agents/*.md")):
+        check_frontmatter(agent, agent.read_text(encoding="utf-8"), agent.stem)
+
+
+def check_references(pdir):
+    """Every `gbase:<name>` the session hook names and every gbase subagent_type resolves to a skill, agent, or command."""
+    plugin = (load_json(pdir / ".claude-plugin" / "plugin.json") or {}).get("name", "")
+    hook = pdir / "hooks" / "session-start.md"
+    sources = [(hook, rf"`{plugin}:([a-z0-9-]+)`")] if hook.exists() else []
+    sources += [(md, rf'subagent_type: "{plugin}:([a-z0-9-]+)"') for md in sorted(pdir.glob("skills/*/SKILL.md"))]
+    for path, pattern in sources:
+        for name in re.findall(pattern, path.read_text(encoding="utf-8")):
+            if not any((pdir / p).exists() for p in (f"skills/{name}/SKILL.md", f"agents/{name}.md", f"commands/{name}.md")):
+                fail(path, f"names {plugin}:{name}, which is no skill, agent, or command")
+
+
+def check_hooks(pdir):
+    path = pdir / "hooks" / "hooks.json"
+    if not path.exists():
+        return
+    for event in (load_json(path) or {}).get("hooks", {}).values():
+        for group in event:
+            for hook in group.get("hooks", []):
+                for script in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([^\"'\s]+)", hook.get("command", "")):
+                    if not (pdir / script).is_file():
+                        fail(path, f"hook command runs missing file {script}")
 
 
 def check_links(path, text):
