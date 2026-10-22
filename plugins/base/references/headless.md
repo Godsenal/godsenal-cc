@@ -15,6 +15,10 @@ A check-in ("continue?", "does this look right?") isn't a question here — cont
 
 Merging, deploying (including a merge or push that triggers a deploy), force-pushing, rewriting pushed history, deleting data, publishing or store submission, messaging people, and committing a secret are never taken on a recommendation or on an `AGENT_ASK_CMD` answer. The step is not done; it gets a `결정 필요:` line saying what a person would do. A step the invocation itself requested (`--merge`) still runs when the skill's own conditions hold without asking — a gate that would ask means the step is not done.
 
+## End when the work ends
+
+Don't schedule a wakeup, cron, or `sleep` as a fallback for a background agent or check — wait on the result itself (the agent's completion notice, or a foreground poll that returns within 5 minutes). Once the final report is written, stop. A fallback wakeup kept one finished run open 18 more minutes, and the caller waits on the process, not the report.
+
 ## `AGENT_ASK_CMD`
 
 The value is a shell command line. Call it once per question, in the foreground, with a 2-minute tool timeout:
