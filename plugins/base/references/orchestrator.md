@@ -8,17 +8,17 @@ How a program that runs agents with no person attached (for example `claude -p` 
 |---|---|---|---|
 | `AGENT_HEADLESS` | `1` | every skill that would ask | No questions; see [headless.md](headless.md). |
 | `AGENT_ASK_CMD` | a shell command line | the same, only under `AGENT_HEADLESS=1` | Questions go to this command; protocol in [headless.md](headless.md#agent_ask_cmd). |
-| `AGENT_SHIP_OWNER` | `orchestrator`, `agent` | `go` | `orchestrator`: `go` stops after local commits and a PR body draft. Unset or any other value: `agent`, today's flow (push, PR, monitor). |
-| `AGENT_PR_BODY_FILE` | a path | `go` when the owner is `orchestrator` | Where the draft goes. Default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` (per worktree, outside the tree). |
-| `AGENT_EVIDENCE_FILE` | a path | `go`, `reproduce` | Check results are appended as JSON lines ([below](#evidence-file)). |
+| `AGENT_SHIP_OWNER` | `orchestrator`, `agent` | `go`, `monitor --until-settled` | `orchestrator`: `go` stops after local commits and a PR body draft; `monitor --until-settled` commits its fixes locally and posts nothing ([Settle](#settle)); other `monitor` modes aren't run under it. Unset or any other value: `agent`, today's flow (push, PR, monitor, replies). |
+| `AGENT_PR_BODY_FILE` | a path | `go` and `monitor --until-settled` when the owner is `orchestrator` | Where the draft goes. Default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` (per worktree, outside the tree). |
+| `AGENT_EVIDENCE_FILE` | a path | `go`, `reproduce`, `monitor --until-settled` | Check results are appended as JSON lines ([below](#evidence-file)). |
 
 ## Report lines
 
 The final assistant message carries these lines at column 0; grep for the prefix.
 
 - `결정 필요: …` — a decision taken without a person, or an irreversible step not taken ([headless.md](headless.md#결정-필요-lines)).
-- `ship: local <branch> @<short-sha> — <n> commits, not pushed` — `go` under `AGENT_SHIP_OWNER=orchestrator`.
-- `PR 본문 초안: <absolute path>` — the same run.
+- `ship: local <branch> @<short-sha> — <n> commits, not pushed` — `go` under `AGENT_SHIP_OWNER=orchestrator`, and `monitor --until-settled` under it when it committed fixes.
+- `PR 본문 초안: <absolute path>` — the same runs.
 - `settle: …` — `monitor --until-settled` ([below](#settle)).
 
 ## Ship owner `orchestrator`
@@ -29,7 +29,7 @@ The final assistant message carries these lines at column 0; grep for the prefix
 - line 2: empty
 - line 3 on: the body exactly as `gh pr create --body` would receive it — `## Why`, `## Change outline`, `## Evidence`, `## Merge danger`, `## Rollout / Deploy order` when compat-check returned `⚠️ Requires ordered rollout`, `## Notes`. Screenshots are referenced by their local `artifacts/verify/…` path, because nothing was uploaded.
 
-Opening the PR from it: `gh pr create --title "$(head -n 1 "$f")" --body "$(tail -n +3 "$f")"`. Review findings that needed a decision are in the report as a table, under `## Notes` in the draft, and in the evidence file as a failed `review` line.
+Opening the PR from it: `gh pr create --title "$(head -n 1 "$f")" --body "$(tail -n +3 "$f")"`. Review findings that needed a decision are in the report as a table, under `## Notes` in the draft, and in the evidence file as an `open` `review` line.
 
 ## Evidence file
 
@@ -37,18 +37,19 @@ JSON Lines, appended with `>>`, never rewritten (the caller may have written lin
 
 | Field | Required | Value |
 |---|---|---|
-| `step` | yes | `review`, `polish`, `checks`, `behavior`, `reproduce` |
-| `result` | yes | `pass`, `fail`, `skip` |
+| `step` | yes | `review`, `polish`, `checks`, `behavior`, `reproduce`, `settle` |
+| `result` | yes | `pass`, `fail`, `skip`, `open` (`review` and `settle` only: ran, but something awaits a decision or hasn't concluded — not a failure) |
 | `command` | yes | what ran: the shell command for `checks` and `reproduce`; the skill and feature for `behavior` (`/verify login`); the skill for `review` and `polish` |
-| `detail` | yes | one line, at most ~500 characters: on `fail` the lines that show the failure, on `skip` the reason, on `pass` what was observed |
+| `detail` | yes | one line, at most ~500 characters: on `fail` the lines that show the failure, on `skip` the reason, on `pass` what was observed, on `open` what is left |
 | `cause` | on `checks`/`behavior` `fail` | `diff` (the change caused it), `pre-existing`, `flaky`, or `environment` (no DB, device, or credential) |
 
 Lines per step:
 
-- `review` — one per `go` run. `pass`: the review ran and no surviving finding is left open. `fail`: findings that need a decision remain; `detail` lists `severity file:line`. `skip`: not run (`--no-review`, a scope review skips, or the finder never returned).
+- `review` — one per `go` run, and per `monitor --until-settled` run whose self-review ran. `pass`: the review ran and no surviving finding is left open. `open`: findings that need a decision remain; `detail` lists `severity file:line`. (Before v1.28.0 this was `fail`; a reader of older files should treat a `review` `fail` as `open`.) `skip`: not run (`--no-review`, a scope review skips, or the finder never returned).
 - `polish` — one per `go` run. `fail` only when polish couldn't complete; a reverted edit isn't a failure.
 - `checks` — one per verification command, with its final result after any fix attempts. `--no-verify` or no commands found → one `skip` line.
 - `behavior` — one per feature the repo's verify skill drove. No verify skill, or no touched feature in its map → one `skip` line.
+- `settle` — one per `monitor --until-settled` run: `pass` for `수렴`, `open` for `미확정`, `fail` for `사람 필요`; `detail` is the `settle:` line. Its fix verifications are `checks` lines.
 - `reproduce` — the result of the reproduction check now: `fail` means the bug reproduced or the criterion isn't met, `pass` means it didn't reproduce, `skip` means no executable check was possible.
 
 Write each line with a JSON encoder, never by hand-quoting:
@@ -73,6 +74,8 @@ settle: 사람 필요 @<short-sha> — <item>, …
 - `사람 필요` — something only a person can resolve: a failing check monitor couldn't fix, a review comment that needs a decision, a standing `CHANGES_REQUESTED`, or a merge conflict.
 
 When more than one applies, `사람 필요` wins over `미확정`. The head sha is the last one monitor waited on; each fix it pushes starts a new wait. It never merges, rebases, or force-pushes in this mode.
+
+Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes nothing and posts nothing. It judges the pushed head once, commits its fixes locally, and, when there are any, writes an updated PR draft to `AGENT_PR_BODY_FILE` and ends with `ship: local …`, `PR 본문 초안: …`, and `settle: 미확정 @<pushed sha> — 푸시 대기: <n> commits` (or `사람 필요`). The caller pushes, updates the PR body from the draft (`gh pr edit --title "$(head -n 1 "$f")" --body "$(tail -n +3 "$f")"`), and runs settle again. `AGENT_SHIP_OWNER=agent` opts into pushing and replying.
 
 ## Manifest
 
@@ -135,7 +138,7 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `pid`, `started_at`, `finished_at`, `run_dir`, `prompt_path`, `log_path` | bookkeeping |
 | `exit_code` | the highest exit code of the claude sessions |
 | `branch`, `head_sha` | of `cwd` after the run |
-| `decisions` | every `결정 필요:` line, in order |
+| `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, except `options`, which is `[]` when the line lists none |
 | `ship`, `settle` | the `ship:` / `settle:` line, or `null` |
 | `pr_body_file` | the path from `PR 본문 초안:`, else `pr-body.md` if it exists, else `null` |
 | `evidence` | the parsed evidence lines |
@@ -150,11 +153,11 @@ A follow-up run answers a run's decisions with `--answers <file>`:
 {
   "run_id": "<run whose decisions these answer>",
   "answers": [
-    { "decision": "<the question of a 결정 필요: line (before its →), or a question from questions.jsonl>", "answer": "<option label or instruction>" }
+    { "decision": "<a 결정 필요: line or its question, or a question from questions.jsonl>", "answer": "<option label or instruction>" }
   ]
 }
 ```
 
-`run_id` is optional; when given, `--repo`, `--slot`, and `--task` default to that run's, and the run continues in that run's `cwd` (its worktree, where its edits are). The answers go into the prompt as decisions already made, and a question asked again gets its answer from `AGENT_ASK_CMD` — the exact text first, then ignoring case, a leading `결정 필요:`, and how whitespace and punctuation are spaced (`Use the cache?` matches `use the cache`; `v1.2.0` doesn't match `v12.0`). When answers that differ match only after normalizing, none is given. The rest of a report line (`→ <choice> (다른 선택지: …)`) isn't stripped, so `decision` should hold the question itself.
+`run_id` is optional; when given, `--repo`, `--slot`, and `--task` default to that run's, and the run continues in that run's `cwd` (its worktree, where its edits are). The answers go into the prompt as decisions already made, and a question asked again gets its answer from `AGENT_ASK_CMD` — the exact text first, then ignoring case, a leading `결정 필요:`, and how whitespace and punctuation are spaced (`Use the cache?` matches `use the cache`; `v1.2.0` doesn't match `v12.0`). When answers that differ match only after normalizing, none is given. A `decision` that starts with `결정 필요:` is a pasted report line: only its question counts, so the `→ …` tail, the `(추천: …; 다른 선택지: …)` group, and `· AGENT_ASK_CMD 에 넘김` are dropped.
 
 Environment of the runner itself: `GBASE_CLAUDE` (default `~/.claude/local/claude`, else `claude` on `PATH`), `GBASE_HOME`, `GBASE_PLUGIN_DIR` (default `plugins/base` of the checkout), `GBASE_PERMISSION_MODE` (default `bypassPermissions`; the child has no person to approve tools), `GBASE_ASK_CMD`.

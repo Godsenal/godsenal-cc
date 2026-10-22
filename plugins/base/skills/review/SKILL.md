@@ -30,7 +30,7 @@ Mode decides how fixes land:
 
 | | **Pre-PR** (from `gbase:go`, or a dirty tree) | **Post-PR** (clean tree + open PR, e.g. from `gbase:monitor`) |
 |---|---|---|
-| Fixes land as | working-tree edits, no commits — `branch-pr` groups them | one commit per fix, pushed |
+| Fixes land as | working-tree edits, no commits — `branch-pr` groups them | one commit per fix, pushed — not pushed under `AGENT_SHIP_OWNER=orchestrator` |
 
 The caller's stated mode wins. Without one, a dirty tree means pre-PR even if a PR is open — committing would sweep the user's unrelated edits into a review commit.
 

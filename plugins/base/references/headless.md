@@ -34,8 +34,10 @@ sh -c "$AGENT_ASK_CMD \"\$@\"" ask "<question>" --recommend "<recommended option
 One line per decision, at the end of the final report, each starting at column 0 so a caller can `grep '^결정 필요:'`:
 
 ```
-결정 필요: <무엇을 정해야 했나> → <정한 것> (다른 선택지: <a> / <b>)
-결정 필요: <되돌리기 어려운 단계> → 하지 않음 (사람이 할 일: <…>)
+결정 필요: <질문> → <적용한 것> (추천: <추천한 것>; 다른 선택지: <a> / <b>)
+결정 필요: <되돌리기 어려운 단계> → 하지 않음 (추천: <추천한 것>; 사람이 할 일: <…>)
 ```
+
+`→` is followed by what this run actually applied; `추천:` is what the skill would pick with a person present, even when it equals the applied default. A caller parses these parts, so keep the order, the `; ` between them, and the ` / ` between options, and keep the reasoning out of the line — put it in the report above.
 
 A skill called by another skill hands its lines up; the outermost skill's report carries all of them.

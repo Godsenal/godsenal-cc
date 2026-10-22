@@ -4,9 +4,9 @@
   "env": {
     "AGENT_HEADLESS": "1 = no person attached; skills decide instead of asking and report each decision as a `결정 필요:` line",
     "AGENT_ASK_CMD": "shell command that receives each question under AGENT_HEADLESS=1: <cmd> ask \"<question>\" --recommend \"<option>\" [--option \"<option>\"]...; non-empty stdout is the answer",
-    "AGENT_SHIP_OWNER": "orchestrator = go stops after local commits and a PR body draft (no push, PR, or monitor); agent or unset = go pushes, opens the PR, and monitors it",
-    "AGENT_PR_BODY_FILE": "where go writes the PR draft (line 1 title, line 2 empty, then the body) when AGENT_SHIP_OWNER=orchestrator; default $(git rev-parse --absolute-git-dir)/gbase/pr-body.md",
-    "AGENT_EVIDENCE_FILE": "JSON Lines file go and reproduce append check results to: {step, result, command, detail, cause?}"
+    "AGENT_SHIP_OWNER": "orchestrator = go stops after local commits and a PR body draft (no push, PR, or monitor), and monitor --until-settled commits its fixes locally without pushing or replying; agent or unset = go pushes, opens the PR, and monitors it, and monitor pushes and replies",
+    "AGENT_PR_BODY_FILE": "where go (and monitor --until-settled, after local fixes) writes the PR draft (line 1 title, line 2 empty, then the body) when AGENT_SHIP_OWNER=orchestrator; default $(git rev-parse --absolute-git-dir)/gbase/pr-body.md",
+    "AGENT_EVIDENCE_FILE": "JSON Lines file go, reproduce, and monitor --until-settled append check results to: {step, result, command, detail, cause?}; result is pass, fail, skip, or open (review/settle: awaits a decision or a conclusion)"
   },
   "slots": {
     "review": {
@@ -46,8 +46,8 @@
     },
     "settle": {
       "invoke": "/gbase:monitor --until-settled",
-      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
-      "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. Never merges, rebases, or force-pushes."
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
+      "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. With AGENT_SHIP_OWNER=orchestrator its fixes stay local commits, nothing is posted, and after any fix it reports `ship: local …` and `PR 본문 초안:` with a refreshed draft; agent pushes and replies. Never merges, rebases, or force-pushes."
     },
     "learn": {
       "invoke": "/gbase:correct",
