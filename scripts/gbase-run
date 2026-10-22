@@ -93,7 +93,9 @@ def build_prompt(slot, spec, task, answers):
         prompt = f"{invoke} {task}".strip() if task else invoke
     if answers and answers.get("answers"):
         src = f"이전 실행 {answers['run_id']}에서" if answers.get("run_id") else "이전 실행에서"
-        lines = "\n".join(f"- {a['decision']} → {a['answer']}" for a in answers["answers"])
+        # a pasted `결정 필요:` line carries its own `→ applied (추천: …)` tail; only its question goes in the prompt
+        lines = "\n".join(f"- {parse_decision(d)['question'] if DECISION_PREFIX.match(d) else d} → {a['answer']}"
+                          for a in answers["answers"] for d in [str(a.get("decision") or "")])
         prompt += (f"\n\n{src} 사람이 답한 결정이다. 같은 결정이 다시 나오면 묻지 말고 이 답을 적용하고, "
                    f"그 결정에는 `결정 필요:` 줄을 쓰지 않는다.\n{lines}")
     return prompt
