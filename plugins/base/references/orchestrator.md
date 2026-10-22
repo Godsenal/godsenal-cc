@@ -138,7 +138,7 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `pid`, `started_at`, `finished_at`, `run_dir`, `prompt_path`, `log_path` | bookkeeping |
 | `exit_code` | the highest exit code of the claude sessions |
 | `branch`, `head_sha` | of `cwd` after the run |
-| `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, `options` `[]` |
+| `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, except `options`, which is `[]` when the line lists none |
 | `ship`, `settle` | the `ship:` / `settle:` line, or `null` |
 | `pr_body_file` | the path from `PR 본문 초안:`, else `pr-body.md` if it exists, else `null` |
 | `evidence` | the parsed evidence lines |
