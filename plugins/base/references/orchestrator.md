@@ -109,6 +109,8 @@ Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes noth
 - `slots.<slot>.reads` — optional: target-repo files the slot depends on.
 - `slots.<slot>.models` — optional: run `invoke` once per model, in independent sessions at the same time, and merge their reports. Only `review2` has it: `gbase:review` in *report only* mode, so neither session edits the tree, merged by `file:line` (same file, lines at most 3 apart) with each finding marked by the model(s) that found it.
 
+`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work {ticket}` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own.
+
 A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. There is no `plan` slot: `gbase:how` explains the code a task touches, but it doesn't decide scope or acceptance criteria.
 
 ## Runner

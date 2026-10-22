@@ -9,6 +9,11 @@
     "AGENT_EVIDENCE_FILE": "JSON Lines file go, reproduce, and monitor --until-settled append check results to: {step, result, command, detail, cause?}; result is pass, fail, skip, or open (review/settle: awaits a decision or a conclusion)"
   },
   "slots": {
+    "work": {
+      "invoke": "/gbase:work {ticket}",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
+      "notes": "The front door for one task (a card, a ticket): picks the route (bug, feature, refactor, …), does the work, and ends in the ship slot's gbase:go — review ∥ polish, verification gate including the repo's verify skill, commits. An orchestrator opens its dev run with this instead of naming review, polish and checks as separate steps; {ticket} is the task's id, and the task itself comes from the orchestrator's prompt."
+    },
     "review": {
       "invoke": "/gbase:review pre-PR mode; defer, don't ask",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
