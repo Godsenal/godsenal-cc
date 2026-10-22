@@ -357,8 +357,8 @@ def cmd_list(_argv):
 def cmd_question(argv):
     """AGENT_ASK_CMD for runs: `question <run-id> [ask] "<q>" --recommend "<o>" [--option "<o>"]...`
     (headless.md's `sh -c` form passes `ask` as $0, so the verb usually doesn't arrive).
-    Records the question and answers it only from the run's --answers file (exact match); otherwise
-    prints nothing, so the skill applies its recommendation and writes a `결정 필요:` line."""
+    Records the question and answers it only from the run's --answers file (exact match first, then
+    normalize_decision); otherwise prints nothing, so the skill applies its recommendation and writes a `결정 필요:` line."""
     run_dir = RUNS / argv[0]
     q = argparse.ArgumentParser()
     q.add_argument("words", nargs="+")
@@ -370,10 +370,24 @@ def cmd_question(argv):
         f.write(json.dumps({"question": a.question, "recommend": a.recommend, "options": a.option}, ensure_ascii=False) + "\n")
     answers = run_dir / "answers.json"
     if answers.exists():
-        for ans in json.loads(answers.read_text(encoding="utf-8")).get("answers", []):
-            if ans.get("decision", "").strip() == a.question.strip():
-                print(ans["answer"])
-                return
+        known = json.loads(answers.read_text(encoding="utf-8")).get("answers", [])
+        exact = [ans["answer"] for ans in known if str(ans.get("decision") or "").strip() == a.question.strip()]
+        key = normalize_decision(a.question)
+        fuzzy = {ans["answer"] for ans in known if key and normalize_decision(str(ans.get("decision") or "")) == key}
+        if exact or len(fuzzy) == 1:  # answers that disagree on the normalized text give none
+            print((exact or list(fuzzy))[0])
+
+
+SENTENCE_PUNCT = set("?!,.:;'\"？！，。：；、‘’“”「」")
+
+
+def normalize_decision(text):
+    """Drops a leading `결정 필요:`, casefolds, and turns each run of whitespace and sentence punctuation
+    into one space, so `v1.2.0` and `v12.0` stay apart while `Use the cache?` matches `use the cache`.
+    Symbols that carry meaning (`-`, `#`, `%`, `_`) stay, so `-1` and `1` or `C#` and `C` don't match."""
+    text = re.sub(r"^\s*결정\s*필요\s*[:：]", "", text).casefold()
+    text = "".join(" " if c.isspace() or c in SENTENCE_PUNCT else c for c in text)
+    return " ".join(text.split())
 
 
 def main():

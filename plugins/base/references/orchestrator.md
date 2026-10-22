@@ -150,11 +150,11 @@ A follow-up run answers a run's decisions with `--answers <file>`:
 {
   "run_id": "<run whose decisions these answer>",
   "answers": [
-    { "decision": "<the 결정 필요: line, or a question from questions.jsonl>", "answer": "<option label or instruction>" }
+    { "decision": "<the question of a 결정 필요: line (before its →), or a question from questions.jsonl>", "answer": "<option label or instruction>" }
   ]
 }
 ```
 
-`run_id` is optional; when given, `--repo`, `--slot`, and `--task` default to that run's, and the run continues in that run's `cwd` (its worktree, where its edits are). The answers go into the prompt as decisions already made, and a question asked again with exactly the same text gets its answer from `AGENT_ASK_CMD`.
+`run_id` is optional; when given, `--repo`, `--slot`, and `--task` default to that run's, and the run continues in that run's `cwd` (its worktree, where its edits are). The answers go into the prompt as decisions already made, and a question asked again gets its answer from `AGENT_ASK_CMD` — the exact text first, then ignoring case, a leading `결정 필요:`, and how whitespace and punctuation are spaced (`Use the cache?` matches `use the cache`; `v1.2.0` doesn't match `v12.0`). When answers that differ match only after normalizing, none is given. The rest of a report line (`→ <choice> (다른 선택지: …)`) isn't stripped, so `decision` should hold the question itself.
 
 Environment of the runner itself: `GBASE_CLAUDE` (default `~/.claude/local/claude`, else `claude` on `PATH`), `GBASE_HOME`, `GBASE_PLUGIN_DIR` (default `plugins/base` of the checkout), `GBASE_PERMISSION_MODE` (default `bypassPermissions`; the child has no person to approve tools), `GBASE_ASK_CMD`.

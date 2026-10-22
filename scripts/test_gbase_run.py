@@ -85,6 +85,32 @@ class GbaseRunTest(unittest.TestCase):
                              env=self.env, capture_output=True, text=True)
         self.assertEqual(ask.stdout.strip(), "B")
 
+    def test_question_matches_answer_despite_spacing_punctuation_case_and_prefix(self):
+        run_dir = self.tmp / "home" / "runs" / "r1"
+        run_dir.mkdir(parents=True)
+        (run_dir / "answers.json").write_text(json.dumps({"answers": [
+            {"decision": "결정 필요:  Use  the CACHE", "answer": "fuzzy"},
+            {"decision": "Use the cache?", "answer": "exact"},
+            {"decision": "결정 필요： Bump to v1.2.0", "answer": "yes"},
+            {"decision": "Drop logs?", "answer": "no"}, {"decision": "drop LOGS", "answer": "yes"},
+            {"decision": "Set retries to -1?", "answer": "unlimited"}, {"decision": "Port it to C#?", "answer": "csharp"},
+            {"decision": None, "answer": "x"}, {"decision": "?!", "answer": "empty"}]}, ensure_ascii=False))
+
+        def ask(q):
+            return subprocess.run([sys.executable, str(RUNNER), "question", "r1", "ask", q, "--recommend", "A"],
+                                  env=self.env, capture_output=True, text=True).stdout.strip()
+
+        self.assertEqual(ask("Use the cache?"), "exact")
+        self.assertEqual(ask("bump to v1.2.0?"), "yes")
+        self.assertEqual(ask("Bump to v12.0?"), "")
+        self.assertEqual(ask("drop logs"), "")  # two different answers normalize alike
+        self.assertEqual(ask("Use a cache?"), "")
+        self.assertEqual(ask("..."), "")
+        self.assertEqual(ask("set retries to -1"), "unlimited")
+        self.assertEqual(ask("Set retries to 1?"), "")
+        self.assertEqual(ask("port it to c#"), "csharp")
+        self.assertEqual(ask("Port it to C?"), "")
+
     def test_review2_runs_both_models_and_merges_by_location(self):
         r, out = self.run_cli("--repo", str(self.repo), "--slot", "review2")
         self.assertEqual(r.returncode, 0, r.stderr)
