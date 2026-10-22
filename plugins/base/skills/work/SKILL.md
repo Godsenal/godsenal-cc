@@ -65,7 +65,9 @@ Put the route's steps into the todo list verbatim, before task-specific items. A
 
 ## 2. Ship
 
-Every route except Investigation and Prototype ends with `Skill(skill: "gbase:go")` — review ∥ polish, verify, PR, monitor.
+Every route except Investigation and Prototype ends with `Skill(skill: "gbase:go")` — review ∥ polish, verify, PR, monitor; the review and behavior check scale with the change's risk tier.
+
+Before calling it, write the route's surface verification as `behavior:` lines in this session (`behavior: <feature> → pass (<evidence>)`, or `behavior: skip — <reason>` when the surface can't be reached). `go` reuses them instead of running the behavior check again.
 
 **Ship gate.** `go` pushes and opens a PR. Skip the question only when, for this task, the user typed `/gbase:work <task>` or explicitly asked to ship it or open a PR; an earlier task's request doesn't carry over, and "finish" or "wrap up" is not a ship request. Otherwise ask once before calling `go`: run it now, or stop with the change verified and uncommitted (the user runs `/gbase:go` later). The rest of the route needs no confirmation.
 

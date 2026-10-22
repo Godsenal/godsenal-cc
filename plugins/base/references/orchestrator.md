@@ -45,10 +45,10 @@ JSON Lines, appended with `>>`, never rewritten (the caller may have written lin
 
 Lines per step:
 
-- `review` — one per `go` run, and per `monitor --until-settled` run whose self-review ran. `pass`: the review ran and no surviving finding is left open. `open`: findings that need a decision remain; `detail` lists `severity file:line`. (Before v1.28.0 this was `fail`; a reader of older files should treat a `review` `fail` as `open`.) `skip`: not run (`--no-review`, a scope review skips, or the finder never returned).
+- `review` — one per `go` run, and per `monitor --until-settled` run whose self-review ran. `pass`: the review ran and no surviving finding is left open. `open`: findings that need a decision remain; `detail` lists `severity file:line`. (Before v1.28.0 this was `fail`; a reader of older files should treat a `review` `fail` as `open`.) `skip`: not run (`low` risk, `--no-review`, a scope review skips, or the finder never returned).
 - `polish` — one per `go` run. `fail` only when polish couldn't complete; a reverted edit isn't a failure.
 - `checks` — one per verification command, with its final result after any fix attempts. `--no-verify` or no commands found → one `skip` line.
-- `behavior` — one per feature the repo's verify skill drove. No verify skill, or no touched feature in its map → one `skip` line.
+- `behavior` — one per feature checked on its surface: by the repo's verify skill, by a CLI or script run when there is none (`command` is then that shell command), or reused from `gbase:work`'s route run. `low` risk, or nothing that could be run → one `skip` line.
 - `settle` — one per `monitor --until-settled` run: `pass` for `수렴`, `open` for `미확정`, `fail` for `사람 필요`; `detail` is the `settle:` line. Its fix verifications are `checks` lines.
 - `reproduce` — the result of the reproduction check now: `fail` means the bug reproduced or the criterion isn't met, `pass` means it didn't reproduce, `skip` means no executable check was possible.
 

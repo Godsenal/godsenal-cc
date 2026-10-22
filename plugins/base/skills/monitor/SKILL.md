@@ -102,11 +102,11 @@ Only when `--merge` was passed — because the user asked to merge, or the proje
 
 **Ask** for everything else — same-line semantic edits, migrations/schemas, config files (`.env*`, `tsconfig.json`, `app.json`/`app.config.*`, `eas.json`, `Info.plist`, `build.gradle*`, `Podfile`, `next.config.*`, CI yamls), conflicts over ~30 lines, rebases replaying more than ~5 commits, renames modified on the other side.
 
-After resolving: `git rebase --continue`, polish the resolved non-lockfile files, `git push --force-with-lease`. A conflict that reappears after a clean rebase means a parallel PR is fighting the same lines — stop and surface.
+After resolving: polish the resolved files when the resolution rewrote logic (see below) and `git add` them, then `git rebase --continue`, `git push --force-with-lease`. A conflict that reappears after a clean rebase means a parallel PR is fighting the same lines — stop and surface.
 
 ## Polish before committing
 
-Run `Skill(skill: "gbase:polish", args: "<touched files>")` on every non-trivial monitor edit and fold its changes into the same commit. Skip for formatter output, verbatim suggestion blocks, lockfile regeneration, and whitespace-only resolutions.
+Run `Skill(skill: "gbase:polish", args: "<touched files>")` only on a monitor edit beyond the auto-apply gate — a change the user approved after you asked, or a conflict resolution that rewrote logic — and fold its changes into the same commit. Skip it for everything that gate admits, formatter output, lockfile regeneration, and whitespace-only resolutions — polish's four agents cost more than such an edit carries.
 
 ## Replies
 

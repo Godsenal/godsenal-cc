@@ -35,6 +35,9 @@ CONTRACTS = [
     ("- `⚠️ requires ordered rollout`", [skill("compat-check")]),
     ("start at stage 2", [skill("go"), skill("review")]),
     ("defer, don't ask", [skill("go"), skill("review")]),
+    ("one skeptic for low/medium", [skill("go"), skill("review")]),
+    # work hands go its surface verification so go doesn't run the behavior check twice
+    ("`behavior:`", [skill("work"), skill("go")]),
     ("--no-review", [skill("go"), skill("monitor")]),
     ("--draft", [skill("go"), skill("monitor")]),
     ("--merge", [skill("work"), skill("go"), skill("monitor")]),
