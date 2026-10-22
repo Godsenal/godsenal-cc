@@ -63,13 +63,15 @@ Skeptic prompt:
 
 One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–3 unrelated findings per skeptic so a large review doesn't spawn a dozen agents; each finding still gets its own verdict. These run with `model: "sonnet"`. High/critical (data loss, security, corruption, crash on a common path) gets three skeptics of its own with different angles, on the session's model (omit `model`) — a wrong refutation silently drops a real bug; a majority refutation kills it. A model the user names for either tier wins. Refuted findings are dropped from the report; keep the count and one-line reasons.
 
+When the caller says *one skeptic for low/medium* (`gbase:go` does on a medium-risk change), all low/medium findings go to a single Sonnet skeptic, each still judged separately; high/critical keep their panel. The skeptic stays a separate agent — the caller already holds the finder output and would anchor on it.
+
 ## Stage 3 — Act
 
 **Pre-existing first.** If the defective line isn't in the diff's added/changed hunks (check `git blame` against the base when unsure), label it `pre-existing`: report it, never auto-fix it, and keep it out of the `S survived` / `K for you` counts (it still gets its own table row). Fixing it widens the PR beyond its intent and pins an old bug on this change.
 
 **Fix the class, not the line.** When a survivor is a pattern (a missing `await`, an unchecked `null`, a wrong unit), grep the diff for every other instance and treat them as one finding — otherwise the next round finds the sibling.
 
-**Auto-fix** a survivor only when the fix is mechanical, local (one or two files, small), and fully determined by the finding — no design choice, dependency, schema/migration, API-contract change, or test added/removed. Land it per the mode. Run `gbase:polish` on the touched files before a non-trivial fix is committed or handed back — in pre-PR mode nothing else will polish it.
+**Auto-fix** a survivor only when the fix is mechanical, local (one or two files, small), and fully determined by the finding — no design choice, dependency, schema/migration, API-contract change, or test added/removed. Land it per the mode, without re-running `gbase:polish` — the gate already limits it to a mechanical, local edit.
 
 When the caller says *report only* (the orchestrator's `review2` slot runs two reviewers on one tree at once), auto-fix nothing: every survivor goes in the report as `needs decision`, so neither reviewer edits under the other.
 

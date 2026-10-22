@@ -1,14 +1,14 @@
 ---
 name: go
 description: "Ships a finished change end to end — reviews and polishes it in parallel, applies verified review fixes, runs the project's fast checks, opens the PR via gbase:branch-pr, and watches it to merge via gbase:monitor. Review happens before the PR so fixes land in the initial commits. Use when the user says a change is done and wants it shipped, or runs /gbase:go."
-allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Edit Write
+allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Agent Edit Write
 ---
 
 # /gbase:go
 
 Takes a finished change to an open, watched PR: **review ∥ polish → verify → branch-pr → monitor**, back to back. `go` only sequences; each sub-skill keeps its own consent and safety rules, so auto-triggering it never bypasses them.
 
-Review runs *before* the PR so its fixes land in the initial commits — a review after the PR opens turns every finding into an extra commit and a CI rerun. The built-in `code-review` forks to a background agent, so running it alongside polish costs no wall-clock.
+Review runs *before* the PR so its fixes land in the initial commits — a review after the PR opens turns every finding into an extra commit and a CI rerun. The finder runs in a background agent, so running it alongside polish costs no wall-clock.
 
 ## 출력 언어
 
@@ -30,23 +30,34 @@ Step 1 reads the `AGENT_*` variables once (`printenv | grep '^AGENT_'`); with no
 
 ### 1. Scope
 
-Uncommitted changes → target them. Clean tree with unpushed `gbase:pause` commits at the tip (`wip:` subject + `Intent:` body) → target their combined diff and ship it — `branch-pr` regroups them. Otherwise clean tree → target the latest commit (`git show HEAD --name-only`); if later steps produce no edits there, there is nothing to PR — say so and stop. Classify its risk the way `branch-pr` does — `high` if it touches a path `REVIEW.md` marks always-high (without one: auth, payments, migrations, CI/release workflows, app config), `low` for docs/copy/tests/flagged additive changes, else `medium`. Report scope and risk in one line.
+Uncommitted changes → target them. Clean tree with unpushed `gbase:pause` commits at the tip (`wip:` subject + `Intent:` body) → target their combined diff and ship it — `branch-pr` regroups them. Otherwise clean tree → target the latest commit (`git show HEAD --name-only`); if later steps produce no edits there, there is nothing to PR — say so and stop. Classify its risk the way `branch-pr` does — `high` if it touches a path `REVIEW.md` marks always-high (without one: auth, payments, migrations, CI/release workflows, app config), `low` for docs/copy/tests/flagged additive changes, else `medium`. A user who asked for a deep pass gets `high`'s depth. Report scope and risk in one line.
+
+The tier sets how much defect-hunting and behavior checking runs. Polish isn't in the table: it runs the same on every tier (its own skip rules still apply).
+
+| risk | finder | Step 3 skeptics | behavior check |
+|---|---|---|---|
+| `low` | skip — monitor's self-review covers it during the CI wait | — | skip — fast checks only |
+| `medium` | `code-review medium` | `one skeptic for low/medium` | required |
+| `high` | `code-review high` | all findings | required |
 
 Under `AGENT_SHIP_OWNER=orchestrator` a clean tree targets every commit on the branch that isn't in the base (`<base>...HEAD`; base = `origin/<default>` when it exists, else the local default branch) — the orchestrator's agent may have committed as it worked.
 
 ### 2. Review (background) ∥ polish
 
-Launch the finder, then polish while it runs:
+Launch the finder in the background, then polish while it runs — both calls in one message:
 
 ```
-Skill(skill: "code-review", args: "<medium | high per Step 1 risk> <scope from Step 1>")
+Agent(subagent_type: "general-purpose", run_in_background: true, description: "review finder",
+      prompt: "Run Skill(skill: \"code-review\", args: \"<effort> <scope from Step 1>\") and return its findings verbatim. Edit nothing.")
 Skill(skill: "gbase:polish", args: "<in-scope files>")
 ```
 
+- **Don't call `code-review` directly here.** Under `claude -p` a forked skill blocks its caller until it finishes, which turned review ∥ polish into review → polish in headless runs.
+
 - **Pass the scope explicitly.** With no target the built-in reviews the current diff, which is empty on the clean-tree path — it would report "nothing found" about a commit it never read.
-- `medium` by default; `high` when Step 1 rated the change high-risk or the user asked for a deep pass. Not higher by default — above `medium` the built-in fans out to a multi-agent workflow, worth it only where one missed bug is costly.
+- Effort per the Step 1 table. Never above `high` — above `medium` the built-in already fans out to a multi-agent workflow, worth it only where one missed bug is costly.
 - Never `--fix` (it would race polish for the same files), `--comment` (no PR yet), or `ultra` (user-triggered and billed).
-- Skip the finder on `--no-review` and on scopes review skips anyway (pure rename, dependency bump, generated code).
+- Skip the finder per the table's `low` row, on `--no-review`, and on scopes review skips anyway (pure rename, dependency bump, generated code).
 
 ### 3. Apply review findings
 
@@ -56,22 +67,28 @@ When the findings arrive, hand them to review's judgment stages:
 Skill(skill: "gbase:review", args: "pre-PR mode; defer, don't ask; candidates already found — start at Stage 2. Findings: <finder output>")
 ```
 
+On `medium`, insert `; one skeptic for low/medium` right after `start at Stage 2`.
+
 Clear fixes come back as working-tree edits (no commits — `branch-pr` groups them); judgment calls come back deferred. Polish rewrote these files after the finder read them, so locate each finding by the code it quotes, not by `file:line`, and re-judge any whose quoted code is gone. Where a review fix and polish collide, the review fix wins.
 
-If the findings haven't arrived when polish finishes, go on to Step 4 and apply them when they land — post-PR mode if the PR is open by then. Under `AGENT_SHIP_OWNER=orchestrator` wait for them before Step 5 instead: no PR will exist to apply them to, and the run ends at Step 5. Skip this step when the finder was skipped. Tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`.
+If the findings haven't arrived when polish finishes, wait for them before Step 4 — the gate then runs once on the final tree instead of again after the fixes. If the finder fails, go on without it (Step 6 drops `--no-review`). Skip this step when the finder was skipped. Tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`.
 
 ### 4. Verification gate
 
-Run the project's own checks over the changed scope — polish only validates its own edits, so this is what stops a red PR. Use the `<!-- gbase:verify:start -->` block in `CLAUDE.md` or `AGENTS.md` when present (written by `gbase:setup`; every line was run once except `unverified locally`); otherwise discover them (`CLAUDE.md`/`AGENTS.md`, `package.json` scripts, Makefile, CI workflows) and mention `/gbase:setup` once in the report. Narrowest scope that covers the diff. If the repo defines none, skip and say so; don't invent or install tools.
+Run the project's own checks over the changed scope — polish only validates its own edits, so this is what stops a red PR. Use the `<!-- gbase:verify:start -->` block in `CLAUDE.md` or `AGENTS.md` when present (written by `gbase:setup`; every line was run once except `unverified locally`); otherwise discover them (`CLAUDE.md`/`AGENTS.md`, `package.json` scripts, Makefile, CI workflows) and mention `/gbase:setup` once in the report. Narrowest scope that covers the diff — the full suite is CI's when a scoped run covers it. Run each check once, on the tree after Step 3; a check the route already ran with no edit since counts as run. If the repo defines none, skip and say so; don't invent or install tools.
 
 Keep the gate to fast checks — lint, typecheck, unit tests. Native builds (`pod install`, `xcodebuild`, Gradle assemble), simulator/emulator runs, and E2E suites belong to CI; don't run them here. Two exceptions: a `typecheck (no CI)` line in the verify block — setup writes it only when no CI job builds the app, so it's the repo's only compile gate — and the repo's own verify skill below.
 
 Bias toward shipping:
-- Diff-caused and mechanical (type error, lint, missing import) → fix and re-run, at most twice.
+- Diff-caused and mechanical (type error, lint, missing import) → fix and re-run, at most twice — re-run the failing file or case first, then the scoped command once.
 - Pre-existing (files the diff didn't touch), flaky, or environment-dependent (no DB, no device, missing env) → note and proceed.
 - Diff-caused and still failing after two attempts → `AskUserQuestion` with the output: fix now / open the PR anyway / abort. *headless:* open it anyway with the failure in Evidence — as a `--draft` PR when the agent owns the PR.
 
-**Behavior check.** If the repo has a verify skill — `.claude/skills/verify-*/` (from `gbase:create-verify`) or `.claude/skills/verify/` (pstack's generator), at the root or in the touched package — and the diff touches a feature in its `features/` map, run that skill for those features only. Same bias as above: an unreachable precondition (no simulator, no test account) is noted and passed; a diff-caused failure of the feature goes through the same fix-twice-then-ask rule.
+**Behavior check** — required per the Step 1 table when the diff changes what a user or caller observes. It runs once per change, not once per skill:
+
+- **Reuse the route's run.** Take the passing `behavior:` lines `gbase:work` wrote for this task as-is, except for a feature whose files a review fix touched after that run — re-run that one. A route `skip` line is not reused; try the feature here.
+- **Otherwise run it here.** The repo's verify skill — `.claude/skills/verify-*/` (from `gbase:create-verify`) or `.claude/skills/verify/` (pstack's generator), at the root or in the touched package — for the features in its `features/` map that the diff touches. Without one, a CLI or script run that exercises the change and needs no build, device, or server start; don't build a harness for it.
+- **Required means evidence or a reason.** An unreachable precondition (no simulator, no test account, no such run) is `behavior: skip — <reason>`, noted and passed. A diff-caused failure goes through the same fix-twice-then-ask rule.
 
 Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (<evidence dir>)`. Hand these lines to `branch-pr` as the PR's `## Evidence`.
 
@@ -94,7 +111,7 @@ Under `AGENT_SHIP_OWNER=orchestrator` the args start with `Ship-owner: orchestra
 Skill(skill: "gbase:monitor", args: "--no-review")            # add --draft / --merge when invoked with them
 ```
 
-Drop `--no-review` if the pre-PR review didn't actually run (finder skipped, failed, or never returned), so monitor's self-review covers the diff.
+Drop `--no-review` if the pre-PR review didn't actually run (finder skipped, failed, or never returned), so monitor's self-review covers the diff — on `low` that review lands in the CI wait instead of before the PR.
 
 Then surface the deferred findings: a severity-ordered table (`file:line`, failure scenario, what the fix takes), with `AskUserQuestion` on any worth resolving before merge. Monitor never received them, so `go` applies, commits, and pushes any fix the user accepts. Under `--draft`, pass monitor the count of unresolved deferred findings so it holds the ready flip until they're resolved. Under `--merge`, settle the deferred findings first (fix or decline each); pass `--merge` only once none remain open, plus `verified-locally` when Step 4 passed this run — otherwise drop `--merge` and say why the PR stays open.
 
