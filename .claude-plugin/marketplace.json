@@ -26,6 +26,16 @@
       },
       "source": "./plugins/app",
       "category": "productivity"
+    },
+    {
+      "name": "gshorts",
+      "description": "Faceless Korean short-form videos — common rules, feedback intake, and one skill per format",
+      "version": "0.1.0",
+      "author": {
+        "name": "godsenal"
+      },
+      "source": "./plugins/shorts",
+      "category": "productivity"
     }
   ]
 }

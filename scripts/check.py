@@ -22,6 +22,10 @@ def skill(name):
     return f"plugins/base/skills/{name}/SKILL.md"
 
 
+def shorts(name):
+    return f"plugins/shorts/skills/{name}/SKILL.md"
+
+
 BRANCH_PR = "plugins/base/commands/branch-pr.md"
 ORCHESTRATOR = "plugins/base/references/orchestrator.md"
 HEADLESS = "plugins/base/references/headless.md"
@@ -79,6 +83,10 @@ CONTRACTS = [
     ("report only", [skill("review"), FACTORY]),
     # the runner merges review2 by parsing review's report table
     ("# | severity | file:line | finding | action", [skill("review"), RUNNER]),
+    # gshorts format skills defer every-video rules to shorts-common; its feedback intake names the format skills
+    ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
+    ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
+    ("top3-compilation-short", [shorts("shorts-common")]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
