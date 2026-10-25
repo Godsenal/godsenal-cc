@@ -20,6 +20,7 @@ The final assistant message carries these lines at column 0; grep for the prefix
 - `ship: local <branch> @<short-sha> — <n> commits, not pushed` — `go` under `AGENT_SHIP_OWNER=orchestrator`, and `monitor --until-settled` under it when it committed fixes.
 - `PR 본문 초안: <absolute path>` — the same runs.
 - `settle: …` — `monitor --until-settled` ([below](#settle)).
+- `mockup: <index.html>`, `mockup url: <url> | none — <reason>`, `mockup shots: <dir>` — `gbase:mockup`. The URL is tailnet-only.
 
 ## Ship owner `orchestrator`
 
@@ -142,6 +143,7 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `branch`, `head_sha` | of `cwd` after the run |
 | `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, except `options`, which is `[]` when the line lists none |
 | `ship`, `settle` | the `ship:` / `settle:` line, or `null` |
+| `mockup` | `{html, url, screenshots}` from the `mockup` lines (`url` is `null` for `none`), or `null` |
 | `pr_body_file` | the path from `PR 본문 초안:`, else `pr-body.md` if it exists, else `null` |
 | `evidence` | the parsed evidence lines |
 | `questions` | each `{question, recommend, options}` sent to the default `AGENT_ASK_CMD` |

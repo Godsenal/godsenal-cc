@@ -1,7 +1,7 @@
 {
   "name": "gbase",
-  "version": "1.30.1",
-  "description": "Core productivity tools for Claude Code — a /gbase:work front door that a session-start hook routes non-trivial tasks into and that ends in a reviewed PR, read-only scout and code-change worker subagents, an unslop prose pass (Korean included), skill discovery, fully-autonomous branch/PR workflows, backward-compat deploy-order checks, blast-radius analysis proven by running code, root-cause bug fixing, turning a bug or request into a check that fails now (reproduce), how/why code explanations, pause/pickup handoff, two-pass diff polish (3-lens fan-out + structural), one-shot review+polish → verify → PR → monitor, adversarial code review (delegated find + skeptic-verify), CI/review monitoring with self-review, one-command Karpathy CLAUDE.md guidelines merge, repo setup (verify commands + REVIEW.md + format hook), project-local behavior-verification skill generation, and a correct loop that turns recurring review/CI mistakes into enforced checks; plus an orchestrator contract (headless mode, local-only shipping, settle-and-stop monitoring, an evidence file, and a slot manifest) for running these skills with no person attached",
+  "version": "1.31.0",
+  "description": "Core productivity tools for Claude Code — a /gbase:work front door that a session-start hook routes non-trivial tasks into and that ends in a reviewed PR, read-only scout and code-change worker subagents, an unslop prose pass (Korean included), skill discovery, fully-autonomous branch/PR workflows, backward-compat deploy-order checks, blast-radius analysis proven by running code, root-cause bug fixing, turning a bug or request into a check that fails now (reproduce), how/why code explanations, pause/pickup handoff, two-pass diff polish (3-lens fan-out + structural), one-shot review+polish → verify → PR → monitor, adversarial code review (delegated find + skeptic-verify), CI/review monitoring with self-review, one-command Karpathy CLAUDE.md guidelines merge, repo setup (verify commands + REVIEW.md + format hook), project-local behavior-verification skill generation, quick clickable HTML mockups for design options (screenshots + tailnet-only URL), and a correct loop that turns recurring review/CI mistakes into enforced checks; plus an orchestrator contract (headless mode, local-only shipping, settle-and-stop monitoring, an evidence file, and a slot manifest) for running these skills with no person attached",
   "author": {
     "name": "godsenal",
     "url": "https://github.com/Godsenal"
@@ -72,6 +72,9 @@
     "subagents",
     "unslop",
     "writing",
-    "i18n"
+    "i18n",
+    "mockup",
+    "design",
+    "prototype"
   ]
 }
