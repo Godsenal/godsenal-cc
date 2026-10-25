@@ -66,12 +66,12 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Reports the command, the quoted failing lines, and the expected result; the check must fail *for the stated reason* (an import error or a refused connection is a broken check), run twice for stability, and production is read-only
 - `bug-fix` starts with it; with `AGENT_EVIDENCE_FILE` set it appends a `reproduce` evidence line
 
-**mockup** (skill, model-invocable) — For a 시안 or design option, a clickable HTML mockup instead of a description.
+**mockup** (skill, explicit only) — For a 시안 or design option, a clickable HTML mockup instead of a description. Runs only on `/gbase:mockup` or `gbase-run --slot mockup`; `work`, `go`, and the other slots never call it, and the model doesn't invoke it on its own.
 
-- Reads the app's screens, theme tokens, bundled fonts, and real copy first, so the option is judged on the idea and not on a generic look
+- Reads the app's screens, theme tokens, bundled fonts, and real copy first, so the option is judged on the idea and not on a generic look; a token plan and an ASCII wireframe per option go in `notes.md` first, and options differ in structure, not color alone, next to the current screen when one exists
 - One self-contained `index.html` (no CDN or remote assets) at real device size; taps and toggles work, every state is addressable as `#<option>-<step>`, and two or three options sit side by side on one page
-- PNG per option and step via `chrome-headless-shell` (regular headless Chrome clamps to 500 px wide), and a tailnet-only URL from a static server bound to the machine's tailnet IP, so it opens on a phone. Never `tailscale funnel` or a public bind
-- Saved to `$GBASE_MOCKUP_DIR` (default `~/LTH/design-mockups`, else `~/design-mockups`) as `<app>-<topic>-r<N>/`, outside the app repo; a revision is the next round. No copyrighted reference images, secrets, or real user data
+- PNG per option and step via `chrome-headless-shell` (regular headless Chrome clamps to 500 px wide), checked before reporting; delivered where the user can open it (the local file, or a Tailscale URL for a phone). Never `tailscale funnel` or a public bind
+- Saved to `$GBASE_MOCKUP_DIR` (default `~/design-mockups`) as `<app>-<YYYYMMDD>-<topic>-r<N>/`, outside the app repo; a revision is the next round. No copyrighted reference images, secrets, or real user data
 - Ends with `mockup:` / `mockup url:` / `mockup shots:` lines, which `gbase-run` reads into `result.json`
 
 **how** (skill, model-invocable) — Explain how a part of the codebase works, with real files and functions. Ported from pstack's `how`.
@@ -258,7 +258,7 @@ After installation, the following are available:
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
 /gbase:bug-fix                 # Fix a bug at its root cause — reproduce, narrow, verify on the same surface (skill, model-invocable)
 /gbase:reproduce <bug|request> # Turn a bug or request into a check that fails now — command, failing output, expected (skill, model-invocable)
-/gbase:mockup <request>        # Clickable single-file HTML mockup + screenshots + tailnet URL, outside the repo (skill, model-invocable)
+/gbase:mockup <request>        # Clickable single-file HTML mockup + screenshots, outside the repo (skill, explicit only)
 /gbase:how                     # How does X work — explained with real files (skill, model-invocable)
 /gbase:why                     # Why is X this way — cited from git, PRs, and connected sources (skill, model-invocable)
 /gbase:pause                   # Stop cleanly with a wip commit whose body is the resume note (skill, explicit only)

@@ -1,7 +1,8 @@
 ---
 name: mockup
-description: "Turns a design request into a quick, clickable HTML mockup instead of a description — one self-contained HTML file at real device size, built from the app's actual screens, colors, fonts, and copy, with several options compared on one page, PNG screenshots of each step, and a tailnet-only URL to open it on a phone. Saved outside the app repo, never committed. Use whenever someone asks for 시안, a mockup, a design option, 'how would this screen look', or to compare layouts before building; also for a revision round on an earlier mockup, or on /gbase:mockup."
+description: "Turns a design request into a quick, clickable HTML mockup instead of a description — one self-contained HTML file at real device size, built from the app's actual screens, colors, fonts, and copy, with several options compared on one page and PNG screenshots of each step, delivered where the user can open it. Saved outside the app repo, never committed. Run on /gbase:mockup <request> (시안, a mockup, comparing layouts, or a revision round) or the orchestrator's mockup slot; explicit only, so gbase:work and the other slots never pull it in."
 allowed-tools: Bash Read Write Edit Glob Grep
+disable-model-invocation: true
 ---
 
 # /gbase:mockup
@@ -22,26 +23,30 @@ When the current directory is the app's repo, read before drawing: the screen be
 
 Read only. The app's code isn't changed here, and nothing from the mockup goes into the app repo.
 
+Before any HTML, write the plan into `notes.md`: the tokens you took (a few named colors, type roles, spacing, radius, with the file each came from) and a small ASCII wireframe per option. Two wireframes that look alike mean two options that are alike; change one before building it.
+
 ## 2. Where it goes
 
 ```bash
-root="${GBASE_MOCKUP_DIR:-$([ -d "$HOME/LTH" ] && echo "$HOME/LTH/design-mockups" || echo "$HOME/design-mockups")}"
+root="${GBASE_MOCKUP_DIR:-$HOME/design-mockups}"
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && app=$(basename "$(dirname "$common")")  # the main repo's name, also from a worktree
 ```
 
-Outside a repo, take a short app name from the request. The round directory `dir` is `$root/<app>-<topic>-r<N>`: `<topic>` is a short kebab-case slug of what's being designed (`onboarding`, `paywall`), and `<N>` is one more than the highest existing `r<N>` for that app and topic, starting at 1. A revision is a new round: copy the previous round's directory and edit the copy, so earlier rounds stay openable for comparison.
+Outside a repo, take a short app name from the request. The round directory `dir` is `$root/<app>-<YYYYMMDD>-<topic>-r<N>` (`myapp-20261025-onboarding-r1`): the date is today's, `<topic>` is a short kebab-case slug of what's being designed, and `<N>` is one more than the highest `r<N>` for that app and topic on any date, starting at 1. A revision is a new round: copy the previous round's directory and edit the copy, so earlier rounds stay openable.
 
-Inside it: `index.html`, `shots/`, and a few lines of `notes.md` (the request, what each option tries, what was read from the app).
+Inside it: `index.html`, `shots/`, and `notes.md` (the request, the plan above, what each option tries).
 
 ## 3. The HTML
 
-- **One file, nothing from the network.** No CDN, web-font service, remote image, or analytics. It has to open from `file://`, from the tailnet server on a phone with no internet detour, and render the same in a headless screenshot. Inline the CSS and JS; the app's own fonts and image assets go in as base64 `data:` URLs (a font over ~2 MB may sit beside the file as a relative path).
+- **One file, nothing from the network.** No CDN, web-font service, remote image, or analytics. It has to open from `file://` and render the same in a headless screenshot. Inline the CSS and JS; the app's own fonts and image assets go in as base64 `data:` URLs (a font over ~2 MB may sit beside the file as a relative path). No framework or build step: plain HTML, CSS, and a little JS are enough for a throwaway, and a component kit's default look would cover the app's.
 - **`<meta charset="utf-8">` first.** Without it Korean comes out as mojibake in headless Chrome over `file://`.
 - **Real device size.** Draw each screen in a frame at the target's CSS size (iPhone 393×852, Android 412×915, or the app's own breakpoints for web), safe areas included. On a viewport narrower than the frame, drop the frame and fill the screen, so it looks native on a phone.
-- **It actually works.** Taps move between screens, toggles toggle, sheets open, inputs accept text. Every state is reachable by URL hash `#<option>-<step>` (`#a-1`, `#b-3`) and updates the hash when reached by clicking, so a screenshot and a feedback message can name the exact state.
-- **Options side by side.** Two or three options go on one page, labeled A/B/C with one line each on what it tries and the tradeoff. On a phone, one option at a time with a small switcher. `?shot` in the URL hides labels, switcher, and frame so only the screen renders.
+- **It actually works.** Taps move between screens, toggles toggle, sheets open, inputs accept text. Every state is reachable by URL hash `#<option>-<step>` (`#a-1`, `#b-3`) and updates the hash when reached by clicking, so a screenshot and a feedback message can name the exact state. Where the request touches them, the empty, very long, and error states get their own steps; a layout that only works with average content isn't decided yet.
+- **Options that differ on purpose.** Two or three options on one page, labeled A/B/C, each with one line on what it tries and the tradeoff. Make them differ in structure or emphasis (density, hierarchy, where the main action sits), not in color alone, and keep each one loud in one place and quiet elsewhere. When an existing screen is being changed, put the current screen first as `now`, so the options are judged against it. On a phone, one option at a time with a small switcher. `?shot` in the URL hides labels, switcher, and frame so only the screen renders.
+- **Copy and small details.** An action keeps one name through the flow (a "보내기" button leads to a "보냈어요" toast, not "전송 완료"); an empty or error state says what to do next. Sample data looks real and adds up (totals match their rows, dates are plausible), never lorem ipsum or grey bars standing in for text. Touch targets at least 44 px, text contrast at least 4.5:1, `…` rather than `...`, tabular figures for numbers that line up.
+- **No look of its own.** The app's look always wins. Only when there's none to follow, avoid the defaults that make a mockup read as generated: Inter on everything, a purple gradient, every block centered, one radius on everything, a card grid as the answer to every layout.
 - **No copyrighted references.** Other apps' screenshots, stock photos, logos, and characters you don't own stay out, even as placeholders. Use the app's own assets, or CSS/SVG shapes and solid placeholder blocks.
-- **No secrets or real user data.** API keys, `.env` values, tokens, real names, emails, or photos from the app's data never go in; the file is served to every device on the tailnet. Use made-up sample data.
+- **No secrets or real user data.** API keys, `.env` values, tokens, real names, emails, or photos from the app's data never go in; the file may be opened on other devices. Use made-up sample data.
 
 ## 4. Screenshots
 
@@ -54,22 +59,18 @@ shell=$(find_shell); [ -n "$shell" ] || { npx -y playwright install chromium-hea
   --screenshot="$dir/shots/a-1.png" "file://$dir/index.html?shot#a-1"
 ```
 
-Use the frame size you drew at for `--window-size`. Then look at the PNGs yourself — wrong fonts, overflowing text, a state that didn't render — and fix the HTML before reporting. A mockup that's broken in its own screenshot isn't ready to show.
+Use the frame size you drew at for `--window-size`. Then look at the PNGs yourself (wrong fonts, overflowing text, a state that didn't render) and fix the HTML; up to three look-and-fix rounds, then report what is still off instead of looping. A mockup that's broken in its own screenshot isn't ready to show, and the report claims only checks you actually ran.
 
-## 5. Phone URL (tailnet only)
+## 5. Delivery
 
-One static server per machine serves the whole `$root`, bound to the machine's tailnet IPv4 only, so devices on the tailnet can reach it and the LAN and internet can't:
+Give the user the mockup in a form they can open: the local path always, and when they'll look on a phone and the machine has Tailscale, a tailnet URL for the round directory. Use the one-liner below rather than `python3 -m http.server --bind`, which hangs about 35 seconds resolving a tailnet IP:
 
 ```bash
 ip=$(tailscale ip -4 2>/dev/null | head -1); port="${GBASE_MOCKUP_PORT:-8765}"
-url="http://$ip:$port/$(basename "$dir")/index.html"
-curl -sf -o /dev/null --max-time 2 "$url" || nohup python3 -c 'import functools,http.server as h,socketserver as s,sys; s.ThreadingTCPServer.allow_reuse_address=True; s.ThreadingTCPServer((sys.argv[1],int(sys.argv[2])),functools.partial(h.SimpleHTTPRequestHandler,directory=sys.argv[3])).serve_forever()' "$ip" "$port" "$root" >/dev/null 2>&1 &
+[ -n "$ip" ] && nohup python3 -c 'import functools,http.server as h,socketserver as s,sys; s.ThreadingTCPServer((sys.argv[1],int(sys.argv[2])),functools.partial(h.SimpleHTTPRequestHandler,directory=sys.argv[3])).serve_forever()' "$ip" "$port" "$dir" >/dev/null 2>&1 &
 ```
 
-Keep `GBASE_MOCKUP_PORT` as written; don't type a port in. Fetch `$url` with `curl` before reporting it: a server already on the port that serves a different root (another `GBASE_MOCKUP_DIR`) answers 404 and the new one can't bind, so take the next port. Not `python3 -m http.server --bind <tailnet ip>`: it reverse-resolves the address on startup and hangs about 35 seconds on a tailnet IP.
-
-- **Never** `tailscale funnel`, a bind to `0.0.0.0` or the LAN address, or a tunnel service — the mockup would be on the internet. Don't edit `tailscale serve` either: its handlers belong to other apps on the machine.
-- No `tailscale` or no tailnet IP → no server; the URL line says `none` and why.
+Fetch the URL with `curl` before reporting it; if the port is taken, use the next one. **Never** `tailscale funnel`, a bind to `0.0.0.0` or the LAN address, or a tunnel service, which would put the mockup on the internet; and leave `tailscale serve` alone, since its handlers belong to other apps.
 
 ## Report
 

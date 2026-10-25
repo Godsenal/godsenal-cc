@@ -20,7 +20,7 @@ The final assistant message carries these lines at column 0; grep for the prefix
 - `ship: local <branch> @<short-sha> — <n> commits, not pushed` — `go` under `AGENT_SHIP_OWNER=orchestrator`, and `monitor --until-settled` under it when it committed fixes.
 - `PR 본문 초안: <absolute path>` — the same runs.
 - `settle: …` — `monitor --until-settled` ([below](#settle)).
-- `mockup: <index.html>`, `mockup url: <url> | none — <reason>`, `mockup shots: <dir>` — `gbase:mockup`. The URL is tailnet-only.
+- `mockup: <index.html>`, `mockup url: <url> | none — <reason>`, `mockup shots: <dir>` — `gbase:mockup`.
 
 ## Ship owner `orchestrator`
 
