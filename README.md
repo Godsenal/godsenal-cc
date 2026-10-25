@@ -15,6 +15,9 @@ Inside Claude Code, run these slash commands:
 
 # (optional) Install the gapp plugin — app-building harness
 /plugin install gapp@godsenal
+
+# (optional) Install the gshorts plugin — faceless Korean short-form videos
+/plugin install gshorts@godsenal
 ```
 
 Or browse interactively with `/plugin` and go to the **Discover** tab.
@@ -247,6 +250,16 @@ Pipeline:
 | 8 | **store-submit** | Claude-in-Chrome automation of App Store Connect: screenshot upload via ngrok tunnel + `DataTransfer` injection (native file dialogs and localhost fetch are both dead ends), React form filling via prototype setters, privacy/age-rating wizard loops (45s CDP timeout aware), and a human confirm gate before the final Submit-for-Review click; never touches Apple credentials |
 | any | **next** | The resume button: reads `HARNESS.md`, reconciles it against actual repo state, then **runs** the next stage (not just a report) — the answer to "what do I do now?" |
 
+### gshorts
+
+Faceless Korean short-form videos for YouTube Shorts, Instagram Reels, and TikTok. The skills hold the format the user has confirmed, feedback by feedback, and point at an external render pipeline (`tiktok-automation`) for the actual commands. They never ship code, keys, or account credentials.
+
+| Skill | What it does |
+|---|---|
+| **shorts-common** | Rules every short follows (length, pacing, audio mix, narration, captions, checks, posting gate — never schedules without the user's OK), options decided from 2–3 side-by-side samples, and **feedback intake**: each new piece of feedback is classified as common or format-specific and written, dated, into the matching skill the same turn. Ships a dated trend reference with sources |
+| **foreign-clip-short** | Official foreign show clips (Shark Tank, Dragons' Den, Antiques Roadshow appraisals) in framing D: black 9:16 canvas, fixed two-line title, ~1080×930 center crop, Korean subtitles; excludes shows with Korean rights holders |
+| **top3-compilation-short** | Starter for ranked TOP3 compilations. Only the request for the format is confirmed, so the open parts are marked TODO and settled by sample comparison |
+
 ## Usage
 
 After installation, the following are available:
@@ -288,6 +301,10 @@ After installation, the following are available:
 /gapp:preflight                # Pre-release checklist gate (code/backend/config/store)
 /gapp:store-assets             # Simulator screenshots + store metadata
 /gapp:store-submit             # App Store Connect submission via Claude-in-Chrome
+
+/gshorts:shorts-common         # Every-video rules + feedback intake (read first)
+/gshorts:foreign-clip-short    # Shark Tank / Dragons' Den / Antiques Roadshow clip short, framing D
+/gshorts:top3-compilation-short  # TOP3 compilation starter (TODO parts settled by samples)
 ```
 
 ## License
