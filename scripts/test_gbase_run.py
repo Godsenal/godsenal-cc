@@ -32,6 +32,8 @@ FAKE_CLAUDE = textwrap.dedent('''\
                 "| 1 | high | `a.py:10` | null deref in `a \\\\| b` | needs decision |\\n| 2 | low | `b.py:3` | typo | needs decision |\\n",
         "sonnet": "| # | severity | file:line | finding | action |\\n|---|---|---|---|---|\\n"
                   "| 1 | medium | `a.py:12` | None not handled | needs decision |\\n",
+        "mockup": "시안 2개\\nmockup: /m/app-onboarding-r2/index.html\\nmockup url: none — tailscale 없음\\n"
+                  "mockup shots: /m/app-onboarding-r2/shots\\n",
         "settle": "ship: local feat/x @def5678 — 1 commits, not pushed\\nPR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"]
                   + "\\nsettle: 미확정 @abc1234 — 푸시 대기: 1 commits\\n",
     }
@@ -96,6 +98,16 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(result["ship"], "ship: local feat/x @def5678 — 1 commits, not pushed")
         self.assertEqual(result["settle"], "settle: 미확정 @abc1234 — 푸시 대기: 1 commits")
         self.assertEqual(result["pr_body_file"], str(Path(result["run_dir"]) / "pr-body.md"))
+
+    def test_mockup_lines_and_task_fill_the_slot(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "mockup", "--task", "온보딩 시안", "--model", "mockup")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(Path(result["prompt_path"]).read_text().strip(), "/gbase:mockup 온보딩 시안")
+        self.assertEqual(result["mockup"], {"html": "/m/app-onboarding-r2/index.html", "url": None,
+                                            "screenshots": "/m/app-onboarding-r2/shots"})
+        self.assertEqual(gbase_run.mockup("mockup url: http://100.1.2.3:8765/x/index.html")["url"],
+                         "http://100.1.2.3:8765/x/index.html")
+        self.assertIsNone(gbase_run.mockup("done"))
 
     def test_answers_feed_prompt_inherit_run_and_answer_exact_question(self):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "reproduce", "--task", "login 500s", "--model", "x")

@@ -42,6 +42,7 @@ DECISION = re.compile(r"^결정 필요: .*$", re.M)
 SHIP = re.compile(r"^ship: .*$", re.M)
 PR_BODY = re.compile(r"^PR 본문 초안: (.+)$", re.M)
 SETTLE = re.compile(r"^settle: .*$", re.M)
+MOCKUP = re.compile(r"^mockup( url| shots)?: (.+)$", re.M)
 
 
 def claude_bin():
@@ -142,7 +143,18 @@ def report(text):
         "ship": (SHIP.findall(text) or [None])[-1],
         "pr_body_line": pr[-1].strip() if pr else None,
         "settle": (SETTLE.findall(text) or [None])[-1],
+        "mockup": mockup(text),
     }
+
+
+def mockup(text):
+    """gbase:mockup's `mockup:` / `mockup url:` / `mockup shots:` lines → {html, url, screenshots}; url null for `none — …`."""
+    lines = {kind.strip(): value.strip() for kind, value in MOCKUP.findall(text)}
+    if not lines:
+        return None
+    url = lines.get("url")
+    return {"html": lines.get(""), "url": url if url and url.startswith("http") else None,
+            "screenshots": lines.get("shots")}
 
 
 def review_rows(text):
@@ -344,6 +356,7 @@ def cmd_run(argv):
             "ship": next((r["ship"] for r in parsed if r["ship"]), None),
             "pr_body_file": pr_line or (str(pr_draft) if pr_draft.exists() else None),
             "settle": next((r["settle"] for r in parsed if r["settle"]), None),
+            "mockup": next((r["mockup"] for r in parsed if r["mockup"]), None),
             "evidence": read_jsonl(run_dir / "evidence.jsonl"),
             "sessions": sessions,
         })

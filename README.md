@@ -66,6 +66,14 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Reports the command, the quoted failing lines, and the expected result; the check must fail *for the stated reason* (an import error or a refused connection is a broken check), run twice for stability, and production is read-only
 - `bug-fix` starts with it; with `AGENT_EVIDENCE_FILE` set it appends a `reproduce` evidence line
 
+**mockup** (skill, explicit only) — For a 시안 or design option, a clickable HTML mockup instead of a description. Runs only on `/gbase:mockup` or `gbase-run --slot mockup`; `work`, `go`, and the other slots never call it, and the model doesn't invoke it on its own.
+
+- Reads the app's screens, theme tokens, bundled fonts, and real copy first, so the option is judged on the idea and not on a generic look; a token plan and an ASCII wireframe per option go in `notes.md` first, and options differ in structure, not color alone, next to the current screen when one exists
+- One self-contained `index.html` (no CDN or remote assets) at real device size; taps and toggles work, every state is addressable as `#<option>-<step>`, and two or three options sit side by side on one page
+- PNG per option and step via `chrome-headless-shell` (regular headless Chrome clamps to 500 px wide), checked before reporting; delivered where the user can open it (the local file, or a Tailscale URL for a phone). Never `tailscale funnel` or a public bind
+- Saved to `$GBASE_MOCKUP_DIR` (default `~/design-mockups`) as `<app>-<YYYYMMDD>-<topic>-r<N>/`, outside the app repo; a revision is the next round. No copyrighted reference images, secrets, or real user data
+- Ends with `mockup:` / `mockup url:` / `mockup shots:` lines, which `gbase-run` reads into `result.json`
+
 **how** (skill, model-invocable) — Explain how a part of the codebase works, with real files and functions. Ported from pstack's `how`.
 
 - Narrow questions are answered directly; a subsystem-wide one fans out 2–4 read-only explorers (Sonnet) on separate angles, then one explainer reconciles them
@@ -202,7 +210,7 @@ A program that runs agents with no person attached (e.g. `claude -p` from a daem
 | `AGENT_PR_BODY_FILE` | Where that draft goes (line 1 title, line 2 empty, then the body); default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` |
 | `AGENT_EVIDENCE_FILE` | `go`, `reproduce`, and `monitor --until-settled` append `{"step","result","command","detail","cause"?}` JSON lines (`review`, `polish`, `checks`, `behavior`, `reproduce`, `settle`); `result` is `pass`, `fail`, `skip`, or `open` (findings or a wait still open, not a failure) |
 
-The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`work`, `review`, `review2`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `reproduce`) to an invocation, the variables it reads, and notes. `review2` runs `gbase:review` in report-only mode on Opus and Sonnet at once and merges the two tables, marking each finding `opus`, `sonnet`, or `both`. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
+The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`work`, `review`, `review2`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `reproduce`, `mockup`) to an invocation, the variables it reads, and notes. `review2` runs `gbase:review` in report-only mode on Opus and Sonnet at once and merges the two tables, marking each finding `opus`, `sonnet`, or `both`. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
 
 **Runner.** [`scripts/gbase-run`](scripts/gbase-run) runs one slot headless from a checkout of this repo and writes a `result.json` a poller can read:
 
@@ -250,6 +258,7 @@ After installation, the following are available:
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
 /gbase:bug-fix                 # Fix a bug at its root cause — reproduce, narrow, verify on the same surface (skill, model-invocable)
 /gbase:reproduce <bug|request> # Turn a bug or request into a check that fails now — command, failing output, expected (skill, model-invocable)
+/gbase:mockup <request>        # Clickable single-file HTML mockup + screenshots, outside the repo (skill, explicit only)
 /gbase:how                     # How does X work — explained with real files (skill, model-invocable)
 /gbase:why                     # Why is X this way — cited from git, PRs, and connected sources (skill, model-invocable)
 /gbase:pause                   # Stop cleanly with a wip commit whose body is the resume note (skill, explicit only)

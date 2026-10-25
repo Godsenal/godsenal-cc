@@ -59,6 +59,11 @@
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
       "notes": "Turns mistakes that recur in the repo's history into enforced checks, each proven to fail on a past instance; /gbase:correct --session runs it as a retrospective on one session. Edits are left uncommitted for the ship slot."
     },
+    "mockup": {
+      "invoke": "/gbase:mockup <design request>",
+      "env": [],
+      "notes": "Builds a clickable single-file HTML mockup of the request from the app's own screens, tokens, fonts and copy, with PNG screenshots per option and step, in $GBASE_MOCKUP_DIR (default ~/design-mockups)/<app>-<YYYYMMDD>-<topic>-r<N>/ — outside the repo, which stays untouched. Explicit only: no other slot or skill (work, ship, …) invokes it, and the model doesn't pick it up on its own. Ends with `mockup:`, `mockup url:` and `mockup shots:` lines. Never asks before the first round; feedback is the next run."
+    },
     "reproduce": {
       "invoke": "/gbase:reproduce <bug report or improvement request>",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_EVIDENCE_FILE"],

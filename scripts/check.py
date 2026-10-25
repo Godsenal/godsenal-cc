@@ -70,6 +70,11 @@ CONTRACTS = [
     ("gbase:worker", [skill("work"), SESSION_HOOK]),
     ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
     ("gbase:unslop", [BRANCH_PR, skill("work")]),
+    # the runner reads mockup's report lines into result.json
+    ("mockup url:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
+    ("mockup shots:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
+    # mockup stays out of work/go runs (company repos included): explicit /gbase:mockup or --slot mockup only
+    ("disable-model-invocation: true", [skill("mockup")]),
     # review2 runs review twice on one tree; report only keeps the two sessions from editing
     ("report only", [skill("review"), FACTORY]),
     # the runner merges review2 by parsing review's report table
