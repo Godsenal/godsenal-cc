@@ -35,6 +35,7 @@ Ported from pstack's `unslop` (MIT), with Korean tells added. Rewrite the text s
 - **Inline-header lists** ("**Performance:** Performance improved…") → prose. A bold lead-in ending in a period followed by new detail is fine.
 - **Boldface** only on the one thing that must not be missed. Sentence-case headings. No decorative emojis. Straight quotes.
 - **Dense or over-compressed sentences.** One idea per sentence; write the articles, verbs, and words that arrows and abbreviations replaced.
+- **Tables and bullets are prose too.** A cell or bullet that strings nouns, arrows, or terms only the author's session knows ("줄", "건별 연결", "토큰 추가") becomes a sentence a newcomer understands, saying what changed and why. Keep cells short by moving the explanation into a bullet, not by compressing it.
 - **Chatbot and sycophantic phrases** ("I hope this helps!", "Great question!", "Let me know if…"). Delete.
 
 ## Korean

@@ -97,13 +97,13 @@ With `AGENT_EVIDENCE_FILE` set, append the [evidence lines](../../references/orc
 ### 5. Branch & PR
 
 ```
-Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <Step 4 lines>")
-# invoked with --draft → args: "--draft Risk: …; Verification: …"
+Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <Step 4 lines>; Deferred: <severity · introduced|pre-existing · file:line · failure scenario, per finding joined by ' | ', or none>")
+# invoked with --draft → args: "--draft Risk: …; Verification: …; Deferred: …"
 ```
 
-`branch-pr` owns branching, commit grouping, push, PR body, and its `compat-check` rollout section; all its safety rules apply.
+`branch-pr` owns branching, commit grouping, push, PR body, and its `compat-check` rollout section; all its safety rules apply. The deferred findings become items in the body's `## Review focus`.
 
-Under `AGENT_SHIP_OWNER=orchestrator` the args start with `Ship-owner: orchestrator; PR-body-file: <$AGENT_PR_BODY_FILE, else $(git rev-parse --absolute-git-dir)/gbase/pr-body.md>; ` and `branch-pr` commits locally and writes the draft instead of pushing. Append the deferred findings to the draft's `## Notes`, then stop: no Step 6. The report ends with branch-pr's `ship:` and `PR 본문 초안:` lines and the deferred-findings table.
+Under `AGENT_SHIP_OWNER=orchestrator` the args start with `Ship-owner: orchestrator; PR-body-file: <$AGENT_PR_BODY_FILE, else $(git rev-parse --absolute-git-dir)/gbase/pr-body.md>; ` and `branch-pr` commits locally and writes the draft instead of pushing. Then stop: no Step 6. The report ends with branch-pr's `ship:` and `PR 본문 초안:` lines and the deferred-findings table.
 
 ### 6. Monitor
 
@@ -113,7 +113,7 @@ Skill(skill: "gbase:monitor", args: "--no-review")            # add --draft / --
 
 Drop `--no-review` if the pre-PR review didn't actually run (finder skipped, failed, or never returned), so monitor's self-review covers the diff — on `low` that review lands in the CI wait instead of before the PR.
 
-Then surface the deferred findings: a severity-ordered table (`file:line`, failure scenario, what the fix takes), with `AskUserQuestion` on any worth resolving before merge. Monitor never received them, so `go` applies, commits, and pushes any fix the user accepts. Under `--draft`, pass monitor the count of unresolved deferred findings so it holds the ready flip until they're resolved. Under `--merge`, settle the deferred findings first (fix or decline each); pass `--merge` only once none remain open, plus `verified-locally` when Step 4 passed this run — otherwise drop `--merge` and say why the PR stays open.
+Then surface the deferred findings: a severity-ordered table (`file:line`, failure scenario, what the fix takes), with `AskUserQuestion` on any worth resolving before merge. Monitor never received them, so `go` applies, commits, and pushes any fix the user accepts, then drops that item, and its count, from the PR body's `## Review focus` or its folded list, switching to the `[!NOTE]` box when none remain (`gh pr edit --body`, after `gbase:unslop` like the first body). Under `--draft`, pass monitor the count of unresolved deferred findings so it holds the ready flip until they're resolved. Under `--merge`, settle the deferred findings first (fix or decline each); pass `--merge` only once none remain open, plus `verified-locally` when Step 4 passed this run — otherwise drop `--merge` and say why the PR stays open.
 
 ## On failure
 

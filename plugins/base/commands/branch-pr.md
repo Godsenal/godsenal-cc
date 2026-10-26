@@ -61,7 +61,7 @@ When the args start with `Ship-owner: orchestrator; PR-body-file: <path>` (`gbas
 
 - **Branch:** commit on the current branch; Steps 3–4 run only when it is the default branch. The caller owns its branch, so the diverged-branch and remote cases aren't questions here.
 - **Already committed:** a clean tree with commits ahead of the base skips Steps 2–6 instead of stopping.
-- **Remote untouched:** skip Step 7, `gh pr create`, and the `gbase-assets` upload; reference screenshots by their local `artifacts/verify/…` path.
+- **Remote untouched:** skip Step 7, `gh pr create`, and the `gbase-assets` upload; embed each screenshot as `![<label>](<absolute local path>)` so the caller can upload it and rewrite the link.
 - **Body:** Step 8 as written. Invoke `gbase:compat-check` there even for a change that looks additive; it is the draft's only deploy-order review. Run it on `<base>...HEAD` (base = `origin/<default>` when it exists, else the local default branch). Write the title as line 1, an empty line 2, then the body, to the path (`mkdir -p` its directory; overwrite).
 - **Report** the lines the caller greps: `ship: local <branch> @<short-sha> — <n> commits, not pushed` and `PR 본문 초안: <path>` ([format](../references/orchestrator.md#report-lines)). Not pushing is the contract, not a decision: no `결정 필요:` line for the push or the PR.
 
@@ -225,59 +225,89 @@ the change, not the author:
 - `medium` — everything else
 
 If the repo has its own PR template (`.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/`,
-or `docs/pull_request_template.md`), fill that template's sections instead of the one below, and append
-whichever of `Evidence` / `Merge danger` it lacks.
+or `docs/pull_request_template.md`), fill that template's sections instead of the one below, and add whichever of
+`Review focus` (with its risk line and folded list) and `Evidence` it lacks: `Review focus` right under its first
+section, `Evidence` wherever it fits.
 
 Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
 `gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
 
-Run the drafted title and body through `gbase:unslop` before creating the PR.
+**Before `gh pr create`, call `Skill(skill: "gbase:unslop")` and rewrite the drafted title and body by it, every table cell and bullet included.** Knowing its rules is not running it: a body written straight into the heredoc is where this step gets skipped. The same holds for every later `gh pr edit --body`.
 
-The body is a briefing for a reviewer who has the diff — combined from humanlayer's `visual-pr` (Why,
-notes), Matt Pocock's `pr` (diff sketch, before/after, door) and gbase (risk, revert, rollout):
+The body is a briefing for a reviewer who has the diff. **The reviewer reads `Review focus` first and may
+stop there**, so everything a person has to judge goes in it and nowhere else; the sections below it are
+reference:
 
 ```bash
 gh pr create --title "<PR title>" --body "$(cat <<'EOF'
 ## Why
 <exactly one sentence: the problem, and what becomes possible once this ships>
 
+## Review focus
+> [!IMPORTANT]
+> **사람이 볼 곳 <N>건**
+> 1. **<the question, as one short bold line>** (결정)
+>    `path:line` · <why no check can answer it, a few words>
+> 2. **<what to look at and what "right" looks like>** (확인)
+>    <where: a screenshot below, `path:line`, a device>
+> 3. **<the failure, as a question>** (보류 · medium)
+>    `path:line` · <failure scenario>
+
+**위험도** <low / medium / high> (<the path or hazard that set it>) · <two-way / one-way> · <how to undo: revert the squash commit, plus anything left behind>
+
+<details><summary>보류한 리뷰 지적 <K>건 · low 또는 기존 코드</summary>
+
+- `path:line` <finding, one line> (low · 기존 코드)
+</details>
+
+<!-- N = 0: `> [!NOTE]` and one line: **사람이 판단할 곳 없음.** <why the checks and the Evidence cover it>.
+     K = 0: drop the details block. -->
+
 ## Change outline
-<one small view per concern, each under a bold one-line lead (e.g. **새 스킬**, **저장 흐름**, **스키마**):
-a table for 3+ parallel items (new endpoints, skills, screens), otherwise the form from the table below
-that fits the concern (~12 lines max, comments a few words). Not a per-commit or per-file changelog: the Commits tab already is one>
+<one numbered `###` heading per concern, at most four (e.g. `### 1. 새 스킬`, `### 2. 저장 흐름`). Under each:
+the view from the table below that fits it, then at most three one-sentence bullets saying why. Table cells
+hold a few words; explanation goes in the bullets, never a paragraph. Not a per-commit or per-file
+changelog: the Commits tab already is one>
 
 ## Evidence
-<before → after in the form that shows this change best (table below) — a `| | Before | After |` table
-when there are two or more. Then the checks already run (the `Verification:` lines the caller passed) as
-`- [x]` with what was observed, and `- [ ]` for what's left to a human>
-
-## Merge danger
-| | |
-|---|---|
-| 위험도 | **<low / medium / high>** — <the path or hazard that set it> |
-| Door | <two-way / one-way> |
-| Blast radius | <what breaks if this is wrong, a few words> |
-| Revert | <revert the squash commit, plus anything left behind — or, one-way, the step after which only a restore works> |
+<before → after first, in the form that shows this change best (table below); a `| | Before | After |`
+table when there are two or more. Then the checks already run (the `Verification:` lines the caller
+passed), one `- [x]` line each with what was observed>
 
 <!-- ## Rollout / Deploy order  ← only when compat-check returned ⚠️ -->
 
 ## Notes
-<1–3 bullets a reviewer would otherwise trip on: a deliberate omission, a compatibility constraint, a
-surprising decision. Drop the section when there are none>
+<only what a reviewer would trip on that isn't a Review focus item (a deliberate omission, an out-of-scope
+find). Usually empty: drop the section>
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```
 
-**Door:** two-way when reverting the squash commit restores the old behavior. One-way when something
+**Review focus** — what a person must judge because no check here can. Before writing an item, name what the
+checks would miss; if you can't, it isn't an item. Most-severe first, at most five; more than that means
+the PR should be split, so say so as item 1. Each item is a bold line a reviewer can answer, its kind in parentheses after the bold, and one plain line
+under it for where and why. Keep code spans out of the bold part:
+
+- `(결정)` a product or design call: copy, a tradeoff the author picked, a behavior change someone may not want, a pattern other code will copy.
+- `(확인)` evidence only a person can judge (how a screen looks, real data, a device), any surface the run couldn't reach (`behavior: skip`), or a `high`-tier path from the risk rule above — point at the exact lines.
+- `(보류 · <severity>)` a finding from the caller's `Deferred:` line marked `introduced` and rated `medium` or above. The rest (`low`, or `pre-existing`) go in the folded details block, marked `기존 코드` when pre-existing so they don't read as the author's fault — they never count toward N.
+
+The alert renders as a colored box, so it stays the one thing that stands out; don't add other alert boxes elsewhere in the body.
+
+**Two-way / one-way:** two-way when reverting the squash commit restores the old behavior. One-way when something
 outlives the revert — a dropped column or rewritten data, a sent notification or email, a store
-submission, a removed public API; take the point of no return from compat-check's Rollback line.
-**Blast radius:** if `gbase:blast-radius` ran on this change, summarize its confirmed risks here.
-Merge danger informs the reviewer; it never blocks the PR.
-**Readable in a minute:** every section is skimmable — tables and one-line bullets, no paragraph over two
-lines. A Why that needs a second clause, or an outline that needs more than ~4 groups, usually means the
-PR should be split; say so in Notes.
+submission, a removed public API; take the point of no return from compat-check's Rollback line, and add
+a `(확인)` item for it. If `gbase:blast-radius` ran, its confirmed risks become `(확인)` items.
+The risk line informs the reviewer; it never blocks the PR.
+
+**Readable in a minute.** The body before `## Change outline` fits on one screen. Every section is tables
+and one-line bullets, no paragraph over two lines. Short is not shorthand: every table cell and bullet is a
+sentence a reader who wasn't in this session understands, saying what changed and why, never a row of nouns,
+arrows, or session jargon. A Change outline over ~25 lines or four groups, and any
+long table or command output, goes inside `<details><summary>…</summary>` with its lead line outside; if
+it still doesn't fit, the PR should be split.
 
 **Pick the form per change** — for each Outline view and each Evidence pair, the one a reviewer grasps fastest:
 
@@ -293,10 +323,14 @@ PR should be split; say so in Notes.
 | A refactor | a file-tree `diff`, plus "the same tests pass unchanged" |
 | CLI or script behavior | terminal output before/after |
 
-**Screenshots and GIFs** come from the run's `verify-*` artifacts (`artifacts/verify/<feature>/`, gitignored).
-"After" is always available; include "before" only when the run already captured it (e.g. it reproduced
-the bug first) — don't relaunch the old build just for a picture. A GIF needs `ffmpeg` to convert a
-recording (`xcrun simctl io booted recordVideo`, Playwright video); without it, use two or three stills.
+**Screenshots and GIFs.** A change to what a user sees ships with the image in the body, in one place only. When the look is the change (layout, copy, a new screen), it goes in `## Change outline` as that concern's view, and Evidence says "see the screenshots above". When it proves a code change (a bug fix, a logic change), it goes in `## Evidence`. A local path left
+in a pushed PR body (`~/…/shots/after.png`) is not evidence, because the reviewer can't open it. Take them from the run's
+captures: the `verify-*` artifacts (`artifacts/verify/<feature>/`, gitignored) or the evidence dir in the
+`behavior:` lines. "After" is always available; include "before" only when the run already captured it
+(e.g. it reproduced the bug first) — don't relaunch the old build just for a picture. When the run took no
+screenshot of a UI change, take one of the after state now if the app is already running; otherwise make
+it a `(확인)` item. A GIF needs `ffmpeg` to convert a recording (`xcrun simctl io booted recordVideo`,
+Playwright video); without it, use two or three stills.
 `gh` can't attach images to a PR body, so upload them to the `gbase-assets` branch with the contents API —
 never commit them to the PR branch, and touch nothing in the working tree:
 
