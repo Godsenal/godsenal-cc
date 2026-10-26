@@ -48,6 +48,8 @@ CONTRACTS = [
     ("gbase:verify", [skill("setup"), skill("go")]),
     ("verification:", [skill("go"), BRANCH_PR]),
     ("risk:", [skill("go"), BRANCH_PR]),
+    ("deferred:", [skill("go"), BRANCH_PR]),
+    ("## review focus", [skill("go"), BRANCH_PR, ORCHESTRATOR]),
     ("intent:", [skill("pause"), skill("pickup"), skill("go"), BRANCH_PR]),
     ("git reset --soft", [BRANCH_PR]),
     (".claude/skills/verify-", [skill("create-verify"), skill("go")]),

@@ -28,9 +28,9 @@ The final assistant message carries these lines at column 0; grep for the prefix
 
 - line 1: the PR title
 - line 2: empty
-- line 3 on: the body exactly as `gh pr create --body` would receive it — `## Why`, `## Change outline`, `## Evidence`, `## Merge danger`, `## Rollout / Deploy order` when compat-check returned `⚠️ Requires ordered rollout`, `## Notes`. Screenshots are referenced by their local `artifacts/verify/…` path, because nothing was uploaded.
+- line 3 on: the body exactly as `gh pr create --body` would receive it — `## Why`, `## Review focus`, `## Change outline`, `## Evidence`, `## Rollout / Deploy order` when compat-check returned `⚠️ Requires ordered rollout`, `## Notes`. Nothing was uploaded, so each screenshot is embedded as `![<label>](<absolute local path>)`: upload those files and rewrite the links before opening the PR, or the reviewer sees broken images.
 
-Opening the PR from it: `gh pr create --title "$(head -n 1 "$f")" --body "$(tail -n +3 "$f")"`. Review findings that needed a decision are in the report as a table, under `## Notes` in the draft, and in the evidence file as an `open` `review` line.
+Opening the PR from it: `gh pr create --title "$(head -n 1 "$f")" --body "$(tail -n +3 "$f")"`. Review findings that needed a decision are in the report as a table, under `## Review focus` in the draft, and in the evidence file as an `open` `review` line.
 
 ## Evidence file
 
