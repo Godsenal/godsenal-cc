@@ -264,9 +264,10 @@ gh pr create --title "<PR title>" --body "$(cat <<'EOF'
      K = 0: drop the details block. -->
 
 ## Change outline
-<one small view per concern, each under a bold one-line lead (e.g. **새 스킬**, **저장 흐름**, **스키마**):
-a table for 3+ parallel items, otherwise the form from the table below that fits the concern. Not a
-per-commit or per-file changelog: the Commits tab already is one>
+<one numbered `###` heading per concern, at most four (e.g. `### 1. 새 스킬`, `### 2. 저장 흐름`). Under each:
+the view from the table below that fits it, then at most three one-sentence bullets saying why. Table cells
+hold a few words; explanation goes in the bullets, never a paragraph. Not a per-commit or per-file
+changelog: the Commits tab already is one>
 
 ## Evidence
 <before → after first, in the form that shows this change best (table below); a `| | Before | After |`
