@@ -323,7 +323,7 @@ it still doesn't fit, the PR should be split.
 | A refactor | a file-tree `diff`, plus "the same tests pass unchanged" |
 | CLI or script behavior | terminal output before/after |
 
-**Screenshots and GIFs.** A change to what a user sees ships with the image in the body. A local path left
+**Screenshots and GIFs.** A change to what a user sees ships with the image in the body, in one place only. When the look is the change (layout, copy, a new screen), it goes in `## Change outline` as that concern's view, and Evidence says "see the screenshots above". When it proves a code change (a bug fix, a logic change), it goes in `## Evidence`. A local path left
 in a pushed PR body (`~/…/shots/after.png`) is not evidence, because the reviewer can't open it. Take them from the run's
 captures: the `verify-*` artifacts (`artifacts/verify/<feature>/`, gitignored) or the evidence dir in the
 `behavior:` lines. "After" is always available; include "before" only when the run already captured it
