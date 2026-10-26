@@ -2,7 +2,7 @@
 name: top3-compilation-short
 description: >-
   Starter for a faceless Korean TOP3 compilation short — three ranked moments from official foreign show
-  clips (e.g. the three biggest investor fights) cut into one 61–65s Shorts/Reels/TikTok video. Most of the
+  clips (e.g. the three biggest investor fights) cut into one 45–55s Shorts/Reels/TikTok video. Most of the
   format is unconfirmed by the user and marked TODO; it settles the open parts by sample comparison. Use when
   asked for a TOP3 / 모음 / 랭킹 / compilation short, or when building stock in a new format.
 ---
@@ -28,9 +28,9 @@ What the first attempt (`out/2026-10-26_top3_fights`, status needs-review, no us
 - 3 narration lines with ding/hit SFX, total 62.5s.
 
 TODO, to settle with the user:
-- Per-entry length split, and whether rank cards stay or become a title overlay (rank cards eat 4–5s of a 65s budget).
+- Per-entry length split, and whether rank cards stay or become a title overlay (rank cards eat 4–5s of a 55s budget).
 - Ranking order (3→1 vs. 1 first as the hook) — the strongest moment must still land in the first seconds, as in [foreign-clip-short](../foreign-clip-short/SKILL.md#structure).
 - Whether entries may repeat clips already posted as single shorts.
 - Pinned comment shape for three subjects.
 
-The pipeline's `src/clipPace.ts` references `docs/formats/top3-compilation.md`, which doesn't exist yet — write the settled format there too.
+Redesign B (foreign-clip-short) applies here too: silence cuts, 1.08×, B subtitles and tags. Write the settled format into the pipeline's `docs/formats/top3-compilation.md` too.
