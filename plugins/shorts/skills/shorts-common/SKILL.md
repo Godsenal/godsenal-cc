@@ -39,7 +39,10 @@ Quotes are the user's words with the date they were said. Undated items are from
 - **Voice**: Typecast voice 대진 with toneup 1.3 and tempo 1.1; the pipeline then speeds it up with ffmpeg `atempo=1.3`, pitch kept (`CLIP_VOICE_SPEEDUP`). Chosen from 8 samples; never 현준. A new voice only after a side-by-side sample comparison.
 - **Caption**: a curiosity hook line + a comment/save/tag CTA line + 5 hashtags. No AI-disclosure line, no summary. The TikTok AI-generated-content toggle stays ON.
 - **Pinned comment**: like the reference short https://youtube.com/shorts/J17s13-O3hE — who the person / what the product is, plus what happened after the broadcast. Only facts you confirmed with a source; cite the source in REPORT.md, never guess a 근황.
-- **Stock**: build inventory ahead in varied formats (TOP3 compilations etc.), not only the current one.
+- **Five posts a day, foreign clips first** — 2026-10-26 "해외 클립 영상이 가장 인기 있으니 주력으로 유지, 업로드는 하루 3편보다 더 늘려도 됨": slots 07:30, 12:00, 18:00, 21:00, 23:00 KST, same slots on TikTok and YouTube Shorts. 12:00 stays the auto-made narration video; the other four are foreign-show clips from pre-rendered stock, one fixed show per slot (pipeline `docs/SERIES.md`, `node scripts/day-slots.mjs <date> --clip`). A slot someone already scheduled is listed in `topics/overrides/<date>.json` `skipSlots` and never touched.
+- **Narration stays at today's amount** — 2026-10-26 "해설 양은 지금 그대로(늘리지 말 것)": 3–4 lines, about 70 characters in total. More stock or a new show is not a reason to add lines.
+- **Fixed series** — 2026-10-26 "인기 많은 쇼는 '고정 시리즈'로 운영": pick shows by measured Korean view counts (record the numbers and sources), give each a slot, and start the caption's first line (and the YouTube title) with `[<시리즈명> #<회차>]`, numbered per show in posting order. Nothing about the series goes on screen unless the user picks it from samples.
+- **Stock**: build inventory ahead in varied formats (TOP3 compilations etc.), not only the current one. A stock folder per slot holds `video.mp4`, `caption.txt`, `COMMENT.md` (pinned comment + sources), `FACTS.md` (every claim with its source time or URL).
 
 ## Sample comparison before deciding
 
@@ -57,8 +60,12 @@ Edit the gshorts source in the godsenal-cc checkout (`plugins/shorts/skills/…`
 
 ## Checks before showing the user
 
+2026-10-26 "품질 최우선 … 통과 못한 영상은 재고에 넣지 않는다": a video that fails any gate below is fixed or dropped, never stocked. Compare each new show against at least three high-view Korean shorts of the same show (hook, cuts per minute, 0.15s+ gaps, BGM under speech, subtitle look) and write the table down.
+
+
 - Duration 45–55s (`ffprobe`); `metadata.json` `flicker` has no issues and no black frames; last frame is footage.
 - Frames grabbed into `check/` at several timestamps (title, crop, subtitles, `last.jpg`) and looked at.
+- No line ending cut off and no leftover gap: make_b's "소리 걸친 컷 경계" and "잘린 단어" are 0, and the render's 0.15s+ gaps are listed. The automatic re-transcription share (`listen_check.py`) drops to 0.7–0.8 on crying or music-heavy scenes even when every word is there; in that case re-transcribe the vocal stem in 4-second chunks and confirm each line is heard. The make_b vocal cache must be keyed by the clip ranges: a stale cache after editing clip ranges shifted every later clip and cut real words (fixed 2026-10-26).
 - Loudness near -14 LUFS. You can't hear the mix — say "귀로 듣지 않음" in REPORT.md rather than claiming the audio is fine.
 - Narration timestamps land where intended; numbers and names match the source.
 - REPORT.md: source URL, title, length/resolution/LUFS/blackdetect/last frame, narration lines with timestamps and SFX, how subtitles were verified, cost, and a "확인 못 한 것" list.

@@ -256,8 +256,8 @@ Faceless Korean short-form videos for YouTube Shorts, Instagram Reels, and TikTo
 
 | Skill | What it does |
 |---|---|
-| **shorts-common** | Rules every short follows (length, pacing, audio mix, narration, captions, checks, posting gate — never schedules without the user's OK), options decided from 2–3 side-by-side samples, and **feedback intake**: each new piece of feedback is classified as common or format-specific and written, dated, into the matching skill the same turn. Ships a dated trend reference with sources |
-| **foreign-clip-short** | Official foreign show clips (Shark Tank, Dragons' Den, Antiques Roadshow appraisals) in framing D: black 9:16 canvas, fixed two-line title, ~1080×930 center crop, Korean subtitles; excludes shows with Korean rights holders |
+| **shorts-common** | Rules every short follows (five posts a day with one fixed show per clip slot, length, pacing, audio mix, narration, captions, checks, posting gate — never schedules without the user's OK), options decided from 2–3 side-by-side samples, and **feedback intake**: each new piece of feedback is classified as common or format-specific and written, dated, into the matching skill the same turn. Ships a dated trend reference with sources |
+| **foreign-clip-short** | Official foreign show clips in framing D (black 9:16 canvas, fixed two-line title, ~1080×930 center crop, Korean subtitles), with per-show variants for the fixed daily series: Antiques Roadshow, Pawn Stars, Shark Tank / Dragons' Den, Kitchen Nightmares, and Undercover Boss as the spare |
 | **top3-compilation-short** | Starter for ranked TOP3 compilations. Only the request for the format is confirmed, so the open parts are marked TODO and settled by sample comparison |
 
 ## Usage
@@ -303,7 +303,7 @@ After installation, the following are available:
 /gapp:store-submit             # App Store Connect submission via Claude-in-Chrome
 
 /gshorts:shorts-common         # Every-video rules + feedback intake (read first)
-/gshorts:foreign-clip-short    # Shark Tank / Dragons' Den / Antiques Roadshow clip short, framing D
+/gshorts:foreign-clip-short    # Foreign show clip short (Shark Tank, Pawn Stars, Kitchen Nightmares …), framing D
 /gshorts:top3-compilation-short  # TOP3 compilation starter (TODO parts settled by samples)
 ```
 

@@ -2,10 +2,11 @@
 name: foreign-clip-short
 description: >-
   Makes a faceless Korean short from an official foreign show clip — Shark Tank, Dragons' Den, Shark Tank
-  Australia pitches, and Antiques Roadshow appraisals — in the user-approved framing D (black 9:16 canvas,
+  Australia pitches, Antiques Roadshow appraisals, Pawn Stars haggles, Kitchen Nightmares restaurants, and
+  Undercover Boss reveals — in the user-approved framing D (black 9:16 canvas,
   fixed two-line title, center-cropped footage, Korean subtitles), with mostly original dialogue and 3–4
-  narration bridges. Use when asked for a Shark Tank / Dragons' Den / Antiques Roadshow / 샤크탱크 /
-  드래곤스덴 / 앤티크 로드쇼 short, reel, or TikTok, or any short built on a foreign TV clip with Korean subtitles.
+  narration bridges. Use when asked for a Shark Tank / Dragons' Den / Antiques Roadshow / Pawn Stars / Kitchen
+  Nightmares / Undercover Boss / 샤크탱크 / 드래곤스덴 / 앤티크 로드쇼 / 전당포 사나이들 / 키친 나이트메어 / 언더커버 보스 short, reel, or TikTok, or any short built on a foreign TV clip with Korean subtitles.
 ---
 
 # foreign-clip-short
@@ -18,7 +19,7 @@ Agreed with the user on 2026-10-25 after analyzing 12 popular Korean Shark Tank 
 
 ## Source
 
-- Official channel uploads only (Shark Tank Global/US, Dragons' Den, Shark Tank Australia, BBC Antiques Roadshow …). **Exclude shows with an official Korean rights holder** (e.g. Pawn Stars / 폰스타즈, Undercover Boss / 언더커버 보스) unless the user allows it.
+- Official channel uploads only (Shark Tank Global/US, Dragons' Den, Shark Tank Australia, BBC/PBS Antiques Roadshow, `@PawnStars`, `@gordonramsay` / `@KitchenNightmares`, Undercover Boss …). Shows with an official Korean rights holder (Pawn Stars / 전당포 사나이들 → '히스토리', Undercover Boss) were excluded until 2026-10-26, when the user made 전당포 사나이들 a fixed series ("전당포 사나이들처럼 새 쇼는 … 쇼별 포맷 스펙"). Use them, skip items the Korean rights holder already posted, and note the claim risk in REPORT/FACTS.
 - Pick episodes with a clear product or object, a fight between investors, a fast deal, or a twist ending / surprising price.
 - Download into `out/<date>_<slug>/source/` (yt-dlp: best video up to 1080p + best audio). Save the source URL in REPORT.md.
 
@@ -41,6 +42,20 @@ The user picked B ("해외쇼쇼식", modeled on the most-viewed foreign-show cl
 - Framing D stays as below.
 
 Appraisal variant (agent-built, ran as stock but not separately confirmed by the user): price hook → owner's story → appraiser explains the object (~18s) → price reveal + reaction. Add a KRW estimate line to foreign prices (the stock runs used about 1달러≈1,400원, 1파운드≈1,800원 — mark it as an estimate).
+
+## Per-show variants (2026-10-26)
+
+One fixed show per clip slot (pipeline `docs/SERIES.md`); the full spec for each is in the pipeline's `docs/formats/<show>.md`. What differs from the structure above:
+
+| Show (slot) | Story spine | Title line 1 | Gotchas |
+|---|---|---|---|
+| 앤티크 로드쇼 (07:30) | owner's story → expert → price reveal (hook reuses it) | `<cheap price> <object>` | appraisal price card at the very end — stop the clip before it |
+| 전당포 사나이들 (18:00) | asking price → expert valuation → 3–5 haggling turns → deal or walk-out | `<원화> 부른 <물건>` | burned-in price tags (`was/now/still $…`), name bars, red fact boxes at 70% height → `crop: 0.68–0.78` or `video` close-ups; end card in the last 7–10s |
+| 샤크탱크 / 드래곤스 덴 (21:00) | as above | number / result | offer bars → `crop: 0.78` |
+| 키친 나이트메어 (23:00) | the restaurant's money trouble first (debt, monthly loss, mortgaged home), then Ramsay's tasting or fridge check, then his verdict | money trouble: `집까지 담보 잡힌 피자집` | full 40–45 min episodes, not multi-restaurant compilations; name bars; translate meaning, not swearing; first cut came out 39.9s — use 3–4 problem scenes |
+| 언더커버 보스 (spare for 07:30) | one employee's hardship → boss reveal → the biggest gift | the gift in 원화 | dissolve transitions make 1-frame flicker — end clips before them; crying lines fall under make_b's voice threshold (check by chunked transcription); hook footage via `video` on the crying face |
+
+Narration stays at 3–4 lines in every variant (2026-10-26 "해설 양은 지금 그대로").
 
 ## Subtitles
 
