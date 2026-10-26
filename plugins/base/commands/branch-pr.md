@@ -302,7 +302,9 @@ a `(확인)` item for it. If `gbase:blast-radius` ran, its confirmed risks becom
 The risk line informs the reviewer; it never blocks the PR.
 
 **Readable in a minute.** The body before `## Change outline` fits on one screen. Every section is tables
-and one-line bullets, no paragraph over two lines. A Change outline over ~25 lines or four groups, and any
+and one-line bullets, no paragraph over two lines. Short is not shorthand: every table cell and bullet is a
+sentence a reader who wasn't in this session understands, saying what changed and why, never a row of nouns,
+arrows, or session jargon. A Change outline over ~25 lines or four groups, and any
 long table or command output, goes inside `<details><summary>…</summary>` with its lead line outside; if
 it still doesn't fit, the PR should be split.
 
