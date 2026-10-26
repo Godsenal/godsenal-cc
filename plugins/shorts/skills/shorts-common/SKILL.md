@@ -21,7 +21,7 @@ Format skills (`foreign-clip-short`, `top3-compilation-short`) hold only what di
 
 The render pipeline is a separate repo (`tiktok-automation`); run its commands there and never copy its code into this plugin. On the reference machine it is `$HOME/LTH/tiktok-automation`; if that path doesn't exist, ask the user for its location once.
 
-- Render: `npm run clip -- out/<date>_<slug>/work/plan.json` (`src/clipCommentary.ts`); format rules in `docs/CLIP.md`, `docs/SHARK_TANK.md`.
+- Render: `npm run clip -- out/<date>_<slug>/work/plan.json` (`src/clipPace.ts`, default `PACE_B`); format rules in `docs/CLIP.md`, `docs/formats/*.md`. Flicker check: `npm run flicker -- video.mp4` (also run by the render; result in `metadata.json` `flicker`).
 - Work dir `out/<date>_<slug>/` (`work/plan.json`, `video.mp4`, `subtitles.srt`, `metadata.json`, `check/`). Delivery copy in `$HOME/tiktok-share/<date>/<nn>_<slug>/`: `video.mp4`, `caption.txt`, `cover.jpg`, `subtitles.srt`, `check/`, `REPORT.md`.
 - Keys come from the environment by name only — `TYPECAST_API_KEY` (TTS), `FAL_KEY` (BGM); optional knobs are in the pipeline's `.env.example`. Never read, print, or copy key values or the shell file that sets them.
 - Cost: every paid call is logged in `cost-ledger.jsonl`; check the monthly budget (`MONTHLY_BUDGET_KRW`) before a batch. Reuse cached TTS/BGM when the line or prompt is unchanged.
@@ -30,9 +30,10 @@ The render pipeline is a separate repo (`tiktok-automation`); run its commands t
 
 Quotes are the user's words with the date they were said. Undated items are from the 2026-10-25 format agreement.
 
-- **Length 61–65s** (TikTok Creator Rewards needs over 1 min). Hard cuts only — no slide/wipe transitions. **No black frame at the end**; the last frame is real footage.
-- **Pace** — 2026-10-26 "속도감이 없다": cut dragging stretches and the silence between lines. Remove dead air rather than adding cuts for their own sake ([trends](references/trends-2026-10.md#cut-frequency--pacing)).
-- **BGM** — 2026-10-26 "BGM이 약하다": clearly audible and matched to the scene. The pipeline default (`BGM_DB` in `src/clipCommentary.ts`: about -4 dB in gaps, -13 dB under speech, +3 dB build, final -14 LUFS) is the level the user called weak, so mix BGM louder than that. TODO (open): no new level is agreed yet. The louder pace-test variants (`scripts/pace-test/make_plans.py`, A/B/C) haven't been shown to the user. Settle it by sample comparison (below), then write the chosen levels here and into the pipeline default.
+- **Length 45–55s** — 2026-10-26, the user picked redesign B ("61초 하한은 없앤다"): the 61s Creator Rewards floor is gone. Well-performing foreign-clip shorts run 36–56s. Reach the length by dropping weak lines (side remarks, a lone "와", self-promotion), never by padding. Hard cuts only — no slide/wipe transitions. **No black frame at the end**; the last frame is real footage.
+- **Pace** — 2026-10-26 "속도감이 없다", settled by redesign B: remove **every silence over 0.15s between lines**, leaving ~0.06s before and after so line endings aren't clipped. Find the silences on the actual waveform (demucs vocal stem), not on Whisper word timestamps alone: Whisper stretches words over pauses and missed every 0.2s pause in a clip. Use word timestamps to check that no word was cut. Then play everything at 1.08× with pitch kept. Pipeline: `scripts/clip/make_b.py` (prints "소리 걸친 컷 경계" and "잘린 단어", both must be 0) and `scripts/clip/listen_check.py` (re-transcribes the render).
+- **No flicker at cuts** — 2026-10-26 "장면 전환 때 화면이 깜빡이는 현상": the cause was one to three frames of a different camera angle or crop at a cut. Clip pieces were cut one frame late (the first frame after the seek wasn't at PTS 0), and plan boundaries sat 1–3 frames off the source's own camera cuts. The pipeline now cuts from PTS 0, fills edge frames that straddle a source cut (`fixEdges`), merges pieces under 4 frames, and aligns color flashes to cut frames. **Before showing a video, `metadata.json` `flicker.issues` must be empty and `blackframe` empty**; any 1–3 frame shot or black frame blocks delivery.
+- **BGM** — 2026-10-26 "BGM이 약하다", settled by redesign B: measured against the dialogue track, -9 LU under speech, -5 in gaps, -6 under narration (2 dB below the B draft so speech isn't buried); master -14 LUFS (`PACE_B.bgmDb`).
 - **SFX**: subtle shorts-style — whoosh+hit at the hook, ding at a key reveal, a tension hit before the decision. Synthesized by the pipeline (`src/sound.ts`), free.
 - **Narration — never zero lines.** 3–4 short Korean hearsay bridge lines (1–3s each) in the shorts storytelling tone: "~했다는데", "침묵이 이어지는데", "잠깐 고민하더니". Not a news-style who/what/result summary. Write numbers in Korean words; commas and ellipses for natural line endings. Narration is also what keeps clip-based shorts out of "reused content" ([trends](references/trends-2026-10.md#reused--clipped-content--matters-for-foreign-clip-formats)).
 - **Voice**: Typecast voice 대진 with toneup 1.3 and tempo 1.1; the pipeline then speeds it up with ffmpeg `atempo=1.3`, pitch kept (`CLIP_VOICE_SPEEDUP`). Chosen from 8 samples; never 현준. A new voice only after a side-by-side sample comparison.
@@ -56,7 +57,7 @@ Edit the gshorts source in the godsenal-cc checkout (`plugins/shorts/skills/…`
 
 ## Checks before showing the user
 
-- Duration 61–65s (`ffprobe`); `blackdetect` finds no black frame; last frame is footage.
+- Duration 45–55s (`ffprobe`); `metadata.json` `flicker` has no issues and no black frames; last frame is footage.
 - Frames grabbed into `check/` at several timestamps (title, crop, subtitles, `last.jpg`) and looked at.
 - Loudness near -14 LUFS. You can't hear the mix — say "귀로 듣지 않음" in REPORT.md rather than claiming the audio is fine.
 - Narration timestamps land where intended; numbers and names match the source.

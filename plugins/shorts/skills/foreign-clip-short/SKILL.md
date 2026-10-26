@@ -29,21 +29,30 @@ Agreed with the user on 2026-10-25 after analyzing 12 popular Korean Shark Tank 
 3. **Back-and-forth**: offers, counters, sharks arguing — or the backstory and appraisal build-up.
 4. **Result**: deal or no deal / the price reveal, and the reaction.
 
-Original dialogue carries most of the video (~90%).
+Original dialogue carries most of the video (~90%). Length and pacing rules are in shorts-common (45–55s, every silence over 0.15s cut).
+
+## Redesign B — the default since 2026-10-26
+
+The user picked B ("해외쇼쇼식", modeled on the most-viewed foreign-show clip shorts) out of four drafts (`$HOME/tiktok-share/2026-10-26/redesign/`). Build the plan with the pipeline's `scripts/clip/make_b.py` from a first-pass plan + word timestamps + a small spec (weak lines to `drop`, situation `tags`). The renderer default `PACE_B` does the rest:
+- 1.08× speed (pitch kept); each footage piece alternates zoom 1.0/1.14/1.06/1.2, so every jump cut reads as a new angle (pieces under 0.6s keep the previous zoom).
+- Big bold one-line subtitle at 60% of the footage height. On each line, one word (a number, a `*key*` word, or the longest word) is colored, cycling yellow → green → sky → red → pink; the rest is white with a thick black stroke.
+- Small situation tag above the subtitle per scene (`*로리 vs 케빈*`, `*최종 결정*`, 2.2s). Tags name people from what's on screen, so check them against the source.
+- Number subtitles get a hit SFX and a 4-frame color flash on the footage, aligned to the cut frame. No punch-in, no boundary whoosh.
+- Framing D stays as below.
 
 Appraisal variant (agent-built, ran as stock but not separately confirmed by the user): price hook → owner's story → appraiser explains the object (~18s) → price reveal + reaction. Add a KRW estimate line to foreign prices (the stock runs used about 1달러≈1,400원, 1파운드≈1,800원 — mark it as an estimate).
 
 ## Subtitles
 
 - Accurate Korean subtitles, mostly the original dialogue translated. Transcribe with at least Whisper small (`faster-whisper small.en`, cross-checked with `medium.en`; word timings: pipeline `scripts/pace-test/words.py`). Check **who says each line**, especially offers, and that every amount matches the original.
-- Subtitle style (lines ≤14 chars, number/keyword colors) lives in the pipeline's `docs/CLIP.md`; subtitles go in `plan.json` `clip.subs`.
+- Subtitle style (lines ≤14 chars, B colors above) lives in the pipeline's `docs/CLIP.md`; subtitles go in `plan.json` `clip.subs`.
 
 ## Framing D (reference: youtube.com/shorts/YJ93QlV37-I)
 
 - Black 1080×1920 canvas.
 - Fixed two-line title in the top black area, y ≈ 250–470: line 1 yellow, line 2 white, bold with a black stroke; inside the profile-grid safe area.
 - Footage center-cropped to about 1080×930 (~65% of the 16:9 width) at y ≈ 485. **Not** a full-frame 9:16 crop — the user found it too zoomed in.
-- Subtitles at the lower part of the footage.
+- Subtitles inside the footage at 60% of its height (B).
 - Cover: same style with the title (the frame at ~0.6s, showing the title and the product).
 - Pipeline: `frame: box` (default) in `plan.json`; per-cut focus `x` (0–1); a numeric `crop` (<1) hides burned-in name bars. Details in `docs/SHARK_TANK.md`.
 
@@ -55,4 +64,4 @@ Appraisal variant (agent-built, ran as stock but not separately confirmed by the
 
 ## Format-specific checks
 
-On top of shorts-common's checks and the subtitle checks above: the title's claim matches what the clip shows; the footage area has no black bars from the crop.
+On top of shorts-common's checks and the subtitle checks above: the title's claim matches what the clip shows; the footage area has no black bars from the crop; situation tags name the right person; `listen_check.py` hears the kept original words (compare its share with the un-cut version — Whisper misses a few words at hard-cut starts either way).
