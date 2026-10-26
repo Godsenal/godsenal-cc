@@ -232,7 +232,7 @@ section, `Evidence` wherever it fits.
 Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
 `gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
 
-Run the drafted title and body through `gbase:unslop` before creating the PR.
+**Before `gh pr create`, call `Skill(skill: "gbase:unslop")` and rewrite the drafted title and body by it, every table cell and bullet included.** Knowing its rules is not running it: a body written straight into the heredoc is where this step gets skipped. The same holds for every later `gh pr edit --body`.
 
 The body is a briefing for a reviewer who has the diff. **The reviewer reads `Review focus` first and may
 stop there**, so everything a person has to judge goes in it and nowhere else; the sections below it are
