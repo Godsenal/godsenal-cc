@@ -1,6 +1,6 @@
 {
   "name": "gshorts",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Faceless Korean short-form video harness for YouTube Shorts, Instagram Reels, and TikTok — one common skill with every user-confirmed rule and a feedback-intake rule that writes each new piece of feedback into the matching skill, plus one skill per format (foreign show clips in framing D with per-show variants and five daily slots, TOP3 compilation starter). Points at an external render pipeline instead of shipping code; includes a dated 2026 short-form trend reference with sources.",
   "author": {
     "name": "godsenal",
