@@ -30,6 +30,8 @@ Agreed with the user on 2026-10-25 after analyzing 12 popular Korean Shark Tank 
 3. **Back-and-forth**: offers, counters, sharks arguing — or the backstory and appraisal build-up.
 4. **Result**: deal or no deal / the price reveal, and the reaction.
 
+**A full story arc (기승전결) is required, and the ending must be inside the video** (user, 2026-10-27: "영상은 기승전결 있도록. 지금 샤크탱크처럼"). Pick source scenes for every stage and keep the ending on screen; a clip that stops at the problem or the conflict does not ship. If the source has no ending scene (a compilation, the first half of a two-parter, an episode cut before the result), do not use that source. After rendering, read the last three lines of `subtitles.srt`: they must be the ending scene (the deal, the price, the gift, the relaunch reaction), not the setup.
+
 Original dialogue carries most of the video (~90%). Length and pacing rules are in shorts-common (45–55s, every silence over 0.15s cut).
 
 ## Redesign B — the default since 2026-10-26
@@ -53,7 +55,7 @@ One fixed show per clip slot (pipeline `docs/SERIES.md`); the full spec for each
 | 앤티크 로드쇼 (07:30) | owner's story → expert → price reveal (hook reuses it) | `<cheap price> <object>` | appraisal price card at the very end — stop the clip before it |
 | 전당포 사나이들 (18:00) | asking price → expert valuation → 3–5 haggling turns → deal or walk-out | `<원화> 부른 <물건>` | burned-in price tags (`was/now/still $…`), name bars, red fact boxes at 70% height → `crop: 0.68–0.78` or `video` close-ups; end card in the last 7–10s |
 | 샤크탱크 / 드래곤스 덴 (21:00) | as above | number / result | offer bars → `crop: 0.78` |
-| 키친 나이트메어 (23:00) | the restaurant's money trouble first (debt, monthly loss, mortgaged home), then Ramsay's tasting or fridge check, then his verdict | money trouble: `집까지 담보 잡힌 피자집` | full 40–45 min episodes, not multi-restaurant compilations; name bars; translate meaning, not swearing; first cut came out 39.9s — use 3–4 problem scenes |
+| 키친 나이트메어 (23:00) | 기승전결, 50–60s: 기 = the failing restaurant and owner (money trouble first: debt, monthly loss, mortgaged home) → 승 = Ramsay's tasting or fridge check and the clash → 전 = the change (makeover reveal, new menu, new kitchen, relaunch) → 결 = the result scene (relaunch-night reactions, Ramsay's final verdict). Episodes without a relaunch/result scene are not used; the 'weeks later' narrator epilogue goes to the comment, not the clip | money trouble: `집까지 담보 잡힌 피자집` | full 40–45 min episodes, not multi-restaurant compilations; name bars; translate meaning, not swearing; first cut came out 39.9s — use 3–4 problem scenes |
 | 언더커버 보스 (spare for 07:30) | one employee's hardship → boss reveal → the biggest gift | the gift in 원화 | dissolve transitions make 1-frame flicker — end clips before them; crying lines fall under make_b's voice threshold (check by chunked transcription); hook footage via `video` on the crying face |
 
 Narration stays at 3–4 lines in every variant (2026-10-26 "해설 양은 지금 그대로").
@@ -80,4 +82,4 @@ Narration stays at 3–4 lines in every variant (2026-10-26 "해설 양은 지�
 
 ## Format-specific checks
 
-On top of shorts-common's checks and the subtitle checks above: the title's claim matches what the clip shows; the footage area has no black bars from the crop; situation tags name the right person; `listen_check.py` hears the kept original words (compare its share with the un-cut version — Whisper misses a few words at hard-cut starts either way).
+On top of shorts-common's checks and the subtitle checks above: the ending scene is in the video (every series: 앤티크 = price reveal + reaction, 전당포 = deal or walk-out with the final price, 언더커버 보스 = reveal + gift, 드래곤스덴/샤크탱크 = final decision; 키친 나이트메어 = relaunch result); the title's claim matches what the clip shows; the footage area has no black bars from the crop; situation tags name the right person; `listen_check.py` hears the kept original words (compare its share with the un-cut version — Whisper misses a few words at hard-cut starts either way).
