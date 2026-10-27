@@ -38,6 +38,7 @@ The user picked B ("해외쇼쇼식", modeled on the most-viewed foreign-show cl
 - 1.08× speed (pitch kept); each footage piece alternates zoom 1.0/1.14/1.06/1.2, so every jump cut reads as a new angle (pieces under 0.6s keep the previous zoom).
 - Big bold one-line subtitle at 60% of the footage height. On each line, one word (a number, a `*key*` word, or the longest word) is colored, cycling yellow → green → sky → red → pink; the rest is white with a thick black stroke.
 - Small situation tag above the subtitle per scene (`*로리 vs 케빈*`, `*최종 결정*`, 2.2s). Tags name people from what's on screen, so check them against the source.
+- **Next-episode end card** (series clips, from 2026-10-28 production; user picked draft A 교체·팝 on 2026-10-27): put `"stock": "<stock folder name>"` (`MMDD-HHMM_<series>-<NN>_<slug>`) in `plan.json` and the last 1.5s replaces the top headline with yellow text that pops 82%→100% in 0.25s — `다음 #3 · 내일 18:00` plus the next episode's queue `hook`, or `다음 회차도 곧 올라와요` when the next slot is unknown (same source as `scripts/series-cta.mjs`; preview with `--endcard`). Write the next episode's `stock`/`slot`/`hook` in `topics/clips/queue.json` before rendering. No narration or sfx is added. Never on narration videos or TOP3; never re-render a video already scheduled.
 - Number subtitles get a hit SFX and a 4-frame color flash on the footage, aligned to the cut frame. No punch-in, no boundary whoosh.
 - Framing D stays as below.
 
