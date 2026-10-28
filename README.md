@@ -263,7 +263,8 @@ Korean content harness: faceless short-form videos for YouTube Shorts, Instagram
 
 | Skill | What it does |
 |---|---|
-| **content-common** | Rules for every piece of content: names, bios, captions, cards, and scripts are written from high-performing references actually opened on the target platform, numbers, schedules, or scope from neither references nor the user are reported as `가정:` lines and kept out of public copy until confirmed, public copy carries no source credits and reads as one person's own first-hand writing (sources stay in the work report), hooks don't impersonate or inflate, text posts put the key numbers in the root, and every mistake or lesson is written into the plugin the same turn so other bots don't repeat it. Holds the **feedback intake**: each new piece of feedback is classified as content-wide, video-wide, or format-specific and written, dated, into the matching skill the same turn |
+| **content-common** | Rules for every piece of content: names, bios, captions, cards, and scripts are written from high-performing references actually opened on the target platform, numbers, schedules, or scope from neither references nor the user are reported as `가정:` lines and kept out of public copy until confirmed, public copy carries no source credits and reads as one person's own first-hand writing (sources stay in the work report), opening lines start from hook-templates, text posts put the key numbers in the root, and every mistake or lesson is written into the plugin the same turn so other bots don't repeat it. Holds the **feedback intake**: each new piece of feedback is classified as content-wide, video-wide, or format-specific and written, dated, into the matching skill the same turn |
+| **hook-templates** | 25 Korean first-line hook templates from a high-performing X post (source and metrics kept), per-platform notes (lighter on X, keyword first on Naver blog titles), and the 머니알림 rules: which templates fit, 6 "현직 OO" and 18 "상위 1%" banned, experience hooks (1, 3, 9, 17, 24, 25) only on a real case, no repeating a template in consecutive posts. Every content skill reads it at its hook step |
 | **shorts-common** | Rules every short follows (five posts a day with one fixed show per clip slot, length, pacing, audio mix, narration, captions, checks, posting gate — never schedules without the user's OK), and options decided from 2–3 side-by-side samples. Ships a dated trend reference with sources |
 | **foreign-clip-short** | Official foreign show clips in framing D (black 9:16 canvas, fixed two-line title, ~1080×930 center crop, Korean subtitles), with per-show variants for the fixed daily series: Antiques Roadshow, Pawn Stars, Shark Tank / Dragons' Den, Kitchen Nightmares, and Undercover Boss as the spare |
 | **top3-compilation-short** | Starter for ranked TOP3 compilations. Only the request for the format is confirmed, so the open parts are marked TODO and settled by sample comparison |
@@ -312,6 +313,7 @@ After installation, the following are available:
 /gapp:store-submit             # App Store Connect submission via Claude-in-Chrome
 
 /gshorts:content-common        # Rules for every piece of content + feedback intake (read first)
+/gshorts:hook-templates        # First-line hook templates + 머니알림 rules
 /gshorts:shorts-common         # Every-video rules
 /gshorts:foreign-clip-short    # Foreign show clip short (Shark Tank, Pawn Stars, Kitchen Nightmares …), framing D
 /gshorts:top3-compilation-short  # TOP3 compilation starter (TODO parts settled by samples)
