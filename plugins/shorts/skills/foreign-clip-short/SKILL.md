@@ -71,7 +71,7 @@ Narration stays at 3–4 lines in every variant (2026-10-26 "해설 양은 지�
 - Fixed two-line title in the top black area, y ≈ 250–470: line 1 yellow, line 2 white, bold with a black stroke; inside the profile-grid safe area.
 - Footage center-cropped to about 1080×930 (~65% of the 16:9 width) at y ≈ 485. **Not** a full-frame 9:16 crop — the user found it too zoomed in.
 - Subtitles inside the footage at 60% of its height (B).
-- Cover: same style with the title (the frame at ~0.6s, showing the title and the product).
+- Cover: same style with the title (a frame at 0.5–1s showing the title and the product, per shorts-common).
 - Pipeline: `frame: box` (default) in `plan.json`; per-cut focus `x` (0–1); a numeric `crop` (<1) hides burned-in name bars. Details in `docs/SHARK_TANK.md`.
 
 ## Narration examples (tone rules are in shorts-common)

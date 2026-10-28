@@ -1,6 +1,6 @@
 {
   "name": "gshorts",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Korean content harness for faceless short-form videos (YouTube Shorts, Instagram Reels, TikTok) and Instagram card news — a content-wide skill (write from opened high-performing references, record every mistake the same turn), a video-wide skill with every user-confirmed rule and a feedback-intake rule that writes each new piece of feedback into the matching skill, plus one skill per format (foreign show clips in framing D with per-show variants and five daily slots, TOP3 compilation starter, Instagram card news). Points at an external render pipeline instead of shipping code; includes a dated 2026 short-form trend reference with sources.",
   "author": {
     "name": "godsenal",
