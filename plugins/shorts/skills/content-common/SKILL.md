@@ -30,7 +30,19 @@ Quotes are the user's words with the date they were said.
 - **Phrases the user rejected** — 2026-10-28: "브리핑" (in names and copy); words that narrow the audience (the "해외 AI회사" case above); saying where the material came from ("x에서 골라왔다는건 왜쓰니"); promising material by DM for a comment ("번역본 dm 은 진짜주는거임? 아니면 빼야할듯"); AI-sounding phrasing ("지금 좀 ai같은데") — match the tone of the references' original text instead.
 - **Price comparisons state their basis** — 2026-10-28: check whether each price includes VAT and how it's displayed (won price vs. dollar list price). If you can't confirm it, narrow the claim in the title or body in plain words ("부가세 빼고 달러 가격으로 보면"), not as a source-style note.
 - **Text posts (Threads, X): everything that matters in the root** — 2026-10-28: thread replies get only 2–4% of the root's views, so the key numbers and the conclusion all go in the root post; replies only add detail.
+- **No made-up experience** — 2026-10-29: a line like "제가 해봤더니" or "저는 이렇게 써요" goes in only when the user confirmed they actually did it. Otherwise write it as a how-to ("이렇게 해 보세요"). A reaction to the material itself ("적자라길래 놀랐는데") is fine; an invented deed, number, or colleague story is not.
+- **Keep the filing's qualifier** — 2026-10-29 (a reel said "구글 최대 1,145억 달러" where the filing said "at least"): when a number comes with "up to", "at least", "approximately", or a list-price/valuation basis, carry that word into the copy (최대·최소·약·정가 기준). Don't turn a reported date into a fact; if only the press has it, say it isn't set yet.
 - **Mistakes are recorded the same turn** — 2026-10-28 "똑같은 실수가 여러봇들에서 반복되지않게": several bots run this harness, so a mistake one makes or a lesson one learns is written into this plugin within that turn, at the place the feedback intake below points to — never only in a chat reply or a bot's own memory.
+
+## Series: 보통 직장인 AI 활용법 (Threads text posts)
+
+2026-10-29 "인스타 쓰레드에 진짜 직장인이 알려주는거같은 ai활용법도 하자!!", narrowed the same night: the reader is an ordinary office worker, not a developer. Everything above still applies; these rules are on top.
+
+- **Reader and topics**: office work (Excel, reports, email, meeting notes, slides) and also daily life and money management. No coding, no "build a program/agent with AI", no "개발자로 일하다가" hook.
+- **Format comes from opened references**: before writing, open the top Korean Threads and Instagram accounts doing workplace AI tips and copy their shape — first line, line breaks, length, the save-worthy structure (the `"○○"라고만 하지 마세요❌` → what to type instead pattern, or a numbered settings checklist), and ending on a question to the reader. Write the accounts into the work folder's refs file. Their "댓글 남기면 DM" bait stays out.
+- **Material from X is checked, then rewritten**: X posts with many bookmarks and likes are good material, but never copy one. Before writing, confirm the feature, menu path, plan, and price on the vendor's official page (help center, pricing page), then write it in your own words. Menu names in third-party posts are often stale; the official page wins, and a toggle the official steps require (e.g. an "enable" switch before the field) goes in.
+- **Root is complete**: the copyable text (the instruction lines, the menu path) is in the root, so a reader can do it without opening a reply. At most one reply, only when needed, never a source.
+- **Topic choice**: list 3–5 candidates with each one's reference numbers, pick the one with the strongest signal across platforms, and keep the rest with their drafts in the work folder for later posts.
 
 ## Operations
 
