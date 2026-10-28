@@ -22,15 +22,14 @@ Rules from the user's feedback on 2026-10-27–28. All of [content-common](../co
 ## Cards
 
 - **No forced cards** — 2026-10-27 "뜬금없는 2,30대 개억지 체크포인트": every card must follow from the story; no filler checklist or audience-targeting card bolted on.
-- **No useless caption lines or source credits, and no image-less text cards** — 2026-10-27 "쓸데없는 캡션이랑 출처, 이미지는 하나도없음": each card carries a real visual — an actual tweet capture, a chart, or the mascot.
+- **No useless caption lines, no image-less text cards** — 2026-10-27 "쓸데없는 캡션이랑 출처, 이미지는 하나도없음": each card carries a real visual — an actual tweet capture, a chart, or the mascot. No source card or credit line either (content-common's no-sources rule, 2026-10-29); the tweet captures themselves stay.
 - **Mascot**: chosen by the user from several samples side by side; on 2026-10-28 the user picked a sea otter (해달). A new character only after another side-by-side comparison.
 
 ## Name, bio, caption
 
-- **Name** — 2026-10-27 "ai머니노트 이게 말이되니", "이름 좀 다른거참고해봐": follow the naming patterns of real Korean info brands (잼비, 경제여우, 어피티, 뉴닉, 순살브리핑 …). Never glue keywords together ("AI머니노트", "지혼자 돈소식").
-- **Bio** — 2026-10-28 "x에서 골라왔다는건 왜쓰니": never state the sourcing route ("X에서 골라와요"). 2026-10-28 "지금 좀 ai같은데": match the tone of the reference bios' original text; no AI-sounding phrasing.
+- **Name** — 2026-10-27 "ai머니노트 이게 말이되니", "이름 좀 다른거참고해봐": follow the naming patterns of real Korean info brands (잼비, 경제여우, 어피티, 뉴닉 …). Never glue keywords together ("AI머니노트", "지혼자 돈소식"), and no "브리핑" ([content-common](../content-common/SKILL.md)'s rejected phrases).
+- **Bio** — match the tone of the reference bios' original text; the sourcing route ("X에서 골라와요"), AI-sounding phrasing, and comment→DM promises are banned in every piece of content ([content-common](../content-common/SKILL.md)'s rejected phrases).
 - **No made-up schedule** — 2026-10-28 "왜 주 4회임?": a posting count or time goes into the bio only after the user sets it ([content-common](../content-common/SKILL.md)'s `가정:` rule).
-- **No promises the account can't keep** — 2026-10-28 "번역본 dm 은 진짜주는거임? 아니면 빼야할듯": no "댓글 남기면 DM으로 자료 보내드려요" unless an auto-send setup actually exists; otherwise drop it.
 
 ## Posting
 
