@@ -61,6 +61,8 @@ CONTRACTS = [
     ("--until-settled", [skill("monitor"), ORCHESTRATOR]),
     ("settle: 수렴", [skill("monitor"), ORCHESTRATOR]),
     ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
+    # headless forbids wakeups in prose; the runner enforces it by denying the tools
+    ("schedulewakeup,croncreate", [HEADLESS, ORCHESTRATOR, RUNNER]),
     # the runner splits decision lines on these keys into recommend / options / human
     ("(추천:", [HEADLESS, RUNNER]),
     ("다른 선택지", [HEADLESS, RUNNER]),
@@ -254,7 +256,9 @@ def check_factory(pdir):
             fail(path, f"env {name} needs a one-line meaning")
         if f"`{name}`" not in contract_text:
             fail(path, f"env {name} is not documented in {manifest.get('contract')}")
-    plugin = load_json(pdir / ".claude-plugin" / "plugin.json") or {}
+    # a slot may name a skill of any plugin in this marketplace (content → /gshorts:…)
+    plugins = {(load_json(d / ".claude-plugin" / "plugin.json") or {}).get("name"): d
+               for d in sorted(ROOT.glob("plugins/*")) if (d / ".claude-plugin" / "plugin.json").is_file()}
     for slot, spec in manifest.get("slots", {}).items():
         keys = set(spec)
         if SLOT_REQUIRED - keys or keys - SLOT_REQUIRED - SLOT_OPTIONAL:
@@ -273,11 +277,15 @@ def check_factory(pdir):
             cmd = spec.get(field)
             if cmd is None:
                 continue
-            m = re.match(rf"/{re.escape(plugin.get('name', ''))}:([a-z0-9-]+)", cmd)
-            if not m:
-                fail(path, f"slot {slot}: {field} {cmd!r} isn't a /{plugin.get('name')}:<skill> command")
-            elif not (pdir / "skills" / m.group(1) / "SKILL.md").exists() and not (pdir / "commands" / f"{m.group(1)}.md").exists():
-                fail(path, f"slot {slot}: {field} names missing skill {m.group(1)}")
+            if field == "invoke" and re.fullmatch(r"<[^<>]+>", cmd):
+                continue  # a bare placeholder: the runner's --task is the whole prompt (task slot)
+            m = re.match(r"/([a-z0-9-]+):([a-z0-9-]+)", cmd)
+            if not m or m.group(1) not in plugins:
+                fail(path, f"slot {slot}: {field} {cmd!r} isn't a /<plugin>:<skill> command of {sorted(plugins)}")
+                continue
+            owner = plugins[m.group(1)]
+            if not (owner / "skills" / m.group(2) / "SKILL.md").exists() and not (owner / "commands" / f"{m.group(2)}.md").exists():
+                fail(path, f"slot {slot}: {field} names missing skill {m.group(1)}:{m.group(2)}")
     for md in sorted(pdir.glob("skills/*/SKILL.md")) + sorted(pdir.glob("commands/*.md")):
         text = md.read_text(encoding="utf-8")
         # a command with no allowed-tools line can ask too; the 출력 언어 block's own mention doesn't count

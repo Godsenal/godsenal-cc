@@ -17,7 +17,7 @@ Merging, deploying (including a merge or push that triggers a deploy), force-pus
 
 ## End when the work ends
 
-Don't schedule a wakeup, cron, or `sleep` as a fallback for a background agent or check — wait on the result itself (the agent's completion notice, or a foreground poll that returns within 5 minutes). Once the final report is written, stop. A fallback wakeup kept one finished run open 18 more minutes, and the caller waits on the process, not the report.
+Don't schedule a wakeup, cron, or `sleep` as a fallback for a background agent or check — wait on the result itself (the agent's completion notice, or a foreground poll that returns within 5 minutes). Once the final report is written, stop. A fallback wakeup kept one finished run open 18 more minutes, and the caller waits on the process, not the report; another one ended the run on an empty turn that buried its `ship:` line. `scripts/gbase-run` runs with `--disallowedTools ScheduleWakeup,CronCreate`; a caller of its own should too.
 
 ## `AGENT_ASK_CMD`
 

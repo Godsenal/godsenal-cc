@@ -64,6 +64,16 @@
       "env": [],
       "notes": "Builds a clickable single-file HTML mockup of the request from the app's own screens, tokens, fonts and copy, with PNG screenshots per option and step, in $GBASE_MOCKUP_DIR (default ~/design-mockups)/<app>-<YYYYMMDD>-<topic>-r<N>/ — outside the repo, which stays untouched. Explicit only: no other slot or skill (work, ship, …) invokes it, and the model doesn't pick it up on its own. Ends with `mockup:`, `mockup url:` and `mockup shots:` lines. Never asks before the first round; feedback is the next run."
     },
+    "content": {
+      "invoke": "/gshorts:content-common <content request>",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
+      "notes": "One piece of gshorts content (a short, card news, an account name, bio, or caption) under content-common's rules; the request names the format, and that format's skill (shorts-common and its video formats, instagram-card-news) applies with it. Lives in the gshorts plugin: gbase-run loads every plugin of its checkout, an installed setup needs gshorts@godsenal. Outputs land in the work folder the request names; nothing is posted under AGENT_HEADLESS=1."
+    },
+    "task": {
+      "invoke": "<task>",
+      "env": [],
+      "notes": "A one-off run with no skill (research, a schedule change): the task is the whole prompt. Use it instead of a bare `claude -p` so the run still gets a stream-json log, result.json, status, and stop."
+    },
     "reproduce": {
       "invoke": "/gbase:reproduce <bug report or improvement request>",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_EVIDENCE_FILE"],

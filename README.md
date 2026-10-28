@@ -20,6 +20,8 @@ Inside Claude Code, run these slash commands:
 /plugin install gshorts@godsenal
 ```
 
+A machine that runs content bots needs `gshorts@godsenal` installed too; otherwise its sessions never load the gshorts rules. `scripts/gbase-run` loads gshorts from its checkout for the `content` slot on its own.
+
 Or browse interactively with `/plugin` and go to the **Discover** tab.
 
 ## Plugins
@@ -213,19 +215,21 @@ A program that runs agents with no person attached (e.g. `claude -p` from a daem
 | `AGENT_PR_BODY_FILE` | Where that draft goes (line 1 title, line 2 empty, then the body); default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` |
 | `AGENT_EVIDENCE_FILE` | `go`, `reproduce`, and `monitor --until-settled` append `{"step","result","command","detail","cause"?}` JSON lines (`review`, `polish`, `checks`, `behavior`, `reproduce`, `settle`); `result` is `pass`, `fail`, `skip`, or `open` (findings or a wait still open, not a failure) |
 
-The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`work`, `review`, `review2`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `reproduce`, `mockup`) to an invocation, the variables it reads, and notes. `review2` runs `gbase:review` in report-only mode on Opus and Sonnet at once and merges the two tables, marking each finding `opus`, `sonnet`, or `both`. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
+The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`work`, `review`, `review2`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `content`, `task`, `reproduce`, `mockup`) to an invocation, the variables it reads, and notes. `review2` runs `gbase:review` in report-only mode on Opus and Sonnet at once and merges the two tables, marking each finding `opus`, `sonnet`, or `both`. `content` runs gshorts' `content-common` with the format the request names; `task` runs a one-off prompt with no skill (research, a schedule change) so it still leaves a log and `result.json`. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
 
 **Runner.** [`scripts/gbase-run`](scripts/gbase-run) runs one slot headless from a checkout of this repo and writes a `result.json` a poller can read:
 
 ```
 scripts/gbase-run --repo ~/code/app --slot ship --task "로그인 500 수정" --worktree login-fix
 scripts/gbase-run --repo ~/code/app --slot review2
+scripts/gbase-run --repo ~/LTH/insta --slot content --task-file task.md   # 긴 작업은 파일로
 scripts/gbase-run --answers answers.json        # 이전 실행의 결정 필요: 줄에 답하고 이어서 실행
 scripts/gbase-run status <run-id>               # 진행 중이면 "status": "running"
+scripts/gbase-run stop <run-id>                 # claude와 그 하위 프로세스까지 종료
 scripts/gbase-run list
 ```
 
-It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads the plugin from the checkout with `--plugin-dir`, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. `decisions` in it are parsed `결정 필요:` lines (`{text, question, applied, recommend, options, human}`). Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
+It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads gbase (plus the plugin a slot names, like gshorts for `content`) from the checkout with `--plugin-dir`, blocks `ScheduleWakeup`/`CronCreate`, starts a `--worktree` branch from `origin`'s default branch (or `--base`) rather than the checkout's current branch, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. `decisions` in it are parsed `결정 필요:` lines (`{text, question, applied, recommend, options, human}`). Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
 
 ### gapp
 
