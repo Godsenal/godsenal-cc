@@ -46,6 +46,9 @@ FAKE_CLAUDE = textwrap.dedent('''\
                   "mockup shots: /m/app-onboarding-r2/shots\\n",
         "settle": "ship: local feat/x @def5678 — 1 commits, not pushed\\nPR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"]
                   + "\\nsettle: 미확정 @abc1234 — 푸시 대기: 1 commits\\n",
+        # agent-owned work run: go opened the PR and settled it
+        "agent": "PR을 열었습니다\\npr: <https://github.com/o/r/pull/9>.\\nsettle: 수렴 @abc1234\\n"
+                 if os.environ["AGENT_SHIP_OWNER"] == "agent" else "no ship owner\\n",
     }
     final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
@@ -104,6 +107,7 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(result["evidence"][0]["detail"], "haiku")
         self.assertEqual(result["questions"], [{"question": "Q?", "recommend": "A", "options": ["B"]}])
         self.assertIsNone(result["settle"])
+        self.assertIsNone(result["pr_url"])
         status = json.loads(self.run_cli("status", result["run_id"])[0].stdout)
         self.assertEqual(status["status"], "done")
         listed = [json.loads(line) for line in self.run_cli("list")[1]]
@@ -116,6 +120,20 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(result["ship"], "ship: local feat/x @def5678 — 1 commits, not pushed")
         self.assertEqual(result["settle"], "settle: 미확정 @abc1234 — 푸시 대기: 1 commits")
         self.assertEqual(result["pr_body_file"], str(Path(result["run_dir"]) / "pr-body.md"))
+
+    def test_agent_owned_work_run_reports_pr_url_and_settle(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T-1", "--ship-owner", "agent",
+                              "--model", "agent")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["ship_owner"], "agent")
+        self.assertEqual(result["pr_url"], "https://github.com/o/r/pull/9")
+        self.assertEqual(result["settle"], "settle: 수렴 @abc1234")
+        self.assertIsNone(result["ship"])
+        # answering its decisions keeps the run agent-owned
+        answers = self.tmp / "answers.json"
+        answers.write_text(json.dumps({"run_id": result["run_id"], "answers": []}))
+        _, out = self.run_cli("--answers", str(answers))
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["ship_owner"], "agent")
 
     def test_mockup_lines_and_task_fill_the_slot(self):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "mockup", "--task", "온보딩 시안", "--model", "mockup")
