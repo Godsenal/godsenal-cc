@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -23,7 +24,16 @@ FAKE_CLAUDE = textwrap.dedent('''\
     args = sys.argv[1:]
     model = args[args.index("--model") + 1] if "--model" in args else "default"
     assert args[args.index("--plugin-dir") + 1].endswith("plugins/base")
+    assert "ScheduleWakeup" in args[args.index("--disallowedTools") + 1]
     assert "GITHUB_TOKEN" not in os.environ
+    run_dir = os.path.dirname(os.environ["AGENT_EVIDENCE_FILE"])
+    with open(os.path.join(run_dir, "plugin-dirs"), "w") as f:
+        f.write("\\n".join(args[i + 1] for i, a in enumerate(args) if a == "--plugin-dir"))
+    if model == "hang":  # a session that never ends, with a grandchild like a subagent's shell
+        child = subprocess.Popen(["sleep", "300"])
+        open(os.path.join(run_dir, "child.pid"), "w").write(str(child.pid))
+        print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-hang", "model": model}), flush=True)
+        child.wait()
     subprocess.run(["sh", "-c", os.environ["AGENT_ASK_CMD"] + ' "$@"', "ask", "Q?", "--recommend", "A", "--option", "B"])
     with open(os.environ["AGENT_EVIDENCE_FILE"], "a") as f:
         f.write(json.dumps({"step": "checks", "result": "pass", "command": "true", "detail": model}) + "\\n")
@@ -41,7 +51,15 @@ FAKE_CLAUDE = textwrap.dedent('''\
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
     print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-" + model, "model": model}))
     print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.01}))
+    if model == "twoturns":  # a later turn (a background task finishing) with no report lines
+        print(json.dumps({"type": "result", "result": "기다리던 작업이 끝났습니다. 할 일은 없습니다.", "total_cost_usd": 0.02}))
 ''')
+
+
+def _alive(pid):
+    """True while pid runs and isn't a zombie (ps shows Z for a reaped-later child)."""
+    r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+    return r.returncode == 0 and not r.stdout.strip().startswith("Z")
 
 
 class GbaseRunTest(unittest.TestCase):
@@ -183,6 +201,77 @@ class GbaseRunTest(unittest.TestCase):
         self.assertIn("unknown slot", r.stderr)
         r, _ = self.run_cli("--repo", str(self.repo), "--slot", "reproduce")
         self.assertIn("needs --task", r.stderr)
+
+    def test_new_worktree_branches_from_origin_not_the_checked_out_branch(self):
+        origin = self.tmp / "origin.git"
+        subprocess.run(["git", "clone", "-q", "--bare", str(self.repo), str(origin)], check=True)
+        g = lambda *a: subprocess.run(["git", "-C", str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()
+        g("remote", "add", "origin", str(origin))
+        g("fetch", "-q", "origin")
+        g("remote", "set-head", "origin", "main")
+        g("checkout", "-q", "-b", "other")  # the main checkout sits on a branch with an unpushed commit
+        g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "unpushed")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w1")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["head_sha"], g("rev-parse", "origin/main"))
+        wt = result["cwd"]  # no upstream: a bare `git push` must not land on main
+        self.assertNotEqual(subprocess.run(["git", "-C", wt, "rev-parse", "@{u}"], capture_output=True).returncode, 0)
+        self.assertEqual(result["base"], {"ref": "origin/main", "ahead": 0, "behind": 0})
+        # reused later: not rebased, and base shows how far it is
+        g("push", "-q", "origin", "other:main")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w1")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["base"], {"ref": "origin/main", "ahead": 0, "behind": 1})
+        r, _ = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w2", "--base", "nope")
+        self.assertIn("--base nope", r.stderr)
+
+    def test_report_lines_survive_a_later_empty_turn(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--model", "twoturns")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["ship"], "ship: local feat/x @abc1234 — 1 commits, not pushed")
+        self.assertEqual(len(result["decisions"]), 1)
+        self.assertIn("ship: local", Path(result["sessions"]["twoturns"]["final_path"]).read_text())
+
+    def test_content_and_task_slots_load_every_plugin(self):
+        task = self.tmp / "task.md"
+        task.write_text("인스타 카드뉴스 1편: 'quoted' $(not run)\n")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "task", "--task-file", str(task))
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(Path(result["prompt_path"]).read_text().strip(), "인스타 카드뉴스 1편: 'quoted' $(not run)")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "content", "--task", "카드뉴스")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(Path(result["prompt_path"]).read_text().strip(), "/gshorts:content-common 카드뉴스")
+        dirs = (Path(result["run_dir"]) / "plugin-dirs").read_text().splitlines()
+        self.assertEqual([Path(d).name for d in dirs], ["base", "shorts"])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        dirs = (Path(json.loads(Path(out[-1]).read_text())["run_dir"]) / "plugin-dirs").read_text().splitlines()
+        self.assertEqual([Path(d).name for d in dirs], ["base"])  # gapp/gshorts skills stay out of dev runs
+        r, _ = self.run_cli("--repo", str(self.repo), "--slot", "task")
+        self.assertIn("needs --task", r.stderr)
+
+    def test_review_table_and_missing_plugin(self):
+        table = "| # | severity | file:line | finding | action |\n|---|---|---|---|---|\n| 1 | high | `a.py:1` | x | y |\n"
+        self.assertEqual(gbase_run.final_text([table, "기다리던 작업이 끝났습니다."]), table)
+        with self.assertRaises(SystemExit):
+            gbase_run.plugin_dirs("content", "/nope:content-common")
+
+    def test_stop_ends_the_session_process_group(self):
+        runner = subprocess.Popen([sys.executable, str(RUNNER), "--repo", str(self.repo), "--slot", "ship", "--model", "hang"],
+                                  env=self.env, stdout=subprocess.DEVNULL)
+        runs = Path(self.env["GBASE_HOME"]) / "runs"
+        for _ in range(100):
+            pids = list(runs.glob("*/child.pid"))
+            if pids and pids[0].read_text():
+                break
+            time.sleep(0.1)
+        child = int(pids[0].read_text())
+        r, out = self.run_cli("stop", pids[0].parent.name)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(out[-1])["stopped_by"], "SIGTERM")
+        runner.wait(timeout=10)
+        result = json.loads((pids[0].parent / "result.json").read_text())
+        self.assertEqual((result["status"], result["stopped_by"]), ("failed", "SIGTERM"))
+        time.sleep(0.2)
+        self.assertFalse(_alive(child))
 
     def test_status_reports_dead_runner(self):
         run = Path(self.env["GBASE_HOME"]) / "runs" / "r1"

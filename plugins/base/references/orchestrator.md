@@ -110,6 +110,8 @@ Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes noth
 - `slots.<slot>.reads` — optional: target-repo files the slot depends on.
 - `slots.<slot>.models` — optional: run `invoke` once per model, in independent sessions at the same time, and merge their reports. Only `review2` has it: `gbase:review` in *report only* mode, so neither session edits the tree, merged by `file:line` (same file, lines at most 3 apart) with each finding marked by the model(s) that found it.
 
+`content` names a skill of the gshorts plugin in this marketplace (`/gshorts:content-common`), so its caller loads gshorts too (the runner does). `task` has no skill: its `invoke` is a bare `<task>`, so the prompt is the task, run under the same runner for its log, result, and stop.
+
 `work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work {ticket}` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own.
 
 A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. There is no `plan` slot: `gbase:how` explains the code a task touches, but it doesn't decide scope or acceptance criteria.
@@ -119,20 +121,21 @@ A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots i
 `scripts/gbase-run` in this repo is one way to be the caller: it runs a single slot with `claude -p` and leaves a result file for a poller. It reads the manifest and this contract and adds no skill behavior.
 
 ```
-gbase-run --repo <path> --slot <slot> [--task "..."] [--worktree <name>] [--model opus|sonnet]
-          [--ship-owner orchestrator|agent] [--answers <file>]
+gbase-run --repo <path> --slot <slot> [--task "..." | --task-file <path>] [--worktree <name>]
+          [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>]
 gbase-run status <run-id>
+gbase-run stop <run-id>
 gbase-run list
 ```
 
-- The prompt is the slot's `invoke`, with `--task` replacing a `<placeholder>` or appended. A slot whose `invoke` is `null` gets a prompt built from its `notes`.
-- The child runs with `AGENT_HEADLESS=1`, `AGENT_SHIP_OWNER` from `--ship-owner` (default `orchestrator`, so nothing leaves the machine), `AGENT_PR_BODY_FILE` and `AGENT_EVIDENCE_FILE` in the run directory, `GITHUB_TOKEN` removed, and the plugin loaded with `--plugin-dir` from the same checkout. `AGENT_ASK_CMD` is `$GBASE_ASK_CMD` when set; otherwise `gbase-run question <run-id>`, which records each question in `questions.jsonl` and gives no answer, so the skill applies its recommendation and writes a `결정 필요:` line.
+- The prompt is the slot's `invoke`, with `--task` replacing a `<placeholder>` or appended. A slot whose `invoke` is `null` gets a prompt built from its `notes`. `--task-file` reads the task from a file — use it for a long task instead of `--task "$(…)"`, where a heredoc quoting slip pastes shell lines into the prompt.
+- The child runs with `AGENT_HEADLESS=1`, `AGENT_SHIP_OWNER` from `--ship-owner` (default `orchestrator`, so nothing leaves the machine), `AGENT_PR_BODY_FILE` and `AGENT_EVIDENCE_FILE` in the run directory, `GITHUB_TOKEN` removed, gbase loaded with `--plugin-dir` from the same checkout — plus the plugin a slot's `invoke` names (`content` → `plugins/shorts`) and any in `GBASE_PLUGIN_DIRS`, so other plugins' skills stay out of dev runs — and `--disallowedTools ScheduleWakeup,CronCreate` ([headless.md](headless.md#end-when-the-work-ends)). A slot whose `invoke` names a `/<plugin>:<skill>` no loaded dir has fails before claude starts. `AGENT_ASK_CMD` is `$GBASE_ASK_CMD` when set; otherwise `gbase-run question <run-id>`, which records each question in `questions.jsonl` and gives no answer, so the skill applies its recommendation and writes a `결정 필요:` line.
 - `--model` is passed to claude; a `models` slot ignores it and runs its own list.
-- `--worktree <name>` runs in `$GBASE_HOME/worktrees/<repo>-<path hash>-<name>` on branch `gbase/<name>`, created from the repo's `HEAD` on first use and reused after.
-- The last stdout line is the absolute path of `result.json`. Exit 0 when every session exited 0. SIGTERM or SIGINT stops the claude sessions and still writes the result (`failed`, with `stopped_by`).
+- `--worktree <name>` runs in `$GBASE_HOME/worktrees/<repo>-<path hash>-<name>` on branch `gbase/<name>`, created on first use with no upstream from `--base` (default: origin's default branch after `git fetch origin`; `HEAD` only when the repo has no `origin`) and reused after — never from whatever the main checkout has checked out, whose unpushed commits would ride into the PR. A reused branch isn't rebased; `base` in `result.json` shows how far it is from the base.
+- The last stdout line is the absolute path of `result.json`. Exit 0 when every session exited 0. SIGTERM, SIGINT, or SIGHUP (`gbase-run stop <run-id>` sends SIGTERM and waits) ends each claude session's process group — subagents and shells included, SIGKILL after 10 s — and still writes the result (`failed`, with `stopped_by`).
 - A slot whose `invoke` has a `<placeholder>` (`reproduce`) needs `--task`.
 
-Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`): `prompt.txt`, `log.jsonl` (the `stream-json` events; `log-<model>.jsonl` per session for a `models` slot), `final.md` (the final message; `final-<model>.md`), `evidence.jsonl`, `pr-body.md` when `go` drafted one, `questions.jsonl`, `answers.json`, `review.md` for a `models` slot, and `result.json`:
+Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`): `prompt.txt`, `log.jsonl` (the `stream-json` events; `log-<model>.jsonl` per session for a `models` slot), `final.md` (the last result message that carries a report line, else the last one; `final-<model>.md`), `evidence.jsonl`, `pr-body.md` when `go` drafted one, `questions.jsonl`, `answers.json`, `review.md` for a `models` slot, and `result.json`:
 
 | Field | Value |
 |---|---|
@@ -141,8 +144,9 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `pid`, `started_at`, `finished_at`, `run_dir`, `prompt_path`, `log_path` | bookkeeping |
 | `exit_code` | the highest exit code of the claude sessions |
 | `branch`, `head_sha` | of `cwd` after the run |
+| `base` | `{ref, ahead, behind}`: commits of `cwd`'s `HEAD` after the run not in `ref` and the other way round, or `null` with no base; before pushing, check `ahead` against the commit count of the `ship:` line |
 | `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, except `options`, which is `[]` when the line lists none |
-| `ship`, `settle` | the `ship:` / `settle:` line, or `null` |
+| `ship`, `settle` | the last `ship:` / `settle:` line of any result message in the session (a session can end more than one turn), or `null` |
 | `mockup` | `{html, url, screenshots}` from the `mockup` lines (`url` is `null` for `none`), or `null` |
 | `pr_body_file` | the path from `PR 본문 초안:`, else `pr-body.md` if it exists, else `null` |
 | `evidence` | the parsed evidence lines |

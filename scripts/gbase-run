@@ -5,16 +5,19 @@ A thin wrapper over plugins/base/references/orchestrator.md: it resolves the slo
 factory.json, sets the AGENT_* variables, runs claude, and parses the column-0 report lines.
 Skill behavior lives in the skills, not here.
 
-  gbase-run --repo <path> --slot <slot> [--task "..."] [--worktree <name>] [--model opus|sonnet]
-            [--ship-owner orchestrator|agent] [--answers <file>]
+  gbase-run --repo <path> --slot <slot> [--task "..." | --task-file <path>] [--worktree <name>]
+            [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>]
   gbase-run status <run-id>     # result.json; "status": "running" while the run is going
+  gbase-run stop <run-id>       # SIGTERM the runner, which ends each claude's process group
   gbase-run list                # one JSON line per run, newest first
 
 The last stdout line of a run is the absolute path of its result.json.
 
 Env: GBASE_CLAUDE (claude binary), GBASE_HOME (default ~/.gbase; runs/ and worktrees/ live there),
-GBASE_PLUGIN_DIR (default: plugins/base of this checkout), GBASE_PERMISSION_MODE (default
-bypassPermissions), GBASE_ASK_CMD (AGENT_ASK_CMD for the child; default records questions only).
+GBASE_PLUGIN_DIR (default: plugins/base of this checkout; factory.json is read from it), GBASE_PLUGIN_DIRS
+(os.pathsep-separated plugin dirs loaded besides it and the plugin a slot's invoke names, from plugins/*),
+GBASE_PERMISSION_MODE (default bypassPermissions), GBASE_ASK_CMD (AGENT_ASK_CMD for the child; default
+records questions only).
 """
 import argparse
 import hashlib
@@ -32,6 +35,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_DIR = Path(os.environ.get("GBASE_PLUGIN_DIR") or ROOT / "plugins" / "base").resolve()
+# loaded with gbase besides the plugin a slot's invoke names (content → gshorts); the other plugins stay out
+# of dev runs, where their skills (gapp's deploy, store-submit) could trigger on their own
+EXTRA_PLUGIN_DIRS = [Path(d).expanduser().resolve() for d in os.environ.get("GBASE_PLUGIN_DIRS", "").split(os.pathsep) if d]
+PLUGIN_DIRS = [PLUGIN_DIR]  # set per run by plugin_dirs()
+STOPPING = threading.Event()
+# headless runs have no next turn to wake into: a wakeup only adds a turn after the report (headless.md)
+DISALLOWED_TOOLS = "ScheduleWakeup,CronCreate"
+STOP_GRACE = 10  # seconds between SIGTERM and SIGKILL for a claude process group
 HOME = Path(os.environ.get("GBASE_HOME") or "~/.gbase").expanduser().resolve()
 RUNS = HOME / "runs"
 SEVERITY = ["critical", "high", "medium", "low"]
@@ -137,6 +148,7 @@ def parse_decision(line):
 
 
 def report(text):
+    """Report lines of a run; text is every result message of the session, so the last line of each kind wins."""
     pr = PR_BODY.findall(text)
     return {
         "decisions": [parse_decision(line) for line in DECISION.findall(text)],
@@ -205,15 +217,20 @@ def review_md(findings, models):
 
 def run_claude(prompt, cwd, env, model, log_path):
     cmd = [claude_bin(), "-p", prompt, "--output-format", "stream-json", "--verbose",
-           "--plugin-dir", str(PLUGIN_DIR),
+           *(arg for d in PLUGIN_DIRS for arg in ("--plugin-dir", str(d))),
+           "--disallowedTools", DISALLOWED_TOOLS,
            "--permission-mode", os.environ.get("GBASE_PERMISSION_MODE", "bypassPermissions")]
     if model:
         cmd += ["--model", model]
-    info = {"log_path": str(log_path), "final": "", "session_id": None, "model": model, "cost_usd": None}
+    info = {"log_path": str(log_path), "results": [], "session_id": None, "model": model, "cost_usd": None}
     with open(log_path, "w", encoding="utf-8") as log:
+        # its own process group, so stopping the run also ends the subagents and shells claude started
         proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                                start_new_session=True)
         PROCS.append(proc)
+        if STOPPING.is_set():  # a stop that arrived before this session started
+            killpg(proc, signal.SIGTERM)
         for line in proc.stdout:
             log.write(line)
             log.flush()
@@ -224,31 +241,102 @@ def run_claude(prompt, cwd, env, model, log_path):
             if event.get("type") == "system" and event.get("subtype") == "init":
                 info["session_id"], info["model"] = event.get("session_id"), event.get("model")
             elif event.get("type") == "result":
-                info["final"] = event.get("result") or ""
+                # a session can end more than one turn (a background task finishing re-invokes it);
+                # keep them all, or a report line from an earlier turn is lost
+                info["results"].append(event.get("result") or "")
                 info["cost_usd"] = event.get("total_cost_usd")
         info["exit_code"] = proc.wait()
     return info
 
 
-def ensure_worktree(repo, name):
+def final_text(results):
+    """The result that carries the run's report lines; the last one when none does."""
+    marked = [t for t in results if SHIP.search(t) or SETTLE.search(t) or PR_BODY.search(t) or MOCKUP.search(t)
+              or review_rows(t)]
+    return (marked or results or [""])[-1]
+
+
+def fetch_origin(repo):
+    if git(repo, "remote", "get-url", "origin") is None:
+        return
+    try:  # a daemon has no one to type a password: fail fast instead of hanging before result.json exists
+        r = subprocess.run(["git", "-C", str(repo), "fetch", "--quiet", "origin"], capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=120, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+        err = r.stderr.strip() if r.returncode else None
+    except subprocess.TimeoutExpired:
+        err = "timed out"
+    if err:
+        print(f"gbase-run: git fetch origin failed, using the last fetched refs: {err}", file=sys.stderr)
+
+
+def resolve_base(repo, ref):
+    """--base, else origin's default branch, else None (no origin)."""
+    if ref:
+        if git(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}") is None:
+            sys.exit(f"gbase-run: --base {ref} is not a commit in {repo}")
+        return ref
+    head = git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+    for cand in [head, "origin/main", "origin/master"]:
+        if cand and git(repo, "rev-parse", "--verify", "--quiet", f"{cand}^{{commit}}") is not None:
+            return cand
+    return None
+
+
+def base_counts(cwd, ref):
+    """{ref, ahead, behind} of cwd's HEAD against ref, so a caller can check the commits it is about to push."""
+    if not ref:
+        return None
+    ahead, behind = git(cwd, "rev-list", "--count", f"{ref}..HEAD"), git(cwd, "rev-list", "--count", f"HEAD..{ref}")
+    return {"ref": ref, "ahead": int(ahead) if ahead else None, "behind": int(behind) if behind else None}
+
+
+def ensure_worktree(repo, name, base):
     # the path hash keeps two repos with the same basename from sharing a worktree
     path = HOME / "worktrees" / f"{repo.name}-{hashlib.sha1(str(repo).encode()).hexdigest()[:6]}-{name}"
     if not path.exists():
         branch = f"gbase/{name}"
         exists = git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}") is not None
-        args = ["worktree", "add", str(path), branch] if exists else ["worktree", "add", "-b", branch, str(path)]
+        if not exists:
+            fetch_origin(repo)
+        # a new branch starts at base, not at whatever the main checkout has checked out (its unpushed
+        # commits would ride along into the PR); without an origin, HEAD is all there is. --no-track:
+        # an upstream of origin/main would make a bare `git push` and @{upstream} diffs target main
+        args = (["worktree", "add", str(path), branch] if exists
+                else ["worktree", "add", "--no-track", "-b", branch, str(path), base or "HEAD"])
         r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
         if r.returncode != 0:
             sys.exit(f"gbase-run: git worktree add failed: {r.stderr.strip()}")
     return path
 
 
+def plugin_dirs(slot, invoke):
+    """gbase, GBASE_PLUGIN_DIRS, and the plugin of a /<plugin>:<skill> invoke — failing when no dir has that
+    skill, since claude would otherwise run the slash command as plain text."""
+    dirs = [PLUGIN_DIR] + [d for d in EXTRA_PLUGIN_DIRS if d != PLUGIN_DIR]
+    m = re.match(r"/([a-z0-9-]+):([a-z0-9-]+)", invoke or "")
+    if not m:
+        return dirs
+    for d in dirs + sorted((ROOT / "plugins").glob("*")):
+        try:
+            name = json.loads((d / ".claude-plugin/plugin.json").read_text(encoding="utf-8")).get("name")
+        except (OSError, json.JSONDecodeError):
+            continue
+        if name == m.group(1) and ((d / "skills" / m.group(2) / "SKILL.md").is_file() or (d / "commands" / f"{m.group(2)}.md").is_file()):
+            return dirs if d.resolve() in dirs else dirs + [d.resolve()]
+    sys.exit(f"gbase-run: slot {slot} invokes /{m.group(1)}:{m.group(2)}, which no plugin dir has "
+             f"({', '.join(map(str, dirs))} or {ROOT / 'plugins'}/*); set GBASE_PLUGIN_DIRS")
+
+
 def cmd_run(argv):
     p = argparse.ArgumentParser(prog="gbase-run", description="Run one gbase orchestrator slot headless.")
     p.add_argument("--repo")
     p.add_argument("--slot")
-    p.add_argument("--task", default="")
+    task_arg = p.add_mutually_exclusive_group()
+    task_arg.add_argument("--task", default="")
+    task_arg.add_argument("--task-file", help="read the task from a file, so a long task needs no shell quoting")
     p.add_argument("--worktree")
+    p.add_argument("--base", help="ref a new --worktree branch starts from and result.json's base counts against "
+                                  "(default: origin's default branch, fetched first)")
     p.add_argument("--model")
     p.add_argument("--ship-owner", choices=["orchestrator", "agent"], default="orchestrator")
     p.add_argument("--answers")
@@ -262,6 +350,8 @@ def cmd_run(argv):
             if not prev_path.exists():
                 sys.exit(f"gbase-run: no run {answers['run_id']}")
             prev = json.loads(prev_path.read_text(encoding="utf-8"))
+    if a.task_file:
+        a.task = Path(a.task_file).expanduser().read_text(encoding="utf-8").strip()
     repo, slot = a.repo or prev.get("repo"), a.slot or prev.get("slot")
     task, model = a.task or prev.get("task", ""), a.model or prev.get("model")
     if not repo or not slot:
@@ -276,12 +366,14 @@ def cmd_run(argv):
         sys.exit(f"gbase-run: unknown slot {slot!r}; factory.json has {', '.join(manifest['slots'])}")
     if not task and re.search(r"<[^>]+>", spec["invoke"] or ""):
         sys.exit(f"gbase-run: slot {slot} needs --task for {spec['invoke']!r}")
+    PLUGIN_DIRS[:] = plugin_dirs(slot, spec["invoke"])
     if spec.get("models") and model:
         print(f"gbase-run: slot {slot} runs {', '.join(spec['models'])}; --model {model} ignored", file=sys.stderr)
 
     # a follow-up run continues in the previous run's checkout, where its edits are
     same_repo = prev.get("repo") == str(repo)
-    cwd = ensure_worktree(repo, a.worktree) if a.worktree else Path(prev["cwd"] if same_repo else repo)
+    base = resolve_base(repo, a.base or (same_repo and (prev.get("base") or {}).get("ref")) or None)
+    cwd = ensure_worktree(repo, a.worktree, base) if a.worktree else Path(prev["cwd"] if same_repo else repo)
     run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{slot}-{secrets.token_hex(3)}"
     run_dir = RUNS / run_id
     run_dir.mkdir(parents=True)
@@ -314,11 +406,16 @@ def cmd_run(argv):
 
     def stop(signum, _frame):  # end the children too; the threads then finish and finally records the run
         result["stopped_by"] = signal.Signals(signum).name
+        STOPPING.set()
         for proc in PROCS:
-            proc.terminate()
+            killpg(proc, signal.SIGTERM)
+        # the whole group, even when claude itself exited: a grandchild ignoring SIGTERM holds the stdout pipe
+        escalate = threading.Timer(STOP_GRACE, lambda: [killpg(p, signal.SIGKILL) for p in PROCS])
+        escalate.daemon = True  # a group that exits in time doesn't hold the runner for the grace period
+        escalate.start()
 
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):  # HUP: the terminal closed; claude is in its own group
+        signal.signal(sig, stop)
     sessions = {}
     try:
         def one(m):
@@ -326,7 +423,7 @@ def cmd_run(argv):
             try:
                 sessions[m or "default"] = run_claude(prompt, cwd, env, m, log)
             except OSError as e:  # claude binary missing or not executable
-                sessions[m or "default"] = {"log_path": str(log), "final": "", "exit_code": 127, "error": str(e)}
+                sessions[m or "default"] = {"log_path": str(log), "results": [], "exit_code": 127, "error": str(e)}
 
         threads = [threading.Thread(target=one, args=(m,)) for m in models]
         for t in threads:
@@ -335,12 +432,13 @@ def cmd_run(argv):
             t.join()
     finally:
         sessions = {k: sessions[k] for k in (m or "default" for m in models) if k in sessions}  # manifest order
-        finals = {m: s.pop("final") for m, s in sessions.items()}
+        results = {m: s.pop("results") for m, s in sessions.items()}
+        finals = {m: final_text(texts) for m, texts in results.items()}
         for m, text in finals.items():
             name = "final.md" if len(models) == 1 else f"final-{m}.md"
             (run_dir / name).write_text(text, encoding="utf-8")
             sessions[m]["final_path"] = str(run_dir / name)
-        parsed = [report(t) for t in finals.values()]
+        parsed = [report("\n".join(texts)) for texts in results.values()]
         decisions = list({d["text"]: d for r in parsed for d in r["decisions"]}.values())
         pr_line = next((r["pr_body_line"] for r in parsed if r["pr_body_line"]), None)
         pr_draft = run_dir / "pr-body.md"
@@ -351,6 +449,7 @@ def cmd_run(argv):
             "exit_code": exit_code,
             "branch": git(cwd, "rev-parse", "--abbrev-ref", "HEAD"),
             "head_sha": git(cwd, "rev-parse", "HEAD"),
+            "base": base_counts(cwd, base),
             "decisions": decisions,
             "questions": read_jsonl(run_dir / "questions.jsonl"),
             "ship": next((r["ship"] for r in parsed if r["ship"]), None),
@@ -367,6 +466,13 @@ def cmd_run(argv):
         write_json(result_path, result)
         print(result_path)
     return 0 if result["status"] == "done" else 1
+
+
+def killpg(proc, sig):
+    try:
+        os.killpg(proc.pid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def pid_alive(pid):
@@ -394,6 +500,26 @@ def cmd_status(argv):
     if result is None:
         sys.exit(f"gbase-run: no run {argv[0]}")
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_stop(argv):
+    """SIGTERM a run's runner; it ends each claude process group and writes result.json (`stopped_by`)."""
+    if len(argv) != 1:
+        sys.exit("usage: gbase-run stop <run-id>")
+    result = load_result(argv[0])
+    if result is None:
+        sys.exit(f"gbase-run: no run {argv[0]}")
+    if result["status"] == "running":
+        try:
+            os.kill(result["pid"], signal.SIGTERM)
+        except (ProcessLookupError, PermissionError) as e:
+            sys.exit(f"gbase-run: can't signal runner pid {result['pid']}: {e}")
+        deadline = time.time() + STOP_GRACE + 20
+        while pid_alive(result["pid"]) and time.time() < deadline:
+            time.sleep(0.2)
+        result = load_result(argv[0])
+    print(json.dumps({k: result.get(k) for k in ("run_id", "status", "stopped_by", "finished_at")}, ensure_ascii=False))
+    return 1 if result["status"] == "running" else 0
 
 
 def cmd_list(_argv):
@@ -443,7 +569,7 @@ def normalize_decision(text):
 
 def main():
     argv = sys.argv[1:]
-    commands = {"status": cmd_status, "list": cmd_list, "question": cmd_question}
+    commands = {"status": cmd_status, "stop": cmd_stop, "list": cmd_list, "question": cmd_question}
     if argv and argv[0] in commands:
         return commands[argv[0]](argv[1:]) or 0
     return cmd_run(argv)
