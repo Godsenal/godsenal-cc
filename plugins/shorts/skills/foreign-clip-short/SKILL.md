@@ -20,6 +20,7 @@ Agreed with the user on 2026-10-25 after analyzing 12 popular Korean Shark Tank 
 ## Source
 
 - Official channel uploads only (Shark Tank Global/US, Dragons' Den, Shark Tank Australia, BBC/PBS Antiques Roadshow, `@PawnStars`, `@gordonramsay` / `@KitchenNightmares`, Undercover Boss …). Shows with an official Korean rights holder (Pawn Stars / 전당포 사나이들 → '히스토리', Undercover Boss) were excluded until 2026-10-26, when the user made 전당포 사나이들 a fixed series ("전당포 사나이들처럼 새 쇼는 … 쇼별 포맷 스펙"). Use them, skip items the Korean rights holder already posted, and note the claim risk in REPORT/FACTS.
+- **Pawn Stars claim → Shark Tank** — 2026-10-28 user decision: if a 전당포 사나이들 upload gets a Content ID claim, a copyright warning, or a strike, fill its slot(s) with 샤크탱크 clips (queue and `day-slots.mjs`). Videos already scheduled are not swapped without the user's OK for each one (shorts-common's posting gate).
 - Pick episodes with a clear product or object, a fight between investors, a fast deal, or a twist ending / surprising price.
 - Download into `out/<date>_<slug>/source/` (yt-dlp: best video up to 1080p + best audio). Save the source URL in REPORT.md.
 
@@ -71,7 +72,7 @@ Narration stays at 3–4 lines in every variant (2026-10-26 "해설 양은 지�
 - Fixed two-line title in the top black area, y ≈ 250–470: line 1 yellow, line 2 white, bold with a black stroke; inside the profile-grid safe area.
 - Footage center-cropped to about 1080×930 (~65% of the 16:9 width) at y ≈ 485. **Not** a full-frame 9:16 crop — the user found it too zoomed in.
 - Subtitles inside the footage at 60% of its height (B).
-- Cover: same style with the title (the frame at ~0.6s, showing the title and the product).
+- Cover: same style with the title (a frame at 0.5–1s showing the title and the product, per shorts-common).
 - Pipeline: `frame: box` (default) in `plan.json`; per-cut focus `x` (0–1); a numeric `crop` (<1) hides burned-in name bars. Details in `docs/SHARK_TANK.md`.
 
 ## Narration examples (tone rules are in shorts-common)

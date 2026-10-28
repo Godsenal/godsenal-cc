@@ -31,6 +31,6 @@ TODO, to settle with the user:
 - Per-entry length split, and whether rank cards stay or become a title overlay (rank cards eat 4–5s of a 55s budget).
 - Ranking order (3→1 vs. 1 first as the hook) — the strongest moment must still land in the first seconds, as in [foreign-clip-short](../foreign-clip-short/SKILL.md#structure).
 - Whether entries may repeat clips already posted as single shorts.
-- Pinned comment shape for three subjects.
+- Explanation-comment shape for three subjects.
 
 Redesign B (foreign-clip-short) applies here too: silence cuts, 1.08×, B subtitles and tags. Write the settled format into the pipeline's `docs/formats/top3-compilation.md` too.
