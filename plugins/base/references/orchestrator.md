@@ -8,7 +8,7 @@ How a program that runs agents with no person attached (for example `claude -p` 
 |---|---|---|---|
 | `AGENT_HEADLESS` | `1` | every skill that would ask | No questions; see [headless.md](headless.md). |
 | `AGENT_ASK_CMD` | a shell command line | the same, only under `AGENT_HEADLESS=1` | Questions go to this command; protocol in [headless.md](headless.md#agent_ask_cmd). |
-| `AGENT_SHIP_OWNER` | `orchestrator`, `agent` | `go`, `monitor --until-settled` | `orchestrator`: `go` stops after local commits and a PR body draft; `monitor --until-settled` commits its fixes locally and posts nothing ([Settle](#settle)); other `monitor` modes aren't run under it. Unset or any other value: `agent`, today's flow (push, PR, monitor, replies). |
+| `AGENT_SHIP_OWNER` | `orchestrator`, `agent` | `go`, `monitor --until-settled` | `orchestrator`: `go` stops after local commits and a PR body draft; `monitor --until-settled` commits its fixes locally and posts nothing ([Settle](#settle)); other `monitor` modes aren't run under it. Unset or any other value: `agent` — `go` pushes, opens the PR and reports `pr: <url>`; under `AGENT_HEADLESS=1` it then runs `monitor --until-settled` and ends with its `settle:` line instead of watching to merge. |
 | `AGENT_PR_BODY_FILE` | a path | `go` and `monitor --until-settled` when the owner is `orchestrator` | Where the draft goes. Default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` (per worktree, outside the tree). |
 | `AGENT_EVIDENCE_FILE` | a path | `go`, `reproduce`, `monitor --until-settled` | Check results are appended as JSON lines ([below](#evidence-file)). |
 
@@ -19,6 +19,7 @@ The final assistant message carries these lines at column 0; grep for the prefix
 - `결정 필요: …` — a decision taken without a person, or an irreversible step not taken ([headless.md](headless.md#결정-필요-lines)).
 - `ship: local <branch> @<short-sha> — <n> commits, not pushed` — `go` under `AGENT_SHIP_OWNER=orchestrator`, and `monitor --until-settled` under it when it committed fixes.
 - `PR 본문 초안: <absolute path>` — the same runs.
+- `pr: <url>` — `branch-pr` after `gh pr create`, carried up by `go`: the PR an agent-owned run opened.
 - `settle: …` — `monitor --until-settled` ([below](#settle)).
 - `mockup: <index.html>`, `mockup url: <url> | none — <reason>`, `mockup shots: <dir>` — `gbase:mockup`.
 
@@ -112,7 +113,7 @@ Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes noth
 
 `content` names a skill of the gshorts plugin in this marketplace (`/gshorts:content-common`), so its caller loads gshorts too (the runner does). `task` has no skill: its `invoke` is a bare `<task>`, so the prompt is the task, run under the same runner for its log, result, and stop.
 
-`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work {ticket}` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own.
+`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work {ticket}` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own. With `AGENT_SHIP_OWNER=agent` the run also pushes and opens the PR (`pr:` line), then settles it (`settle:` line); it never merges. Under `AGENT_HEADLESS=1` `go` reviews every tier before the PR, `low` included.
 
 A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. There is no `plan` slot: `gbase:how` explains the code a task touches, but it doesn't decide scope or acceptance criteria.
 
@@ -147,6 +148,7 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `base` | `{ref, ahead, behind}`: commits of `cwd`'s `HEAD` after the run not in `ref` and the other way round, or `null` with no base; before pushing, check `ahead` against the commit count of the `ship:` line |
 | `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, except `options`, which is `[]` when the line lists none |
 | `ship`, `settle` | the last `ship:` / `settle:` line of any result message in the session (a session can end more than one turn), or `null` |
+| `pr_url` | the URL from the last `pr:` line (`--ship-owner agent`), or `null` |
 | `mockup` | `{html, url, screenshots}` from the `mockup` lines (`url` is `null` for `none`), or `null` |
 | `pr_body_file` | the path from `PR 본문 초안:`, else `pr-body.md` if it exists, else `null` |
 | `evidence` | the parsed evidence lines |
@@ -166,6 +168,6 @@ A follow-up run answers a run's decisions with `--answers <file>`:
 }
 ```
 
-`run_id` is optional; when given, `--repo`, `--slot`, and `--task` default to that run's, and the run continues in that run's `cwd` (its worktree, where its edits are). The answers go into the prompt as decisions already made, and a question asked again gets its answer from `AGENT_ASK_CMD` — the exact text first, then ignoring case, a leading `결정 필요:`, and how whitespace and punctuation are spaced (`Use the cache?` matches `use the cache`; `v1.2.0` doesn't match `v12.0`). When answers that differ match only after normalizing, none is given. A `decision` that starts with `결정 필요:` is a pasted report line: only its question counts, so the `→ …` tail, the `(추천: …; 다른 선택지: …)` group, and `· AGENT_ASK_CMD 에 넘김` are dropped.
+`run_id` is optional; when given, `--repo`, `--slot`, `--task`, and `--ship-owner` default to that run's, and the run continues in that run's `cwd` (its worktree, where its edits are). The answers go into the prompt as decisions already made, and a question asked again gets its answer from `AGENT_ASK_CMD` — the exact text first, then ignoring case, a leading `결정 필요:`, and how whitespace and punctuation are spaced (`Use the cache?` matches `use the cache`; `v1.2.0` doesn't match `v12.0`). When answers that differ match only after normalizing, none is given. A `decision` that starts with `결정 필요:` is a pasted report line: only its question counts, so the `→ …` tail, the `(추천: …; 다른 선택지: …)` group, and `· AGENT_ASK_CMD 에 넘김` are dropped.
 
 Environment of the runner itself: `GBASE_CLAUDE` (default `~/.claude/local/claude`, else `claude` on `PATH`), `GBASE_HOME`, `GBASE_PLUGIN_DIR` (default `plugins/base` of the checkout), `GBASE_PERMISSION_MODE` (default `bypassPermissions`; the child has no person to approve tools), `GBASE_ASK_CMD`.

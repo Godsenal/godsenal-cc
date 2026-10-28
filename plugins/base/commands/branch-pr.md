@@ -347,7 +347,7 @@ gh api "repos/$repo/git/ref/heads/gbase-assets" >/dev/null 2>&1 || \
 
 On a public repo those images are public — only upload screens with seeded demo data, never real user data.
 
-Return the PR URL to the user.
+Return the PR URL to the user, and put it in the final report as `pr: <url>` at column 0 ([format](../references/orchestrator.md#report-lines)) — `gbase:go` carries that line up, and a headless caller greps it.
 
 ### Step 9: Cleanup
 

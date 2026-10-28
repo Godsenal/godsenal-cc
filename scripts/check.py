@@ -58,7 +58,10 @@ CONTRACTS = [
     ("pr-body-file:", [skill("go"), BRANCH_PR]),
     ("ship: local", [BRANCH_PR, ORCHESTRATOR, skill("monitor")]),
     ("pr 본문 초안:", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, skill("monitor")]),
-    ("--until-settled", [skill("monitor"), ORCHESTRATOR]),
+    ("--until-settled", [skill("monitor"), skill("go"), ORCHESTRATOR]),
+    # agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url
+    ("`pr: <url>`", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
+    ("pr_url", [ORCHESTRATOR, RUNNER]),
     ("settle: 수렴", [skill("monitor"), ORCHESTRATOR]),
     ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
     # headless forbids wakeups in prose; the runner enforces it by denying the tools

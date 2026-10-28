@@ -53,6 +53,7 @@ DECISION = re.compile(r"^결정 필요: .*$", re.M)
 SHIP = re.compile(r"^ship: .*$", re.M)
 PR_BODY = re.compile(r"^PR 본문 초안: (.+)$", re.M)
 SETTLE = re.compile(r"^settle: .*$", re.M)
+PR_URL = re.compile(r"^pr: <?(https?://[^\s<>`]+)", re.M)  # go/branch-pr's `pr: <url>` line
 MOCKUP = re.compile(r"^mockup( url| shots)?: (.+)$", re.M)
 
 
@@ -155,6 +156,7 @@ def report(text):
         "ship": (SHIP.findall(text) or [None])[-1],
         "pr_body_line": pr[-1].strip() if pr else None,
         "settle": (SETTLE.findall(text) or [None])[-1],
+        "pr_url": (PR_URL.findall(text) or [""])[-1].rstrip(".,;)") or None,
         "mockup": mockup(text),
     }
 
@@ -251,8 +253,8 @@ def run_claude(prompt, cwd, env, model, log_path):
 
 def final_text(results):
     """The result that carries the run's report lines; the last one when none does."""
-    marked = [t for t in results if SHIP.search(t) or SETTLE.search(t) or PR_BODY.search(t) or MOCKUP.search(t)
-              or review_rows(t)]
+    marked = [t for t in results if SHIP.search(t) or SETTLE.search(t) or PR_BODY.search(t) or PR_URL.search(t)
+              or MOCKUP.search(t) or review_rows(t)]
     return (marked or results or [""])[-1]
 
 
@@ -338,7 +340,7 @@ def cmd_run(argv):
     p.add_argument("--base", help="ref a new --worktree branch starts from and result.json's base counts against "
                                   "(default: origin's default branch, fetched first)")
     p.add_argument("--model")
-    p.add_argument("--ship-owner", choices=["orchestrator", "agent"], default="orchestrator")
+    p.add_argument("--ship-owner", choices=["orchestrator", "agent"], help="default: the answered run's, else orchestrator")
     p.add_argument("--answers")
     a = p.parse_args(argv)
 
@@ -354,6 +356,7 @@ def cmd_run(argv):
         a.task = Path(a.task_file).expanduser().read_text(encoding="utf-8").strip()
     repo, slot = a.repo or prev.get("repo"), a.slot or prev.get("slot")
     task, model = a.task or prev.get("task", ""), a.model or prev.get("model")
+    a.ship_owner = a.ship_owner or prev.get("ship_owner") or "orchestrator"
     if not repo or not slot:
         p.error("--repo and --slot are required (or --answers naming a previous run_id)")
     repo = Path(repo).expanduser().resolve()
@@ -455,6 +458,7 @@ def cmd_run(argv):
             "ship": next((r["ship"] for r in parsed if r["ship"]), None),
             "pr_body_file": pr_line or (str(pr_draft) if pr_draft.exists() else None),
             "settle": next((r["settle"] for r in parsed if r["settle"]), None),
+            "pr_url": next((r["pr_url"] for r in parsed if r["pr_url"]), None),
             "mockup": next((r["mockup"] for r in parsed if r["mockup"]), None),
             "evidence": read_jsonl(run_dir / "evidence.jsonl"),
             "sessions": sessions,

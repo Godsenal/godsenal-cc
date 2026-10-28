@@ -36,11 +36,13 @@ The tier sets how much defect-hunting and behavior checking runs. Polish isn't i
 
 | risk | finder | Step 3 skeptics | behavior check |
 |---|---|---|---|
-| `low` | skip — monitor's self-review covers it during the CI wait | — | skip — fast checks only |
+| `low` | skip — monitor's self-review covers it during the CI wait (*headless:* `code-review low`) | — (*headless:* `one skeptic for low/medium`) | skip — fast checks only |
 | `medium` | `code-review medium` | `one skeptic for low/medium` | required |
 | `high` | `code-review high` | all findings | required |
 
-Under `AGENT_SHIP_OWNER=orchestrator` a clean tree targets every commit on the branch that isn't in the base (`<base>...HEAD`; base = `origin/<default>` when it exists, else the local default branch) — the orchestrator's agent may have committed as it worked.
+Headless runs review `low` before the PR because they often end before any monitor self-review — under `AGENT_SHIP_OWNER=orchestrator` there is no Step 6.
+
+Under `AGENT_SHIP_OWNER=orchestrator`, or `AGENT_HEADLESS=1` with any owner, a clean tree targets every commit on the branch that isn't in the base (`<base>...HEAD`; base = `origin/<default>` when it exists, else the local default branch) — the orchestrator's agent may have committed as it worked.
 
 ### 2. Review (background) ∥ polish
 
@@ -57,7 +59,7 @@ Skill(skill: "gbase:polish", args: "<in-scope files>")
 - **Pass the scope explicitly.** With no target the built-in reviews the current diff, which is empty on the clean-tree path — it would report "nothing found" about a commit it never read.
 - Effort per the Step 1 table. Never above `high` — above `medium` the built-in already fans out to a multi-agent workflow, worth it only where one missed bug is costly.
 - Never `--fix` (it would race polish for the same files), `--comment` (no PR yet), or `ultra` (user-triggered and billed).
-- Skip the finder per the table's `low` row, on `--no-review`, and on scopes review skips anyway (pure rename, dependency bump, generated code).
+- Skip the finder per the table's `low` row (not when headless), on `--no-review`, and on scopes review skips anyway (pure rename, dependency bump, generated code).
 
 ### 3. Apply review findings
 
@@ -67,7 +69,7 @@ When the findings arrive, hand them to review's judgment stages:
 Skill(skill: "gbase:review", args: "pre-PR mode; defer, don't ask; candidates already found — start at Stage 2. Findings: <finder output>")
 ```
 
-On `medium`, insert `; one skeptic for low/medium` right after `start at Stage 2`.
+On `medium` (and headless `low`), insert `; one skeptic for low/medium` right after `start at Stage 2`.
 
 Clear fixes come back as working-tree edits (no commits — `branch-pr` groups them); judgment calls come back deferred. Polish rewrote these files after the finder read them, so locate each finding by the code it quotes, not by `file:line`, and re-judge any whose quoted code is gone. Where a review fix and polish collide, the review fix wins.
 
@@ -105,11 +107,15 @@ Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <S
 
 Under `AGENT_SHIP_OWNER=orchestrator` the args start with `Ship-owner: orchestrator; PR-body-file: <$AGENT_PR_BODY_FILE, else $(git rev-parse --absolute-git-dir)/gbase/pr-body.md>; ` and `branch-pr` commits locally and writes the draft instead of pushing. Then stop: no Step 6. The report ends with branch-pr's `ship:` and `PR 본문 초안:` lines and the deferred-findings table.
 
+Otherwise, once the PR exists, the report carries `pr: <url>` at column 0 — `branch-pr`'s, or `gh pr view --json url -q .url` when it pushed to a PR that already existed — so an orchestrator can read it.
+
 ### 6. Monitor
 
 ```
 Skill(skill: "gbase:monitor", args: "--no-review")            # add --draft / --merge when invoked with them
 ```
+
+*headless:* the owner is the agent here (an orchestrator owner stopped at Step 5). Add `--until-settled` to the args (the `--no-review` rule below still applies) instead of running the persistent watch, which has no one to end it under `claude -p`; monitor pushes its fixes, replies, and ends with one `settle:` line. Never pass `--merge` in this mode — it never merges; a requested merge becomes a `결정 필요:` line for the caller. A `--draft` PR stays a draft; say so in a `결정 필요:` line. The deferred-findings paragraph below shrinks to its table: nothing is asked or pushed after monitor, so the `settle:` verdict stays true for the head it names.
 
 Drop `--no-review` if the pre-PR review didn't actually run (finder skipped, failed, or never returned), so monitor's self-review covers the diff — on `low` that review lands in the CI wait instead of before the PR.
 
@@ -119,7 +125,7 @@ Then surface the deferred findings: a severity-ordered table (`file:line`, failu
 
 - Polish fails → surface it; ask whether to continue without it or abort. *headless:* continue without it.
 - `branch-pr` fails → stop, print `git status`, and point at the backup stash (`git stash apply stash@{0}`, not `pop`).
-- Monitor can't start (no `gh` auth, no PR) → surface and stop; the PR is already up.
+- Monitor can't start (no `gh` auth, no PR) → surface and stop; the PR is already up (`pr:` line still in the report).
 
 ## Usage
 
