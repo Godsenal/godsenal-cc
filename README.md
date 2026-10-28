@@ -144,6 +144,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - `--merge` (only when you ask, or the project's instructions say to merge) also merges once CI is green and nothing is outstanding — **asks first when the merge would deploy** (a push-to-main OTA/production workflow the PR's paths don't skip), uses a merge method the repo allows, retargets stacked PRs before the branch is deleted; a check that never started for account/billing reasons merges only if the local verify gate passed
 - Inherits all `branch-pr` safety rules — no force push, no hard reset
 - The behavior check recognizes both verify-skill layouts: `.claude/skills/verify-<app>/` (from `create-verify`) and `.claude/skills/verify/` (pstack's generator)
+- Under `AGENT_HEADLESS=1` a `low` change still gets the pre-PR finder (`code-review low`, one skeptic), and the tail is `monitor --until-settled` instead of the watch-to-merge loop
 - Under `AGENT_SHIP_OWNER=orchestrator` it stops after local commits and a PR body draft (no push, PR, image upload, or monitor) — see [Running gbase from an orchestrator](#running-gbase-from-an-orchestrator)
 
 **monitor** (skill) — Subscribe to the current branch's PR and keep it moving until merge/close.
@@ -212,6 +213,7 @@ A program that runs agents with no person attached (e.g. `claude -p` from a daem
 | `AGENT_HEADLESS=1` | No skill asks. It applies its recommendation (or the reversible option that does less) and reports a `결정 필요:` line; irreversible steps (merge, deploy, force push, data deletion) are not taken. Rules: [`references/headless.md`](plugins/base/references/headless.md) |
 | `AGENT_ASK_CMD` | Under headless, each question goes to `sh -c "$AGENT_ASK_CMD \"\$@\"" ask "<question>" --recommend "<option>" --option "<option>"…`; non-empty stdout is the answer |
 | `AGENT_SHIP_OWNER=orchestrator` | `go` stops after local commits and a PR body draft; `monitor --until-settled` commits its fixes locally and refreshes that draft. Neither touches the remote |
+| `AGENT_SHIP_OWNER=agent` | `go` pushes, opens the PR and reports `pr: <url>`; under headless it then runs `monitor --until-settled` and ends with the `settle:` line instead of watching to merge. Never merges |
 | `AGENT_PR_BODY_FILE` | Where that draft goes (line 1 title, line 2 empty, then the body); default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md` |
 | `AGENT_EVIDENCE_FILE` | `go`, `reproduce`, and `monitor --until-settled` append `{"step","result","command","detail","cause"?}` JSON lines (`review`, `polish`, `checks`, `behavior`, `reproduce`, `settle`); `result` is `pass`, `fail`, `skip`, or `open` (findings or a wait still open, not a failure) |
 
@@ -221,6 +223,7 @@ The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-p
 
 ```
 scripts/gbase-run --repo ~/code/app --slot ship --task "로그인 500 수정" --worktree login-fix
+scripts/gbase-run --repo ~/code/app --slot work --task "T-12" --worktree t12 --ship-owner agent   # push·PR까지, result.json pr_url
 scripts/gbase-run --repo ~/code/app --slot review2
 scripts/gbase-run --repo ~/LTH/insta --slot content --task-file task.md   # 긴 작업은 파일로
 scripts/gbase-run --answers answers.json        # 이전 실행의 결정 필요: 줄에 답하고 이어서 실행
@@ -229,7 +232,7 @@ scripts/gbase-run stop <run-id>                 # claude와 그 하위 프로세
 scripts/gbase-run list
 ```
 
-It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads gbase (plus the plugin a slot names, like gshorts for `content`) from the checkout with `--plugin-dir`, blocks `ScheduleWakeup`/`CronCreate`, starts a `--worktree` branch from `origin`'s default branch (or `--base`) rather than the checkout's current branch, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. `decisions` in it are parsed `결정 필요:` lines (`{text, question, applied, recommend, options, human}`). Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
+It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads gbase (plus the plugin a slot names, like gshorts for `content`) from the checkout with `--plugin-dir`, blocks `ScheduleWakeup`/`CronCreate`, starts a `--worktree` branch from `origin`'s default branch (or `--base`) rather than the checkout's current branch, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. `pr_url` is the PR an agent-owned run opened; `decisions` in it are parsed `결정 필요:` lines (`{text, question, applied, recommend, options, human}`). Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
 
 ### gapp
 

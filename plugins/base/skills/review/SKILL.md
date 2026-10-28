@@ -63,7 +63,7 @@ Skeptic prompt:
 
 One skeptic per low/medium finding — or, with more than ~5 of them, batch 2–3 unrelated findings per skeptic so a large review doesn't spawn a dozen agents; each finding still gets its own verdict. These run with `model: "sonnet"`. High/critical (data loss, security, corruption, crash on a common path) gets three skeptics of its own with different angles, on the session's model (omit `model`) — a wrong refutation silently drops a real bug; a majority refutation kills it. A model the user names for either tier wins. Refuted findings are dropped from the report; keep the count and one-line reasons.
 
-When the caller says *one skeptic for low/medium* (`gbase:go` does on a medium-risk change), all low/medium findings go to a single Sonnet skeptic, each still judged separately; high/critical keep their panel. The skeptic stays a separate agent — the caller already holds the finder output and would anchor on it.
+When the caller says *one skeptic for low/medium* (`gbase:go` does on a medium-risk change, and on a low-risk one when headless), all low/medium findings go to a single Sonnet skeptic, each still judged separately; high/critical keep their panel. The skeptic stays a separate agent — the caller already holds the finder output and would anchor on it.
 
 ## Stage 3 — Act
 
