@@ -11,7 +11,7 @@ description: >-
 
 # shorts-common — rules for every short
 
-Format skills (`foreign-clip-short`, `top3-compilation-short`) hold only what differs per format and point here for the rest. When a format skill and this file disagree, the newer dated feedback wins.
+Format skills (`foreign-clip-short`, `top3-compilation-short`) hold only what differs per format and point here for the rest. Rules for every piece of content, video or not (writing from opened references, recording mistakes the same turn), live in [content-common](../content-common/SKILL.md) and apply here too. When a format skill and this file disagree, the newer dated feedback wins.
 
 ## 출력 언어
 
@@ -51,13 +51,7 @@ Any screen or format option (framing, title style, BGM level, pace, voice) is de
 
 ## Feedback intake — same turn, every time
 
-Every new piece of user feedback about a short is written into a skill **before** continuing the work:
-
-1. Classify it: applies to every video → this file's "Rules for every video"; specific to one format → that format skill; a new format → a new `skills/<format>-short/SKILL.md` that points here.
-2. Write it as a rule with the date and the user's own words in quotes (`2026-10-26 "BGM이 약하다": …`). If it contradicts an existing rule, rewrite that rule instead of adding a second one, and give it the new date.
-3. Then update the pipeline default it implies, if any.
-
-Edit the gshorts source in the godsenal-cc checkout (`plugins/shorts/skills/…`; on the reference machine `$HOME/LTH/godsenal-cc`), not the installed plugin cache — the cache is overwritten on update. Bump the gshorts version in both `plugins/shorts/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (patch for a rule, minor for a new format skill); installed copies only change once it ships.
+Every new piece of feedback about a short is written, dated and quoted, into the matching skill before the work continues — every video → this file's "Rules for every video", one format → `foreign-clip-short` or `top3-compilation-short`. The full procedure (classification, rewriting a contradicted rule, where to edit, version bump) is [content-common's intake](../content-common/SKILL.md#feedback-intake--same-turn-every-time).
 
 ## Checks before showing the user
 

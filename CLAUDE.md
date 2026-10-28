@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-A Claude Code plugin marketplace (`godsenal`) with three plugins — `gbase` (dev workflow: review, polish, PR, monitor), `gapp` (app-building harness: idea → App Store), and `gshorts` (faceless Korean short-form videos). No build step, no dependencies; everything is markdown skills. What each skill does lives in its own `SKILL.md` and in `README.md` — don't duplicate it here.
+A Claude Code plugin marketplace (`godsenal`) with three plugins — `gbase` (dev workflow: review, polish, PR, monitor), `gapp` (app-building harness: idea → App Store), and `gshorts` (Korean content: faceless short-form videos, Instagram card news). No build step, no dependencies; everything is markdown skills. What each skill does lives in its own `SKILL.md` and in `README.md` — don't duplicate it here.
 
 ## Layout
 
@@ -32,7 +32,7 @@ Plugin names carry a `g` prefix (`gbase`); directories don't (`plugins/base/`).
   - `bug-fix` starts with `gbase:reproduce`, which only writes the failing check; the fix stays in `bug-fix`.
   - `hooks/session-start.md` routes tasks to `gbase:work` with the same criteria as `work`'s description, and names the `gbase:scout` / `gbase:worker` agent types that `work`'s Subagents section dispatches; the hook's promise that `work` "asks before anything leaves the machine" is kept by `work`'s Ship gate — change both together. `branch-pr` and `work` use `gbase:unslop`.
   - gapp stages auto-continue to the next stage and update `docs/HARNESS.md`; stage numbers (0 kickoff … 8 store-submit) must match across `kickoff`, each skill's description, and `README.md`.
-  - gshorts format skills link to `shorts-common` for every-video rules and hold only format-specific ones; `shorts-common` names the format skills its feedback intake writes into. Adding a format skill means updating `shorts-common`'s list, `CONTRACTS` in check.py, and README together.
+  - gshorts format skills link to `shorts-common` for every-video rules (video formats) and to `content-common` for every-content rules, holding only format-specific ones; `shorts-common` and `content-common` name the format skills their feedback intake writes into. Adding a format skill means updating those lists, `CONTRACTS` in check.py, and README together.
 
 ## Writing skills
 
