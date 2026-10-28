@@ -266,6 +266,18 @@ class GbaseRunTest(unittest.TestCase):
         r, _ = self.run_cli("--repo", str(self.repo), "--slot", "task")
         self.assertIn("needs --task", r.stderr)
 
+    def test_every_slot_prompt_fills_its_placeholders(self):
+        # the runner fills only `<...>`; any other placeholder syntax ({ticket}) would reach claude as literal text
+        slots = json.loads((gbase_run.PLUGIN_DIR / ".claude-plugin" / "factory.json").read_text())["slots"]
+        for slot, spec in slots.items():
+            if spec["invoke"] is None:
+                continue
+            prompt = gbase_run.build_prompt(slot, spec, "T-1 로그인 500", None)
+            self.assertNotRegex(prompt, r"[<{][^>}]*[>}]", slot)
+            self.assertIn("T-1 로그인 500", prompt, slot)
+        r, _ = self.run_cli("--repo", str(self.repo), "--slot", "work")
+        self.assertIn("needs --task", r.stderr)
+
     def test_review_table_and_missing_plugin(self):
         table = "| # | severity | file:line | finding | action |\n|---|---|---|---|---|\n| 1 | high | `a.py:1` | x | y |\n"
         self.assertEqual(gbase_run.final_text([table, "기다리던 작업이 끝났습니다."]), table)

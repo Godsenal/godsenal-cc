@@ -10,9 +10,9 @@
   },
   "slots": {
     "work": {
-      "invoke": "/gbase:work {ticket}",
+      "invoke": "/gbase:work <task>",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
-      "notes": "The front door for one task (a card, a ticket): picks the route (bug, feature, refactor, …), does the work, and ends in the ship slot's gbase:go — review ∥ polish, verification gate including the repo's verify skill, commits; with AGENT_SHIP_OWNER=agent it also pushes, opens the PR (`pr: <url>`) and settles it (`settle:`), never merging. Under AGENT_HEADLESS=1 even a low-risk change is reviewed before the PR. An orchestrator opens its dev run with this instead of naming review, polish and checks as separate steps; {ticket} is the task's id, and the task itself comes from the orchestrator's prompt."
+      "notes": "The front door for one task (a card, a ticket): picks the route (bug, feature, refactor, …), does the work, and ends in the ship slot's gbase:go — review ∥ polish, verification gate including the repo's verify skill, commits; with AGENT_SHIP_OWNER=agent it also pushes, opens the PR (`pr: <url>`) and settles it (`settle:`), never merging. Under AGENT_HEADLESS=1 even a low-risk change is reviewed before the PR. An orchestrator opens its dev run with this instead of naming review, polish and checks as separate steps; <task> is the task from the orchestrator's prompt, its ticket id included."
     },
     "review": {
       "invoke": "/gbase:review pre-PR mode; defer, don't ask",
