@@ -16,7 +16,7 @@ Inside Claude Code, run these slash commands:
 # (optional) Install the gapp plugin — app-building harness
 /plugin install gapp@godsenal
 
-# (optional) Install the gshorts plugin — faceless Korean short-form videos
+# (optional) Install the gshorts plugin — faceless Korean short-form videos and Instagram card news
 /plugin install gshorts@godsenal
 ```
 
@@ -252,13 +252,15 @@ Pipeline:
 
 ### gshorts
 
-Faceless Korean short-form videos for YouTube Shorts, Instagram Reels, and TikTok. The skills hold the format the user has confirmed, feedback by feedback, and point at an external render pipeline (`tiktok-automation`) for the actual commands. They never ship code, keys, or account credentials.
+Korean content harness: faceless short-form videos for YouTube Shorts, Instagram Reels, and TikTok, plus Instagram card news. The skills hold the format the user has confirmed, feedback by feedback, and point at an external render pipeline (`tiktok-automation`) for the actual commands. They never ship code, keys, or account credentials.
 
 | Skill | What it does |
 |---|---|
-| **shorts-common** | Rules every short follows (length, pacing, audio mix, narration, captions, checks, posting gate — never schedules without the user's OK), options decided from 2–3 side-by-side samples, and **feedback intake**: each new piece of feedback is classified as common or format-specific and written, dated, into the matching skill the same turn. Ships a dated trend reference with sources |
-| **foreign-clip-short** | Official foreign show clips (Shark Tank, Dragons' Den, Antiques Roadshow appraisals) in framing D: black 9:16 canvas, fixed two-line title, ~1080×930 center crop, Korean subtitles; excludes shows with Korean rights holders |
+| **content-common** | Rules for every piece of content: names, bios, captions, cards, and scripts are written from high-performing references actually opened on the target platform, and every mistake or lesson is written into the plugin the same turn so other bots don't repeat it. Holds the **feedback intake**: each new piece of feedback is classified as content-wide, video-wide, or format-specific and written, dated, into the matching skill the same turn |
+| **shorts-common** | Rules every short follows (five posts a day with one fixed show per clip slot, length, pacing, audio mix, narration, captions, checks, posting gate — never schedules without the user's OK), and options decided from 2–3 side-by-side samples. Ships a dated trend reference with sources |
+| **foreign-clip-short** | Official foreign show clips in framing D (black 9:16 canvas, fixed two-line title, ~1080×930 center crop, Korean subtitles), with per-show variants for the fixed daily series: Antiques Roadshow, Pawn Stars, Shark Tank / Dragons' Den, Kitchen Nightmares, and Undercover Boss as the spare |
 | **top3-compilation-short** | Starter for ranked TOP3 compilations. Only the request for the format is confirmed, so the open parts are marked TODO and settled by sample comparison |
+| **instagram-card-news** | Instagram card news (carousels) for an info account: references opened before any card, no forced or image-less cards, names patterned on real Korean info brands, no sourcing route or AI tone in the bio, no promises without a setup behind them, mascot picked from samples, posts only after the user's OK |
 
 ## Usage
 
@@ -302,9 +304,11 @@ After installation, the following are available:
 /gapp:store-assets             # Simulator screenshots + store metadata
 /gapp:store-submit             # App Store Connect submission via Claude-in-Chrome
 
-/gshorts:shorts-common         # Every-video rules + feedback intake (read first)
-/gshorts:foreign-clip-short    # Shark Tank / Dragons' Den / Antiques Roadshow clip short, framing D
+/gshorts:content-common        # Rules for every piece of content + feedback intake (read first)
+/gshorts:shorts-common         # Every-video rules
+/gshorts:foreign-clip-short    # Foreign show clip short (Shark Tank, Pawn Stars, Kitchen Nightmares …), framing D
 /gshorts:top3-compilation-short  # TOP3 compilation starter (TODO parts settled by samples)
+/gshorts:instagram-card-news   # Instagram card news (carousel) for an info account
 ```
 
 ## License

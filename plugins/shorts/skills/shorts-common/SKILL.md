@@ -11,7 +11,7 @@ description: >-
 
 # shorts-common — rules for every short
 
-Format skills (`foreign-clip-short`, `top3-compilation-short`) hold only what differs per format and point here for the rest. When a format skill and this file disagree, the newer dated feedback wins.
+Format skills (`foreign-clip-short`, `top3-compilation-short`) hold only what differs per format and point here for the rest. Rules for every piece of content, video or not (writing from opened references, recording mistakes the same turn), live in [content-common](../content-common/SKILL.md) and apply here too. When a format skill and this file disagree, the newer dated feedback wins.
 
 ## 출력 언어
 
@@ -21,7 +21,7 @@ Format skills (`foreign-clip-short`, `top3-compilation-short`) hold only what di
 
 The render pipeline is a separate repo (`tiktok-automation`); run its commands there and never copy its code into this plugin. On the reference machine it is `$HOME/LTH/tiktok-automation`; if that path doesn't exist, ask the user for its location once.
 
-- Render: `npm run clip -- out/<date>_<slug>/work/plan.json` (`src/clipCommentary.ts`); format rules in `docs/CLIP.md`, `docs/SHARK_TANK.md`.
+- Render: `npm run clip -- out/<date>_<slug>/work/plan.json` (`src/clipPace.ts`, default `PACE_B`); format rules in `docs/CLIP.md`, `docs/formats/*.md`. Flicker check: `npm run flicker -- video.mp4` (also run by the render; result in `metadata.json` `flicker`).
 - Work dir `out/<date>_<slug>/` (`work/plan.json`, `video.mp4`, `subtitles.srt`, `metadata.json`, `check/`). Delivery copy in `$HOME/tiktok-share/<date>/<nn>_<slug>/`: `video.mp4`, `caption.txt`, `cover.jpg`, `subtitles.srt`, `check/`, `REPORT.md`.
 - Keys come from the environment by name only — `TYPECAST_API_KEY` (TTS), `FAL_KEY` (BGM); optional knobs are in the pipeline's `.env.example`. Never read, print, or copy key values or the shell file that sets them.
 - Cost: every paid call is logged in `cost-ledger.jsonl`; check the monthly budget (`MONTHLY_BUDGET_KRW`) before a batch. Reuse cached TTS/BGM when the line or prompt is unchanged.
@@ -30,15 +30,20 @@ The render pipeline is a separate repo (`tiktok-automation`); run its commands t
 
 Quotes are the user's words with the date they were said. Undated items are from the 2026-10-25 format agreement.
 
-- **Length 61–65s** (TikTok Creator Rewards needs over 1 min). Hard cuts only — no slide/wipe transitions. **No black frame at the end**; the last frame is real footage.
-- **Pace** — 2026-10-26 "속도감이 없다": cut dragging stretches and the silence between lines. Remove dead air rather than adding cuts for their own sake ([trends](references/trends-2026-10.md#cut-frequency--pacing)).
-- **BGM** — 2026-10-26 "BGM이 약하다": clearly audible and matched to the scene. The pipeline default (`BGM_DB` in `src/clipCommentary.ts`: about -4 dB in gaps, -13 dB under speech, +3 dB build, final -14 LUFS) is the level the user called weak, so mix BGM louder than that. TODO (open): no new level is agreed yet. The louder pace-test variants (`scripts/pace-test/make_plans.py`, A/B/C) haven't been shown to the user. Settle it by sample comparison (below), then write the chosen levels here and into the pipeline default.
+- **Length 45–55s** — 2026-10-26, the user picked redesign B ("61초 하한은 없앤다"): the 61s Creator Rewards floor is gone. Well-performing foreign-clip shorts run 36–56s. Reach the length by dropping weak lines (side remarks, a lone "와", self-promotion), never by padding. Hard cuts only — no slide/wipe transitions. **No black frame at the end**; the last frame is real footage.
+- **Pace** — 2026-10-26 "속도감이 없다", settled by redesign B: remove **every silence over 0.15s between lines**, leaving ~0.06s before and after so line endings aren't clipped. Find the silences on the actual waveform (demucs vocal stem), not on Whisper word timestamps alone: Whisper stretches words over pauses and missed every 0.2s pause in a clip. Use word timestamps to check that no word was cut. Then play everything at 1.08× with pitch kept. Pipeline: `scripts/clip/make_b.py` (prints "소리 걸친 컷 경계" and "잘린 단어", both must be 0) and `scripts/clip/listen_check.py` (re-transcribes the render).
+- **No flicker at cuts** — 2026-10-26 "장면 전환 때 화면이 깜빡이는 현상": the cause was one to three frames of a different camera angle or crop at a cut. Clip pieces were cut one frame late (the first frame after the seek wasn't at PTS 0), and plan boundaries sat 1–3 frames off the source's own camera cuts. The pipeline now cuts from PTS 0, fills edge frames that straddle a source cut (`fixEdges`), merges pieces under 4 frames, and aligns color flashes to cut frames. **Before showing a video, `metadata.json` `flicker.issues` must be empty and `blackframe` empty**; any 1–3 frame shot or black frame blocks delivery.
+- **BGM** — 2026-10-26 "BGM이 약하다", settled by redesign B: measured against the dialogue track, -9 LU under speech, -5 in gaps, -6 under narration (2 dB below the B draft so speech isn't buried); master -14 LUFS (`PACE_B.bgmDb`).
 - **SFX**: subtle shorts-style — whoosh+hit at the hook, ding at a key reveal, a tension hit before the decision. Synthesized by the pipeline (`src/sound.ts`), free.
 - **Narration — never zero lines.** 3–4 short Korean hearsay bridge lines (1–3s each) in the shorts storytelling tone: "~했다는데", "침묵이 이어지는데", "잠깐 고민하더니". Not a news-style who/what/result summary. Write numbers in Korean words; commas and ellipses for natural line endings. Narration is also what keeps clip-based shorts out of "reused content" ([trends](references/trends-2026-10.md#reused--clipped-content--matters-for-foreign-clip-formats)).
 - **Voice**: Typecast voice 대진 with toneup 1.3 and tempo 1.1; the pipeline then speeds it up with ffmpeg `atempo=1.3`, pitch kept (`CLIP_VOICE_SPEEDUP`). Chosen from 8 samples; never 현준. A new voice only after a side-by-side sample comparison.
-- **Caption**: a curiosity hook line + a comment/save/tag CTA line + 5 hashtags. No AI-disclosure line, no summary. The TikTok AI-generated-content toggle stays ON.
-- **Pinned comment**: like the reference short https://youtube.com/shorts/J17s13-O3hE — who the person / what the product is, plus what happened after the broadcast. Only facts you confirmed with a source; cite the source in REPORT.md, never guess a 근황.
-- **Stock**: build inventory ahead in varied formats (TOP3 compilations etc.), not only the current one.
+- **Caption**: a curiosity hook line + a **series line** + 5 hashtags. No AI-disclosure line, no summary. The TikTok AI-generated-content toggle stays ON. Since 2026-10-28 production (subscriber-conversion plan, pipeline `docs/SERIES.md` "시리즈 안내 줄"), line 2 of a series clip is `<쇼 이름> #<다음 회차>는 <다음 예약 날짜 시각>, 지난 회차는 프로필에서`, generated by `node scripts/series-cta.mjs <stock folder>` from `topics/clips/queue.json` slots and the `SCHEDULE-RESULT.md` booking records; when the next episode's slot is unknown it says `다음 회차도 곧 올라와요` with no date. Non-series videos (narration, TOP3) use a general line such as `이런 돈 정보 매일 올려요`. **Never** conditional or reward-style follow bait ("팔로우하면 2편 공개", "구독해야 결과 공개") — TikTok's integrity guidelines drop follow-manipulating content from For You. Captions and comments of videos already scheduled or posted are never rewritten.
+- **End card**: series clips (from 2026-10-28 production) end with a 1.5s yellow next-episode line in the headline spot, from the same schedule as the caption series line (pipeline `docs/SERIES.md` "엔드카드", `plan.json` `stock`). Narration videos and TOP3 get none.
+- **Pinned comment**: like the reference short https://youtube.com/shorts/J17s13-O3hE — who the person / what the product is, plus what happened after the broadcast. For series clips the comment is **behind-the-story only** (user, 2026-10-27: "댓글은 비하인드 스토리"): what happened after the broadcast (closure, rename, lawsuit, local reports, the episode's own epilogue), not a recap of the video. Only facts you confirmed with a source; cite the source in REPORT.md, never guess a 근황. For a series clip the last line (after the viewer question) repeats the caption's series line; no URLs (Shorts comment links are not clickable).
+- **Five posts a day, foreign clips first** — 2026-10-26 "해외 클립 영상이 가장 인기 있으니 주력으로 유지, 업로드는 하루 3편보다 더 늘려도 됨": slots 07:30, 12:00, 18:00, 21:00, 23:00 KST, same slots on TikTok and YouTube Shorts. 12:00 stays the auto-made narration video; the other four are foreign-show clips from pre-rendered stock, one fixed show per slot (pipeline `docs/SERIES.md`, `node scripts/day-slots.mjs <date> --clip`). A slot someone already scheduled is listed in `topics/overrides/<date>.json` `skipSlots` and never touched.
+- **Narration stays at today's amount** — 2026-10-26 "해설 양은 지금 그대로(늘리지 말 것)": 3–4 lines, about 70 characters in total. More stock or a new show is not a reason to add lines.
+- **Fixed series** — 2026-10-26 "인기 많은 쇼는 '고정 시리즈'로 운영": pick shows by measured Korean view counts (record the numbers and sources), give each a slot, and start the caption's first line (and the YouTube title) with `[<시리즈명> #<회차>]`, numbered per show in posting order. Nothing about the series goes on screen unless the user picks it from samples.
+- **Stock**: build inventory ahead in varied formats (TOP3 compilations etc.), not only the current one. A stock folder per slot holds `video.mp4`, `caption.txt`, `COMMENT.md` (pinned comment + sources), `FACTS.md` (every claim with its source time or URL).
 
 ## Sample comparison before deciding
 
@@ -46,18 +51,16 @@ Any screen or format option (framing, title style, BGM level, pace, voice) is de
 
 ## Feedback intake — same turn, every time
 
-Every new piece of user feedback about a short is written into a skill **before** continuing the work:
-
-1. Classify it: applies to every video → this file's "Rules for every video"; specific to one format → that format skill; a new format → a new `skills/<format>-short/SKILL.md` that points here.
-2. Write it as a rule with the date and the user's own words in quotes (`2026-10-26 "BGM이 약하다": …`). If it contradicts an existing rule, rewrite that rule instead of adding a second one, and give it the new date.
-3. Then update the pipeline default it implies, if any.
-
-Edit the gshorts source in the godsenal-cc checkout (`plugins/shorts/skills/…`; on the reference machine `$HOME/LTH/godsenal-cc`), not the installed plugin cache — the cache is overwritten on update. Bump the gshorts version in both `plugins/shorts/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (patch for a rule, minor for a new format skill); installed copies only change once it ships.
+Every new piece of feedback about a short is written, dated and quoted, into the matching skill before the work continues — every video → this file's "Rules for every video", one format → `foreign-clip-short` or `top3-compilation-short`. The full procedure (classification, rewriting a contradicted rule, where to edit, version bump) is [content-common's intake](../content-common/SKILL.md#feedback-intake--same-turn-every-time).
 
 ## Checks before showing the user
 
-- Duration 61–65s (`ffprobe`); `blackdetect` finds no black frame; last frame is footage.
+2026-10-26 "품질 최우선 … 통과 못한 영상은 재고에 넣지 않는다": a video that fails any gate below is fixed or dropped, never stocked. Compare each new show against at least three high-view Korean shorts of the same show (hook, cuts per minute, 0.15s+ gaps, BGM under speech, subtitle look) and write the table down.
+
+
+- Duration 45–55s (`ffprobe`); `metadata.json` `flicker` has no issues and no black frames; last frame is footage.
 - Frames grabbed into `check/` at several timestamps (title, crop, subtitles, `last.jpg`) and looked at.
+- No line ending cut off and no leftover gap: make_b's "소리 걸친 컷 경계" and "잘린 단어" are 0, and the render's 0.15s+ gaps are listed. The automatic re-transcription share (`listen_check.py`) drops to 0.7–0.8 on crying or music-heavy scenes even when every word is there; in that case re-transcribe the vocal stem in 4-second chunks and confirm each line is heard. The make_b vocal cache must be keyed by the clip ranges: a stale cache after editing clip ranges shifted every later clip and cut real words (fixed 2026-10-26).
 - Loudness near -14 LUFS. You can't hear the mix — say "귀로 듣지 않음" in REPORT.md rather than claiming the audio is fine.
 - Narration timestamps land where intended; numbers and names match the source.
 - REPORT.md: source URL, title, length/resolution/LUFS/blackdetect/last frame, narration lines with timestamps and SFX, how subtitles were verified, cost, and a "확인 못 한 것" list.

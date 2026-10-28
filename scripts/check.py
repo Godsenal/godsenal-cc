@@ -89,6 +89,9 @@ CONTRACTS = [
     ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
     ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
     ("top3-compilation-short", [shorts("shorts-common")]),
+    # content-common holds rules for every piece of content; shorts-common and instagram-card-news defer to it
+    ("content-common", [shorts("shorts-common"), shorts("instagram-card-news")]),
+    ("instagram-card-news", [shorts("content-common")]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
