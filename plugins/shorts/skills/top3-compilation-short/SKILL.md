@@ -23,7 +23,7 @@ Narration matters more here: YouTube names low-narrative compilations as reused 
 
 What the first attempt (`out/2026-10-26_top3_fights`, status needs-review, no user verdict) used:
 
-- Theme across all three entries (e.g. investors fighting), title like "투자자끼리 싸움 났다 / 역대급 피치 TOP3" in framing D.
+- Theme across all three entries (e.g. investors fighting), title like "투자자끼리 싸움 났다 / 역대급 피치 TOP3" in framing D. Start the title from [hook-templates](../hook-templates/SKILL.md).
 - Order 3위 → 2위 → 1위, each entry a hard-cut segment from a different source; a rank card (`rank {n, label, seconds}` in `plan.json`, 1.6s in the draft) before each.
 - 3 narration lines with ding/hit SFX, total 62.5s.
 

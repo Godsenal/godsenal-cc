@@ -21,6 +21,7 @@ Rules from the user's feedback on 2026-10-27–28. All of [content-common](../co
 
 ## Cards
 
+- **Cover, first card, and the caption's first line** start from [hook-templates](../hook-templates/SKILL.md) and follow its 머니알림 rules.
 - **No forced cards** — 2026-10-27 "뜬금없는 2,30대 개억지 체크포인트": every card must follow from the story; no filler checklist or audience-targeting card bolted on.
 - **No useless caption lines, no image-less text cards** — 2026-10-27 "쓸데없는 캡션이랑 출처, 이미지는 하나도없음": each card carries a real visual — an actual tweet capture, a chart, or the mascot. No source card or credit line either (content-common's no-sources rule, 2026-10-29); the tweet captures themselves stay.
 - **Mascot**: chosen by the user from several samples side by side; on 2026-10-28 the user picked a sea otter (해달). A new character only after another side-by-side comparison.

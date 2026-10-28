@@ -26,7 +26,7 @@ Agreed with the user on 2026-10-25 after analyzing 12 popular Korean Shark Tank 
 
 ## Structure
 
-1. **Hook (0–5s)**: the most dramatic line or moment — for appraisals, the price or the owner's reaction.
+1. **Hook (0–5s)**: the most dramatic line or moment — for appraisals, the price or the owner's reaction. The two-line title and the caption's hook line start from [hook-templates](../hook-templates/SKILL.md).
 2. **What it is (~17–25s)**: original pitch/demo, or the appraiser's explanation with close-ups. Viewers must understand the product or object.
 3. **Back-and-forth**: offers, counters, sharks arguing — or the backstory and appraisal build-up.
 4. **Result**: deal or no deal / the price reveal, and the reaction.

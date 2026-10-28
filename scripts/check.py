@@ -97,6 +97,9 @@ CONTRACTS = [
     # content-common holds rules for every piece of content; shorts-common and instagram-card-news defer to it
     ("content-common", [shorts("shorts-common"), shorts("instagram-card-news")]),
     ("instagram-card-news", [shorts("content-common")]),
+    # hook-templates is read before every opening line; each content skill links it at its hook step
+    ("hook-templates", [shorts("content-common"), shorts("shorts-common"), shorts("instagram-card-news"),
+                         shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
