@@ -113,7 +113,7 @@ Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes noth
 
 `content` names a skill of the gshorts plugin in this marketplace (`/gshorts:content-common`), so its caller loads gshorts too (the runner does). `task` has no skill: its `invoke` is a bare `<task>`, so the prompt is the task, run under the same runner for its log, result, and stop.
 
-`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work {ticket}` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own. With `AGENT_SHIP_OWNER=agent` the run also pushes and opens the PR (`pr:` line), then settles it (`settle:` line); it never merges. Under `AGENT_HEADLESS=1` `go` reviews every tier before the PR, `low` included.
+`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work <task>` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own. With `AGENT_SHIP_OWNER=agent` the run also pushes and opens the PR (`pr:` line), then settles it (`settle:` line); it never merges. Under `AGENT_HEADLESS=1` `go` reviews every tier before the PR, `low` included.
 
 A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. There is no `plan` slot: `gbase:how` explains the code a task touches, but it doesn't decide scope or acceptance criteria.
 
@@ -134,7 +134,7 @@ gbase-run list
 - `--model` is passed to claude; a `models` slot ignores it and runs its own list.
 - `--worktree <name>` runs in `$GBASE_HOME/worktrees/<repo>-<path hash>-<name>` on branch `gbase/<name>`, created on first use with no upstream from `--base` (default: origin's default branch after `git fetch origin`; `HEAD` only when the repo has no `origin`) and reused after — never from whatever the main checkout has checked out, whose unpushed commits would ride into the PR. A reused branch isn't rebased; `base` in `result.json` shows how far it is from the base.
 - The last stdout line is the absolute path of `result.json`. Exit 0 when every session exited 0. SIGTERM, SIGINT, or SIGHUP (`gbase-run stop <run-id>` sends SIGTERM and waits) ends each claude session's process group — subagents and shells included, SIGKILL after 10 s — and still writes the result (`failed`, with `stopped_by`).
-- A slot whose `invoke` has a `<placeholder>` (`reproduce`) needs `--task`.
+- A slot whose `invoke` has a `<placeholder>` (`work`, `reproduce`) needs `--task`.
 
 Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`): `prompt.txt`, `log.jsonl` (the `stream-json` events; `log-<model>.jsonl` per session for a `models` slot), `final.md` (the last result message that carries a report line, else the last one; `final-<model>.md`), `evidence.jsonl`, `pr-body.md` when `go` drafted one, `questions.jsonl`, `answers.json`, `review.md` for a `models` slot, and `result.json`:
 
