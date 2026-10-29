@@ -67,7 +67,7 @@
     "content": {
       "invoke": "/gshorts:content-common <content request>",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
-      "notes": "One piece of gshorts content (a short, card news, an account name, bio, or caption) under content-common's rules; the request names the format, and that format's skill (shorts-common and its video formats, instagram-card-news) applies with it. Lives in the gshorts plugin: gbase-run loads every plugin of its checkout, an installed setup needs gshorts@godsenal. Outputs land in the work folder the request names; nothing is posted under AGENT_HEADLESS=1. Never edits the harness source: each lesson is a `교훈:` report line, which gbase-run hands to a `work` run (`next:`)."
+      "notes": "One piece of gshorts content (a short, card news, a Naver blog plan, an account name, bio, or caption) under content-common's rules; the request names the format, and that format's skill (shorts-common and its video formats, instagram-card-news, naver-blog) applies with it. Lives in the gshorts plugin: gbase-run loads every plugin of its checkout, an installed setup needs gshorts@godsenal. Outputs land in the work folder the request names; nothing is posted under AGENT_HEADLESS=1. Never edits the harness source: each lesson is a `교훈:` report line, which gbase-run hands to a `work` run (`next:`)."
     },
     "task": {
       "invoke": "<task>",

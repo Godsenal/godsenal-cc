@@ -16,7 +16,7 @@ Inside Claude Code, run these slash commands:
 # (optional) Install the gapp plugin — app-building harness
 /plugin install gapp@godsenal
 
-# (optional) Install the gshorts plugin — faceless Korean short-form videos and Instagram card news
+# (optional) Install the gshorts plugin — faceless Korean short-form videos, Instagram card news, and Naver blog strategy
 /plugin install gshorts@godsenal
 ```
 
@@ -264,7 +264,7 @@ Pipeline:
 
 ### gshorts
 
-Korean content harness: faceless short-form videos for YouTube Shorts, Instagram Reels, and TikTok, plus Instagram card news. The skills hold the format the user has confirmed, feedback by feedback, and point at an external render pipeline (`tiktok-automation`) for the actual commands. They never ship code, keys, or account credentials.
+Korean content harness: faceless short-form videos for YouTube Shorts, Instagram Reels, and TikTok, plus Instagram card news and Naver blog strategy. The skills hold the format the user has confirmed, feedback by feedback, and point at an external render pipeline (`tiktok-automation`) for the actual commands. They never ship code, keys, or account credentials.
 
 | Skill | What it does |
 |---|---|
@@ -274,6 +274,7 @@ Korean content harness: faceless short-form videos for YouTube Shorts, Instagram
 | **foreign-clip-short** | Official foreign show clips in framing D (black 9:16 canvas, fixed two-line title, ~1080×930 center crop, Korean subtitles), with per-show variants for the fixed daily series: Antiques Roadshow, Pawn Stars, Shark Tank / Dragons' Den, Kitchen Nightmares, and Undercover Boss as the spare |
 | **top3-compilation-short** | Starter for ranked TOP3 compilations. Only the request for the format is confirmed, so the open parts are marked TODO and settled by sample comparison |
 | **instagram-card-news** | Instagram card news (carousels) for an info account: references opened before any card, no forced or image-less cards, names patterned on real Korean info brands, no sourcing route or AI tone in the bio, no promises without a setup behind them, mascot picked from samples, posts only after the user's OK |
+| **naver-blog** | Naver blog strategy, diagnosis, post template, titles, and monetization order (애드포스트·체험단·쇼핑커넥트) from blogs that rank in 통합검색 now or publicly disclose revenue, opened on mobile Naver first (how to read post bodies, blog stats, cadence via the post-list API, AdPost slots). Diagnosis compares blog-level facts (이웃, 방문, category spread, 블로그 주제, operator identity) before post length or images, never invents an operator, and quotes official thresholds with a check date. Writing a single post stays with the caller's own skill |
 
 ## Usage
 
@@ -323,6 +324,7 @@ After installation, the following are available:
 /gshorts:foreign-clip-short    # Foreign show clip short (Shark Tank, Pawn Stars, Kitchen Nightmares …), framing D
 /gshorts:top3-compilation-short  # TOP3 compilation starter (TODO parts settled by samples)
 /gshorts:instagram-card-news   # Instagram card news (carousel) for an info account
+/gshorts:naver-blog            # Naver blog strategy, diagnosis, and post template from ranking blogs
 ```
 
 ## License

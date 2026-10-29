@@ -13,7 +13,7 @@ description: >-
 
 # content-common — rules for every piece of content
 
-Applies to everything gshorts makes. Video-wide rules live in [shorts-common](../shorts-common/SKILL.md), Instagram card news in [instagram-card-news](../instagram-card-news/SKILL.md); both point here. When they disagree, the newer dated feedback wins.
+Applies to everything gshorts makes. Video-wide rules live in [shorts-common](../shorts-common/SKILL.md), Instagram card news in [instagram-card-news](../instagram-card-news/SKILL.md), Naver blog strategy in [naver-blog](../naver-blog/SKILL.md); all point here. When they disagree, the newer dated feedback wins.
 
 ## 출력 언어
 
@@ -44,7 +44,7 @@ Quotes are the user's words with the date they were said.
 
 Every new piece of user feedback or lesson becomes a `교훈:` line **before** continuing the work:
 
-1. Classify it — this names the target skill: every piece of content (and text posts, until they get their own skill) → this file's rules; every video → shorts-common's "Rules for every video"; one format → that format skill (`foreign-clip-short`, `top3-compilation-short`, `instagram-card-news`); a new format → a new `skills/<format>/SKILL.md` that points here (and at shorts-common if it's a video).
+1. Classify it — this names the target skill: every piece of content (and text posts, until they get their own skill) → this file's rules; every video → shorts-common's "Rules for every video"; one format → that format skill (`foreign-clip-short`, `top3-compilation-short`, `instagram-card-news`, `naver-blog`); a new format → a new `skills/<format>/SKILL.md` that points here (and at shorts-common if it's a video).
 2. Write it as a rule with the date and the user's own words in quotes, one line each at column 0 of the report: `교훈: <target skill> — <date "user's words">: <rule>` (`교훈: content-common — 2026-10-28 "지금 좀 ai같은데": …`). Say when it contradicts an existing rule, so the rewrite replaces that rule instead of adding a second one.
 3. Then update the pipeline or tooling default it implies, if any.
 
