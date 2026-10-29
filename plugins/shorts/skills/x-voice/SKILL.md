@@ -4,7 +4,7 @@ description: >-
   Sets how an X (Twitter) post from the gshorts accounts (@wolgeupnal, 월급날) sounds and how long it is, so it
   reads like one person typing on a phone and not a notice board or a link bot: a first line that talks to the
   reader, spoken 해요체 for information posts (short news may be "~래/~대" 반말), one reaction or opinion line
-  in every root, roots about 130자, quote posts of one or two lines (25–60자) in 반말/음슴/noun-style monologue
+  in most roots, roots about 130자, quote posts of one or two lines (25–60자) in 반말/음슴/noun-style monologue
   that correct, push back, or say what you really think, and no source wording anywhere. How replies and
   comments sound and where to leave them is comment-guide's. Rules come from X posts opened on 2026-10-29:
   45 roots of 36 Korean money and work accounts, 219 quote posts, and 140 posts of 20 accounts that morning.
@@ -30,7 +30,7 @@ Measurements: 45 roots (38 money/life information, 7 work/money stories) from 36
 
 - **First line talks to the reader.** "님들 ~아시나요", "~연장됐대", "~인 사람?", "오잉 너무 쉬워요". No notice-style opener: "~부터 보는 게 순서", "~해당", "~모음 (공고 원문 다 확인함)".
 - **Information posts: spoken 해요체.** 해요/합쇼 was the most common ending among the top money posts (11 of 31 across both samples), but not a majority, so the ending alone doesn't make it sound like X. Write the 해요 people say — "~더라고요", "~거 아시나요", "~돼요 진짜", "~붙고요". **No 음슴체 information roots** (bottom 7 vs top 4 this sample; the morning's top 12 had 1). A one-to-three-line news item may be hearsay 반말 "~래/~대": all three top 반말 posts were short news of 76자 or less (kimtom_Official 33자 "06, 07년생 트친드라. / 문화향유 지원금 신청해. / 15~20만원 나온대", ♥8,575). Still no 반말 orders like "~셈", "~둬" (morning: 4 of 140, none in the top quartile).
-- **Every root has one reaction or attitude line.** "하 제발 중요한거인데", "아침밥 지원은 좀 웃기긴 함", "이건 진짜 챙길 만해요". Opinion and reaction only; no experience, amount, or count the user didn't have. Honest takes: posts with an opinion line beat the same account's other posts in 9 accounts and trailed in 3 (morning).
+- **Most roots have one reaction or attitude line, not every one.** Leave it out now and then (about 1 in 4–5 roots) when the fact itself carries the post, so the reaction line doesn't turn into a fixed pattern (user, 2026-10-29: "감상 줄만 유연하게"). "하 제발 중요한거인데", "아침밥 지원은 좀 웃기긴 함", "이건 진짜 챙길 만해요". Opinion and reaction only; no experience, amount, or count the user didn't have. Honest takes: posts with an opinion line beat the same account's other posts in 9 accounts and trailed in 3 (morning).
 - **Reaction posts** (반말, 음슴체, `ㅋㅋ`, `..` fine) only about money or work, and only real: the user's own reaction or a feeling added to a fact in real news. Everyday-life monologue mostly underperformed (morning: 61 of 80 below the account median).
 
 Real examples:
@@ -77,7 +77,7 @@ Real examples:
 ## Bot signals — if any of these is in the draft, rewrite it
 
 1. Notice-style first line ("~보는 게 순서", "~해당", "~모음 (원문 확인함)"), or an 음슴체 information root.
-2. A root with no reaction line — no reader address, no take, no `ㅋ`/`ㅠ`, no `?`.
+2. Several roots in a row with no human line — no reader address, no take, no `ㅋ`/`ㅠ`, no `?` (one plain root now and then is fine). Also the same reaction line pattern repeated across posts.
 3. A reaction post over ~100자, an information post well past 130자, or decorated emoji lists.
 4. A quote that only summarizes or praises the original, or a 해요 information quote.
 5. Any link in a quote, source wording, check date, or source-only continuation.
@@ -92,4 +92,4 @@ Count, don't estimate. Save the post to a file and run:
 python3 -c 'import re,sys;t=open(sys.argv[1]).read().strip();L=[l for l in t.splitlines() if l.strip()];print(len(L),"줄",len("".join(L)),"자 | 첫줄",len(L[0]),"자 | 숫자후보",re.findall(r"\d+(?:[.,]\d+)*",t),"| 링크",bool(re.search(r"https?://|\.com|\.kr",t)),"| 감정표지",bool(re.search(r"ㅋ|ㅠ|ㅜ|ㄷㄷ|!|\?|진짜|제발",t)),"| 출처말",bool(re.search(r"출처|확인\)|안내상|FAQ",t)))' post.txt
 ```
 
-Root: about 130자 with 감정표지 True. Quote: 60자 or less. Both: 링크 and 출처말 False. Walk the bot-signal list, then put one line in the work report, for example `voice-check: x 인용 1줄 38자 | 반말 정정 | 봇 신호 0`.
+Root: about 130자, 감정표지 True for most roots (an occasional False is fine). Quote: 60자 or less. Both: 링크 and 출처말 False. Walk the bot-signal list, then put one line in the work report, for example `voice-check: x 인용 1줄 38자 | 반말 정정 | 봇 신호 0`.
