@@ -2,9 +2,11 @@
 name: instagram-card-news
 description: >-
   Makes Korean Instagram card news (carousel posts) for an information account — account name, bio, cards,
-  and caption — from high-performing Korean card-news references opened first, with real tweet captures,
-  charts, and a mascot on every card. Use when asked for 카드뉴스, an Instagram carousel, or an Instagram
-  info account's name, bio, mascot, or post, or when the user gives feedback on one.
+  and caption — from high-performing Korean card-news references opened first, in one fixed format template
+  (same cover layout, slide split, type sizes, colors, slide count, and slide roles every post) with real
+  captures and charts, and the sea-otter mascot only as the profile photo, never on a slide. Use when asked
+  for 카드뉴스, an Instagram carousel, or an Instagram info account's name, bio, profile image, or post, or
+  when the user gives feedback on one.
 ---
 
 # instagram-card-news
@@ -23,9 +25,26 @@ Rules from the user's feedback on 2026-10-27–28. All of [content-common](../co
 
 - **Cover, first card, and the caption's first line** start from [hook-templates](../hook-templates/SKILL.md) and follow its 머니알림 rules.
 - **No forced cards** — 2026-10-27 "뜬금없는 2,30대 개억지 체크포인트": every card must follow from the story; no filler checklist or audience-targeting card bolted on.
-- **No useless caption lines, no image-less text cards** — 2026-10-27 "쓸데없는 캡션이랑 출처, 이미지는 하나도없음": each card carries a real visual — an actual tweet capture, a chart, or the mascot. No source card or credit line either (content-common's no-sources rule, 2026-10-29); the tweet captures themselves stay.
+- **No useless caption lines, no image-less text cards** — 2026-10-27 "쓸데없는 캡션이랑 출처, 이미지는 하나도없음": each card carries a real visual — an actual tweet capture, a screen capture, or a chart. No source card or credit line either (content-common's no-sources rule, 2026-10-29); the tweet captures themselves stay.
 - **Last card — no fixed CTA box** — 2026-10-29 (user decision 17:50, "CTA는 내용에 맞는 한 줄로 매번 바꿔"): never put the same closing box on every carousel (❤️ 좋아요 · 🔖 저장 · 💬 공유 · 👉 팔로우). Write one CTA line that fits that post's content, different each time; the same ending line every time reads as a bot signal.
-- **Mascot**: chosen by the user from several samples side by side; on 2026-10-28 the user picked a sea otter (해달). A new character only after another side-by-side comparison. It is the account's face only: no name, and it never narrates (2026-10-29, [content-common](../content-common/SKILL.md)'s no-mascot-voice rule).
+- **Mascot — profile photo only** — 2026-10-29 21:37 "무슨 캐릭터만들어서 카드뉴스만들고 이런게아님 그냥 형식만 잘 통일해서 잘만드는느낌": the sea otter (해달) the user picked on 2026-10-28 is the profile photo and nothing else. It goes on no slide, cover, or last card; what makes the account look made with care is the fixed format below. No name, never narrates ([content-common](../content-common/SKILL.md)'s no-mascot-voice rule). This replaces the older "mascot on every card" rule.
+
+## Format template (@haedollar)
+
+Same 2026-10-29 21:37 feedback. The two references the user named, @moodmode.ai and @ai.trend.kr, change only the cover image, the headline, and the captures from post to post; position, size, color, slide count, and each slide's role stay fixed (21 carousels opened, analysis and URLs in [references/format-refs-2026-10-29.md](references/format-refs-2026-10-29.md)). Every @haedollar carousel uses this one template. Change a value only with the user, then change it here, not per post.
+
+| | Spec (1080×1440 px, 3:4) |
+|---|---|
+| Type | One family, Pretendard. Headlines ExtraBold with tight tracking; body Medium |
+| Colors | Panel `#0B0B0B`, headline `#FFFFFF`, body `#B8B8B8`, one accent `#F5B82E` used in one place per slide at most |
+| Margins | 72 px left and right on every slide; text left-aligned |
+| Cover (1 slide) | Full-bleed image: a real screen or product photo, never the otter. Bottom 40% dark gradient. Bottom-left: tag pill `AI 뉴스` · `AI 팁` · `AI 돈` (26 px, only these three), then a 2-line headline at 88–96 px, ≤14자 per line, from [hook-templates](../hook-templates/SKILL.md) |
+| Body slides (4–8) | Top 55%: one capture (tweet, screen, chart), edge to edge. Bottom 45%: `#0B0B0B` panel with the slide number (1, 2 …, 26 px), one headline line ≤16자 at 64 px, then ≤3 body lines at 34 px in 해요체; one bold phrase at most. No credit, `@handle`, or "출처" text on the slide; a capture keeps whatever is inside it |
+| Last slide (1) | The cover image at 35% brightness with one line centered at 56 px: that post's CTA, different every post. No follow card, profile pill, ♥💬🔖 icons, or "댓글 남기면" line |
+| Count and order | Cover → numbered body slides → last slide: 6–10 slides. A weekly roundup uses the same cover with the tag `AI 뉴스` and a second line "N월 N주 AI 소식"; how often it runs is the user's call |
+| Caption | The Caption rules below; the first line restates the cover headline as a sentence. No English translation block, no `Editor`/`Created by`/`Source` lines (both references do these; we don't) |
+
+Before handing off, put the cover, one body slide, and the last slide of the new carousel next to the previous post's and check that only the image, words, and captures differ; write `format-check: 비율 3:4 | 장 N | 태그 <AI 뉴스> | 본문 제목 최대 N자 | 마스코트 0` in the report.
 
 ## Name, bio
 
