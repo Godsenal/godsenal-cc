@@ -104,13 +104,18 @@ CONTRACTS = [
     ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
     ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
     ("top3-compilation-short", [shorts("shorts-common")]),
-    # content-common holds rules for every piece of content; shorts-common, instagram-card-news, and naver-blog defer to it
-    ("content-common", [shorts("shorts-common"), shorts("instagram-card-news"), shorts("naver-blog")]),
+    # content-common holds rules for every piece of content; shorts-common, instagram-card-news, naver-blog, threads-voice, and x-voice defer to it
+    ("content-common", [shorts("shorts-common"), shorts("instagram-card-news"), shorts("naver-blog"),
+                        shorts("threads-voice"), shorts("x-voice")]),
     ("instagram-card-news", [shorts("content-common")]),
     ("naver-blog", [shorts("content-common")]),
     # hook-templates is read before every opening line; each content skill links it at its hook step
     ("hook-templates", [shorts("content-common"), shorts("shorts-common"), shorts("instagram-card-news"),
-                         shorts("foreign-clip-short"), shorts("top3-compilation-short"), shorts("naver-blog")]),
+                         shorts("foreign-clip-short"), shorts("top3-compilation-short"), shorts("naver-blog"),
+                         shorts("threads-voice"), shorts("x-voice")]),
+    # every skill that writes Threads or X copy sends it through that platform's voice skill; the feedback intake names both
+    ("threads-voice", [shorts("content-common"), shorts("hook-templates"), shorts("instagram-card-news")]),
+    ("x-voice", [shorts("content-common"), shorts("hook-templates")]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore

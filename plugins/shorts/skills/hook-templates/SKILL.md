@@ -57,6 +57,8 @@ From the post's author: on X, lighter hooks with a 'ㅋㅋ' feel work better tha
 - **Naver blog**: the search keyword goes at the front of the title, so a template only fills the end of the title and the first paragraph.
 - **Shorts / Reels / TikTok**: the template is the on-screen headline that the 0.5–1s cover frame shows ([shorts-common](../shorts-common/SKILL.md) length rule), and may be the caption's hook line.
 - **Card news**: the cover or first card; 8, 14, 22 fit carousels.
+- **Threads**: a template is only a starting point. The first line stays within [threads-voice](../threads-voice/SKILL.md)'s caps (20자 or less) and voice, so trim the template into how a person would say it.
+- **X**: lighter still; a first line of about 25자 or less in [x-voice](../x-voice/SKILL.md)'s voice, and a reaction post may skip the template entirely.
 
 ## 머니알림 rules (user-confirmed, 2026-10-28)
 

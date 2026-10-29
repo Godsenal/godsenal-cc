@@ -29,8 +29,8 @@
     },
     {
       "name": "gshorts",
-      "description": "Korean content harness — faceless short-form videos, Instagram card news, and Naver blog strategy: common rules, feedback intake, and one skill per format",
-      "version": "0.6.0",
+      "description": "Korean content harness — faceless short-form videos, Instagram card news, Naver blog strategy, and Threads/X posts: common rules, feedback intake, and one skill per format",
+      "version": "0.7.0",
       "author": {
         "name": "godsenal"
       },
