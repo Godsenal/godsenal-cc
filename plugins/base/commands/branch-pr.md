@@ -291,7 +291,7 @@ the PR should be split, so say so as item 1. Each item is a bold line a reviewer
 under it for where and why. Keep code spans out of the bold part:
 
 - `(결정)` a product or design call: copy, a tradeoff the author picked, a behavior change someone may not want, a pattern other code will copy.
-- `(확인)` evidence only a person can judge (how a screen looks, real data, a device), any surface the run couldn't reach (`behavior: skip`), or a `high`-tier path from the risk rule above — point at the exact lines.
+- `(확인)` evidence only a person can judge (how a screen looks, real data, a device), any surface the run couldn't reach (`behavior: skip`), or a `high`-tier path from the risk rule above — point at the exact lines. A `Verification:` line with `differs:` is always one, titled `실기기 확인 필요: <difference>`: the check passed on another kind of input than the one that failed.
 - `(보류 · <severity>)` a finding from the caller's `Deferred:` line marked `introduced` and rated `medium` or above. The rest (`low`, or `pre-existing`) go in the folded details block, marked `기존 코드` when pre-existing so they don't read as the author's fault — they never count toward N.
 
 The alert renders as a colored box, so it stays the one thing that stands out; don't add other alert boxes elsewhere in the body.

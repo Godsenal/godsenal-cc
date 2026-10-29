@@ -81,6 +81,14 @@ CONTRACTS = [
     ("gbase:worker", [skill("work"), SESSION_HOOK]),
     ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
     ("gbase:unslop", [BRANCH_PR, skill("work")]),
+    # content runs report lessons instead of editing the harness; the runner hands them to a work run
+    ("교훈:", [shorts("content-common"), shorts("shorts-common"), ORCHESTRATOR, RUNNER, FACTORY]),
+    # evidence records what a check ran on; a `differs:` input becomes a Review focus item
+    ("`input`", [ORCHESTRATOR, skill("go"), skill("reproduce")]),
+    ("differs:", [ORCHESTRATOR, skill("go"), skill("reproduce"), BRANCH_PR]),
+    ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
+    ("conflict resolution unreviewed", [skill("monitor")]),
+    ("--exclusive", [ORCHESTRATOR, RUNNER]),
     # the runner reads mockup's report lines into result.json
     ("mockup url:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
     ("mockup shots:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
