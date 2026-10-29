@@ -4,7 +4,7 @@ description: >-
   Makes Korean Instagram card news (carousel posts) for an information account — account name, bio, cards,
   and caption — from high-performing Korean card-news references opened first, in one fixed format template
   (same cover layout, slide split, type sizes, colors, slide count, and slide roles every post) with real
-  captures and charts, one follow card at the end (a comment→DM reward slide before it only with a real
+  captures and charts (1–3 video slides with a bundled HyperFrames chart-motion template), one follow card at the end (a comment→DM reward slide before it only with a real
   resource), and the sea-otter mascot only as the profile photo, never on a slide. Use when asked for
   카드뉴스, an Instagram carousel, or an Instagram info account's name, bio, profile image, or post, or when
   the user gives feedback on one.
@@ -42,13 +42,32 @@ Same 2026-10-29 21:37 feedback. The two references the user named, @moodmode.ai 
 | Colors | Panel `#0B0B0B`, headline `#FFFFFF`, body `#B8B8B8`, one accent `#F5B82E` used in one place per slide at most |
 | Margins | 72 px left and right on every slide; text left-aligned |
 | Cover (1 slide) | Full-bleed image: a real screen or product photo, never the otter. Bottom 40% dark gradient. Bottom-left: tag pill `AI 뉴스` · `AI 팁` · `AI 돈` (26 px, only these three), then a 2-line headline at 88–96 px, ≤14자 per line, from [hook-templates](../hook-templates/SKILL.md) |
-| Body slides (4–7) | Top 55%: one capture (tweet, screen, chart), edge to edge. Bottom 45%: `#0B0B0B` panel with the slide number (1, 2 …, 26 px), one headline line ≤16자 at 64 px, then ≤3 body lines at 34 px in 해요체; one bold phrase at most. No credit, `@handle`, or "출처" text on the slide; a capture keeps whatever is inside it |
+| Body slides (4–7) | Top 55%: one capture (tweet, screen, chart), edge to edge; on a video slide only this area moves (Video slides below). Bottom 45%: `#0B0B0B` panel with the slide number (1, 2 …, 26 px), one headline line ≤16자 at 64 px, then ≤3 body lines at 34 px in 해요체; one bold phrase at most. No credit, `@handle`, or "출처" text on the slide; a capture keeps whatever is inside it |
 | Reward slide (optional) | Only under the reward rule above. A blurred (24 px) capture of the actual resource at 40% brightness. One white box centered (radius 24, 72 px side margin), 3 lines centered at 52 px ExtraBold `#0B0B0B`: "댓글에 '<키워드>' 남기시면 →" / what they get, word for word as the resource's contents, on an accent `#F5B82E` marker / "DM으로 보내드려요". No follow condition |
 | Follow card (1 slide) | The cover image at 35% brightness, three blocks centered. Top: a small white label box with one question tied to this post (40 px). Middle: a white pill (radius 999) with the display name `해달러 \| 쉽게 푸는 AI 경제` (40 px), `@haedollar` in grey under it, and an accent `팔로우` button on the right; no profile photo (no otter on slides). Bottom: the one line written for this post (up to 2 white lines at 48 px), saying what following gets them this time, one phrase in accent. No ♥💬🔖 icons, no "댓글 남기면" or DM line (the reward, if any, is on the slide before) |
 | Count and order | Cover → numbered body slides (4–7) → reward slide (if any) → follow card: 6–10 slides. A weekly roundup uses the same cover with the tag `AI 뉴스` and a second line "N월 N주 AI 소식"; how often it runs is the user's call |
 | Caption | The Caption rules below; the first line restates the cover headline as a sentence. No English translation block, no `Editor`/`Created by`/`Source` lines (both references do these; we don't) |
 
-Before handing off, put the cover, one body slide, the reward slide if any, and the follow card of the new carousel next to the previous post's and check that only the image, words, and captures differ, and that the follow reason is not the previous post's; write `format-check: 비율 3:4 | 장 N | 태그 <AI 뉴스> | 본문 제목 최대 N자 | 마스코트 0 | 보상 장 <없음 / 키워드> | 팔로우 이유 "<한 줄>"` in the report.
+Before handing off, put the cover, one body slide, the reward slide if any, and the follow card of the new carousel next to the previous post's and check that only the image, words, and captures differ, and that the follow reason is not the previous post's; write `format-check: 비율 3:4 | 장 N | 태그 <AI 뉴스> | 본문 제목 최대 N자 | 마스코트 0 | 영상 장 <없음 / 2·4장> | 보상 장 <없음 / 키워드> | 팔로우 이유 "<한 줄>"` in the report.
+
+## Video slides
+
+2026-10-30 user go-ahead ("ㄱㄱㄱ", 00:16) after the mixed-carousel research in [references/video-slide-research-2026-10-29.md](references/video-slide-research-2026-10-29.md): @moodmode.ai mixes video into half its carousels, keeping the panel still and moving only the media area.
+
+- **Shape** — a video slide is a body slide whose top media area (1080×792, 55%) moves; the bottom panel is the photo slide's, unchanged and still for the whole clip. 1080×1440 H.264 30 fps yuv420p, no audio track, 3–15 s, and the final screen held **at least 4 s** (a paused or captured mid-count-up frame shows wrong numbers). Text inside the media area 28 px or more (delivered video can drop to 720×960); the panel keeps the photo spec, so HyperFrames' 26 px warning on the slide number is expected.
+- **What moves** — `AI 팁`: a screen recording we made ourselves comes first. `AI 뉴스` and `AI 돈`: chart motion from the template below. Never someone else's launch video or demo clip: we can't credit it (no-sources rule), so it is a copyright risk.
+- **Where** — 1–3 video slides among body slides 2–5. The cover stays a photo by default; the reward slide and follow card are always photos (all 32 reference mixed carousels end on photos).
+- **Upload** — web upload only, all files in one go, then pick **원본** in the crop screen's ratio button (default 1:1 crops every slide, and the first slide's ratio applies to all). The API may reject or crop 3:4, so don't switch to it without testing. Leave generous upload waits once a video is in.
+- **Effect not proven** — mixed carousels did not beat photo-only ones in the references (median likes 474 vs 577). For the first few carousels with video slides, log saves and likes next to comparable photo-only posts in the account's existing performance record (the work folder's insights log), and report the comparison; keep or drop video slides on that, not on taste.
+- **Reels** — the video slides of one post can be joined into a 7–15 s reel of the same topic; making reels is out of scope here.
+
+**Chart motion template** — [templates/chart-motion/](templates/chart-motion/) (HyperFrames pinned to `hyperframes@0.8.210`): `bar` (2–5 bars filling with count-up, then the highlighted one stays lit) and `compare` (two cards, e.g. two prices). Write one JSON with the data (`items[].label/value/highlight/note`, `prefix`/`suffix` unit (ASCII such as `$` or `%`, so OCR can check it; a Korean unit goes in `subcaption`), `decimals`, `max` for bars, `caption`/`subcaption`/`footnote`) and the panel (`num`, `title`, `body` lines with one `**bold**`); examples in `templates/chart-motion/examples/`. Use the same numbers as the still build, then:
+
+```bash
+python3 scripts/chart_motion.py slide.json -o out/03.mp4 [--fonts <Pretendard dir>]
+```
+
+It validates the JSON (title ≤16자, ≤3 body lines, values fit, hold ≥4 s), runs `hyperframes check` and `render`, checks the spec with ffprobe, saves start/mid/end frames next to the mp4, checks the last 4 s are still (SSIM), and OCRs each end-frame number against the input; any miss exits 1. Open the end frame next to the still slide before handing off and put its `chart-motion-check:` line in the report.
 
 ## Name, bio
 
