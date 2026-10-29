@@ -1,0 +1,51 @@
+<template>
+<style>
+      /* @haedollar 본문 장 규격 (SKILL.md Format template). 위치 값은 scripts/chart_motion.py 의 OCR 좌표와 같아야 한다 */
+      @font-face { font-family: Pretendard; font-weight: 800; src: url('assets/fonts/Pretendard-ExtraBold.otf'); }
+      @font-face { font-family: Pretendard; font-weight: 700; src: url('assets/fonts/Pretendard-Bold.otf'); }
+      @font-face { font-family: Pretendard; font-weight: 500; src: url('assets/fonts/Pretendard-Medium.otf'); }
+      :root { --panel: #0B0B0B; --media: #171717; --accent: #F5B82E; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      #slide { position: absolute; inset: 0; font-family: Pretendard, sans-serif; color: #fff;
+               -webkit-font-smoothing: antialiased; background: var(--panel); }
+      .media { position: absolute; left: 0; top: 0; width: 1080px; height: 792px; overflow: hidden;
+               background: var(--media); padding: 72px 72px 0; }
+      .cap { height: 40px; line-height: 40px; font-weight: 700; font-size: 28px; color: #8C8C8C; letter-spacing: -0.01em; white-space: nowrap; }
+      .sub { height: 36px; line-height: 36px; margin-top: 8px; font-weight: 500; font-size: 28px; color: #6A6A6A; white-space: nowrap; }
+      .panel { position: absolute; left: 0; top: 792px; width: 1080px; height: 648px; background: var(--panel); padding: 64px 72px 0; }
+      .num { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; height: 48px; padding: 0 12px;
+             border-radius: 10px; background: #2A2A2A; color: #CFCFCF; font-weight: 700; font-size: 26px; }
+      .h { margin-top: 30px; font-weight: 800; font-size: 64px; line-height: 1.2; letter-spacing: -0.035em; white-space: nowrap; }
+      .b { margin-top: 30px; font-weight: 500; font-size: 34px; line-height: 1.6; letter-spacing: -0.02em; color: #B8B8B8; }
+      .b strong { color: #fff; font-weight: 800; }
+{{TYPE_STYLE}}
+    </style>
+<div id="slide" data-composition-id="slide" data-width="1080" data-height="1440">
+      <div id="chart" class="media clip" data-start="0" data-duration="{{DURATION}}" data-track-index="0">
+{{MEDIA}}
+      </div>
+      <div id="panel" class="panel clip" data-start="0" data-duration="{{DURATION}}" data-track-index="1">
+{{PANEL}}
+      </div>
+    </div>
+    <script>
+      const SLIDE = {{DATA}};
+      const tl = gsap.timeline({ paused: true });
+      // 카운트업 중간값 표시: 소수 자리·천 단위 쉼표·앞뒤 단위. 끝값은 빌드할 때 만든 text 를 그대로 쓴다
+      const fmt = (n) => {
+        const [i, d] = n.toFixed(SLIDE.decimals).split(".");
+        const s = SLIDE.thousands ? i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") : i;
+        return SLIDE.prefix + s + (d ? "." + d : "") + SLIDE.suffix;
+      };
+      const countUp = (el, it, t0, dur) => {
+        const c = { n: 0 };
+        tl.fromTo(c, { n: 0 }, {
+          n: it.value, duration: dur, ease: "power3.out",
+          onUpdate() { el.textContent = this.progress() >= 1 ? it.text : fmt(c.n); },
+        }, t0);
+      };
+{{TYPE_SCRIPT}}
+      tl.to({}, { duration: 0.01 }, SLIDE.duration - 0.01);
+      window.__timelines["slide"] = tl;
+    </script>
+</template>

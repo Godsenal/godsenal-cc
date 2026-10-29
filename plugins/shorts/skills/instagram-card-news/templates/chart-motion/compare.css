@@ -1,0 +1,11 @@
+      .cards { margin-top: 64px; display: flex; gap: 48px; }
+      .card { width: 444px; height: 360px; }
+      .ci { width: 444px; height: 360px; border-radius: 24px; background: #222222; padding: 40px; }
+      .cl { height: 40px; line-height: 40px; font-weight: 700; font-size: 32px; color: #CFCFCF; letter-spacing: -0.02em; white-space: nowrap; }
+      .cv { margin-top: 32px; height: 112px; line-height: 112px; font-weight: 800; font-size: 96px; color: #E6E6E6;
+            letter-spacing: -0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .cn { margin-top: 24px; font-weight: 500; font-size: 28px; line-height: 40px; color: #9A9A9A; letter-spacing: -0.02em; }
+      .card.hi .ci { background: #2C2C2C; }
+      .card.hi .cl { color: #fff; }
+      .card.hi .cv { color: var(--accent); }
+      .foot { margin-top: 40px; font-weight: 500; font-size: 28px; line-height: 40px; color: #8C8C8C; letter-spacing: -0.02em; white-space: nowrap; }

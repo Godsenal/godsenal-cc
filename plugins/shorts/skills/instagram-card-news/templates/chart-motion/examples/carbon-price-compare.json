@@ -1,0 +1,19 @@
+{
+  "type": "compare",
+  "caption": "Gemini 4 Carbon API 출력 가격",
+  "subcaption": "100만 토큰당, 달러",
+  "prefix": "$",
+  "footnote": "캐시된 입력은 입력 가격에서 95% 할인",
+  "items": [
+    {"label": "출시 할인 기간", "value": 10, "note": "입력은 $2", "highlight": true},
+    {"label": "할인 끝난 뒤", "value": 20, "note": "입력은 $4"}
+  ],
+  "panel": {
+    "num": 6,
+    "title": "가격은 Argon이랑 같아요",
+    "body": [
+      "입력 100만 토큰당 $2, 출력은 $10이에요.",
+      "출시 할인이 끝나면 **$4, $20**으로 올라요."
+    ]
+  }
+}
