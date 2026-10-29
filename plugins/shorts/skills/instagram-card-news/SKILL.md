@@ -32,6 +32,10 @@ Rules from the user's feedback on 2026-10-27–28. All of [content-common](../co
 - **Bio** — match the tone of the reference bios' original text; the sourcing route ("X에서 골라와요"), AI-sounding phrasing, and comment→DM promises are banned in every piece of content ([content-common](../content-common/SKILL.md)'s rejected phrases).
 - **No made-up schedule** — 2026-10-28 "왜 주 4회임?": a posting count or time goes into the bio only after the user sets it ([content-common](../content-common/SKILL.md)'s `가정:` rule).
 
+## Threads summary
+
+A Threads post that summarizes a carousel is a Threads post first: it follows [threads-voice](../threads-voice/SKILL.md) (root caps, voice, self-check), not the card copy. Pointing to the carousel goes in a reply, not the root.
+
 ## Posting
 
 **Never post without the user's explicit OK for that post.** Show the cards and caption first. Under `AGENT_HEADLESS=1` nothing is posted; report it as pending the user's OK.

@@ -30,6 +30,7 @@ Quotes are the user's words with the date they were said.
 - **Phrases the user rejected** — 2026-10-28: "브리핑" (in names and copy); words that narrow the audience (the "해외 AI회사" case above); saying where the material came from ("x에서 골라왔다는건 왜쓰니"); promising material by DM for a comment ("번역본 dm 은 진짜주는거임? 아니면 빼야할듯"); AI-sounding phrasing ("지금 좀 ai같은데") — match the tone of the references' original text instead.
 - **Price comparisons state their basis** — 2026-10-28: check whether each price includes VAT and how it's displayed (won price vs. dollar list price). If you can't confirm it, narrow the claim in the title or body in plain words ("부가세 빼고 달러 가격으로 보면"), not as a source-style note.
 - **Text posts (Threads, X): everything that matters in the root** — 2026-10-28: thread replies get only 2–4% of the root's views, so the key numbers and the conclusion all go in the root post; replies only add detail.
+- **Threads posts follow [threads-voice](../threads-voice/SKILL.md)** — 2026-10-29 "다 졸라 봇같음. 사람이쓴것처럼. 그리고 첫 타래가 왤케기냐고 ㅋ": before writing any Threads root, reply, or comment reply, read threads-voice and run its self-check. It holds the root length caps, the per-topic voice, and the bot-signal checklist.
 - **Mistakes are recorded the same turn** — 2026-10-28 "똑같은 실수가 여러봇들에서 반복되지않게": several bots run this harness, so a mistake one makes or a lesson one learns is written into this plugin within that turn, at the place the feedback intake below points to — never only in a chat reply or a bot's own memory.
 
 ## Operations
@@ -40,7 +41,7 @@ Quotes are the user's words with the date they were said.
 
 Every new piece of user feedback or lesson is written into a skill **before** continuing the work:
 
-1. Classify it: every piece of content (and text posts, until they get their own skill) → this file's rules; every video → shorts-common's "Rules for every video"; one format → that format skill (`foreign-clip-short`, `top3-compilation-short`, `instagram-card-news`); a new format → a new `skills/<format>/SKILL.md` that points here (and at shorts-common if it's a video).
+1. Classify it: every piece of content (and X posts, until they get their own skill) → this file's rules; Threads voice, length, or format → `threads-voice`; every video → shorts-common's "Rules for every video"; one format → that format skill (`foreign-clip-short`, `top3-compilation-short`, `instagram-card-news`); a new format → a new `skills/<format>/SKILL.md` that points here (and at shorts-common if it's a video).
 2. Write it as a rule with the date and the user's own words in quotes (`2026-10-28 "지금 좀 ai같은데": …`). If it contradicts an existing rule, rewrite that rule with the new date instead of adding a second one.
 3. Then update the pipeline or tooling default it implies, if any.
 

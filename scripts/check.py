@@ -95,11 +95,13 @@ CONTRACTS = [
     ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
     ("top3-compilation-short", [shorts("shorts-common")]),
     # content-common holds rules for every piece of content; shorts-common and instagram-card-news defer to it
-    ("content-common", [shorts("shorts-common"), shorts("instagram-card-news")]),
+    ("content-common", [shorts("shorts-common"), shorts("instagram-card-news"), shorts("threads-voice")]),
     ("instagram-card-news", [shorts("content-common")]),
     # hook-templates is read before every opening line; each content skill links it at its hook step
     ("hook-templates", [shorts("content-common"), shorts("shorts-common"), shorts("instagram-card-news"),
-                         shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
+                         shorts("foreign-clip-short"), shorts("top3-compilation-short"), shorts("threads-voice")]),
+    # every skill that writes Threads copy sends it through threads-voice; its feedback intake names it
+    ("threads-voice", [shorts("content-common"), shorts("hook-templates"), shorts("instagram-card-news")]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
