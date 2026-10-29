@@ -24,12 +24,13 @@ Rules from the user's feedback on 2026-10-27–28. All of [content-common](../co
 - **Cover, first card, and the caption's first line** start from [hook-templates](../hook-templates/SKILL.md) and follow its 머니알림 rules.
 - **No forced cards** — 2026-10-27 "뜬금없는 2,30대 개억지 체크포인트": every card must follow from the story; no filler checklist or audience-targeting card bolted on.
 - **No useless caption lines, no image-less text cards** — 2026-10-27 "쓸데없는 캡션이랑 출처, 이미지는 하나도없음": each card carries a real visual — an actual tweet capture, a chart, or the mascot. No source card or credit line either (content-common's no-sources rule, 2026-10-29); the tweet captures themselves stay.
-- **Mascot**: chosen by the user from several samples side by side; on 2026-10-28 the user picked a sea otter (해달). A new character only after another side-by-side comparison.
+- **Mascot**: chosen by the user from several samples side by side; on 2026-10-28 the user picked a sea otter (해달). A new character only after another side-by-side comparison. It is the account's face only: no name, and it never narrates (2026-10-29, [content-common](../content-common/SKILL.md)'s no-mascot-voice rule).
 
 ## Name, bio, caption
 
 - **Name** — 2026-10-27 "ai머니노트 이게 말이되니", "이름 좀 다른거참고해봐": follow the naming patterns of real Korean info brands (잼비, 경제여우, 어피티, 뉴닉 …). Never glue keywords together ("AI머니노트", "지혼자 돈소식"), and no "브리핑" ([content-common](../content-common/SKILL.md)'s rejected phrases).
 - **Bio** — match the tone of the reference bios' original text; the sourcing route ("X에서 골라와요"), AI-sounding phrasing, and comment→DM promises are banned in every piece of content ([content-common](../content-common/SKILL.md)'s rejected phrases).
+- **Caption bot signals** — 2026-10-29 (user decision 17:34), same as [threads-voice](../threads-voice/SKILL.md)'s bot signals: no "(저장/공유)"-style tag at the head of the first line, and no closing "여러분 ~? 👇" question. End on the take.
 - **No made-up schedule** — 2026-10-28 "왜 주 4회임?": a posting count or time goes into the bio only after the user sets it ([content-common](../content-common/SKILL.md)'s `가정:` rule).
 
 ## Threads summary
