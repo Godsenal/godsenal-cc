@@ -5,7 +5,8 @@ description: >-
   card news, and any account name, bio, caption, script, or post copy — chiefly that it is written from
   high-performing references actually opened on the target platform (X, Instagram, YouTube, Threads), that
   public copy reads as one real person's own first-hand writing with no source credits, and that every mistake
-  or lesson is written into this plugin the same turn so other bots don't repeat it. Use before naming an
+  or lesson is reported the same turn as a `교훈:` line that a reviewed gbase:work run writes into this plugin,
+  so other bots don't repeat it. Use before naming an
   account, writing a bio, caption, card, script, or text post (Threads, X), when the user gives feedback that
   applies across formats, or when a gshorts skill points here.
 ---
@@ -30,18 +31,21 @@ Quotes are the user's words with the date they were said.
 - **Phrases the user rejected** — 2026-10-28: "브리핑" (in names and copy); words that narrow the audience (the "해외 AI회사" case above); saying where the material came from ("x에서 골라왔다는건 왜쓰니"); promising material by DM for a comment ("번역본 dm 은 진짜주는거임? 아니면 빼야할듯"); AI-sounding phrasing ("지금 좀 ai같은데") — match the tone of the references' original text instead.
 - **Price comparisons state their basis** — 2026-10-28: check whether each price includes VAT and how it's displayed (won price vs. dollar list price). If you can't confirm it, narrow the claim in the title or body in plain words ("부가세 빼고 달러 가격으로 보면"), not as a source-style note.
 - **Text posts (Threads, X): everything that matters in the root** — 2026-10-28: thread replies get only 2–4% of the root's views, so the key numbers and the conclusion all go in the root post; replies only add detail.
-- **Mistakes are recorded the same turn** — 2026-10-28 "똑같은 실수가 여러봇들에서 반복되지않게": several bots run this harness, so a mistake one makes or a lesson one learns is written into this plugin within that turn, at the place the feedback intake below points to — never only in a chat reply or a bot's own memory.
+- **Mistakes are recorded the same turn** — 2026-10-28 "똑같은 실수가 여러봇들에서 반복되지않게": several bots run this harness, so a mistake one makes or a lesson one learns is reported within that turn as a `교훈:` line for the skill the feedback intake below points to, and shipped into this plugin from there — never only in a chat reply or a bot's own memory.
 
 ## Operations
 
 - **Background remote jobs** — 2026-10-28: a remote job started in the background may never send its completion notice. Wait for its completion file with a blocking loop that has a timeout (`until [ -f <done-file> ]; do sleep 30; done`), not for the notice.
+- **A post counts as published only when the logged-out public view shows it** — 2026-10-28 (사용자 승인 16:46): a YouTube comment reported as posted turned out to be someone else's. Report success only after finding, while logged out, an item whose author and text match yours, and record its ID; not found → report it as `미확인`, not as posted.
+- **Automated actions start after the platform's official policy is read** — 2026-10-28 (공식 정책 대조 22:31): X bans automated likes at any volume, up to permanent suspension, and a bot was already auto-liking that day. Before turning on likes, follows, replies, or link comments, open that platform's official spam/automation policy and put its URL and the clause quoted in the work folder's report. A reference account doing it is not evidence that it's allowed.
+- **Causes are reported as `가설:`; operating rules change on facts** — 2026-10-28 "확실한지조사부터": the cause of vanished YouTube comments changed five times in one day, and the link and pause rules changed with each guess. Report a cause as a `가설:` line with how sure you are and how it was checked (logged-in view, logged-out public list, official help page); change an operating rule (a ban, a pause) only on a confirmed fact. This is the operations side of the `가정:` rule above.
 
 ## Feedback intake — same turn, every time
 
-Every new piece of user feedback or lesson is written into a skill **before** continuing the work:
+Every new piece of user feedback or lesson becomes a `교훈:` line **before** continuing the work:
 
-1. Classify it: every piece of content (and text posts, until they get their own skill) → this file's rules; every video → shorts-common's "Rules for every video"; one format → that format skill (`foreign-clip-short`, `top3-compilation-short`, `instagram-card-news`); a new format → a new `skills/<format>/SKILL.md` that points here (and at shorts-common if it's a video).
-2. Write it as a rule with the date and the user's own words in quotes (`2026-10-28 "지금 좀 ai같은데": …`). If it contradicts an existing rule, rewrite that rule with the new date instead of adding a second one.
+1. Classify it — this names the target skill: every piece of content (and text posts, until they get their own skill) → this file's rules; every video → shorts-common's "Rules for every video"; one format → that format skill (`foreign-clip-short`, `top3-compilation-short`, `instagram-card-news`); a new format → a new `skills/<format>/SKILL.md` that points here (and at shorts-common if it's a video).
+2. Write it as a rule with the date and the user's own words in quotes, one line each at column 0 of the report: `교훈: <target skill> — <date "user's words">: <rule>` (`교훈: content-common — 2026-10-28 "지금 좀 ai같은데": …`). Say when it contradicts an existing rule, so the rewrite replaces that rule instead of adding a second one.
 3. Then update the pipeline or tooling default it implies, if any.
 
-Edit the gshorts source in the godsenal-cc checkout (`plugins/shorts/skills/…`; on the reference machine `$HOME/LTH/godsenal-cc`), not the installed plugin cache — the cache is overwritten on update. Bump the gshorts version in both `plugins/shorts/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (patch for a rule, minor for a new format skill); installed copies only change once it ships.
+**Don't edit the harness source (`plugins/shorts/…` in any godsenal-cc checkout) or the installed plugin cache from a content run.** Whatever branch a checkout has out, an uncommitted edit there was left behind on a stale branch and collided with a version that shipped meanwhile (2026-10-28). The `교훈:` lines are the handoff: under `gbase-run` they go to a `work` run on a fresh worktree of the runner's checkout, which reviews them and opens the PR; in an interactive session, hand them to `/gbase:work` once the content is done.

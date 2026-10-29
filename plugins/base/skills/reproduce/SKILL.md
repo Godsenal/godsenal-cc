@@ -32,6 +32,7 @@ One command, run from the repo root, that exits non-zero now and prints why.
 - **Fails for the stated reason.** Quote the lines that show the bug — the assertion diff, the wrong status and body, the measured value — not just the exit code. An import error, a missing env var, a refused connection, or a typo in the check is a broken check, not a reproduction.
 - **Run it twice.** Different results mean flaky: tighten order, timing, seed, or cache until it's stable, or report it as flaky with both outputs. "Passes alone, fails in the full run" is a reproduction once you name what differs.
 - **Drive the real path.** No test-only endpoints or internal setters that make the bug appear.
+- **Same kind of input as the report.** A bug seen on a device or on real data reproduces on that kind of input — the same resolution, format, metadata present or absent, size. A downscaled or re-encoded copy passed while the originals still failed. Can't get that input → it isn't `재현 안 됨`: report `open` with `cause: input differs from report — <difference>`.
 - **Production is read-only.** Against a deployed environment, only requests with no side effects; never create, change, or delete data there.
 - **Doesn't reproduce** → report `재현 안 됨` with the conditions tried, and stop. Never weaken the check until it fails.
 - **No product code changes.** The only write is a new test file or script, left uncommitted. A fix you can already see goes in the report as a hint.
@@ -44,9 +45,10 @@ command: `<command>`
 now (fails):
 > <quoted failing lines>
 expected: <what the command shows once fixed — the passing assertion, the target value>
+input: <what the check ran on>[; differs: <how it differs from the report's input>]
 files: <added test or script, uncommitted> | none
 ```
 
-With `AGENT_EVIDENCE_FILE` set, append one `reproduce` [evidence line](../../references/orchestrator.md#evidence-file): `fail` when it reproduced, `pass` when it didn't, `skip` when no executable check was possible.
+With `AGENT_EVIDENCE_FILE` set, append one `reproduce` [evidence line](../../references/orchestrator.md#evidence-file) with its `input`: `fail` when it reproduced, `pass` when it didn't, `open` when it didn't on an input of another kind than the report's, `skip` when no executable check was possible.
 
 Suggest `/gbase:bug-fix` for a bug — don't fix it here. When `gbase:bug-fix` called this, return to it.
