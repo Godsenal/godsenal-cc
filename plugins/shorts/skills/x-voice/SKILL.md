@@ -39,7 +39,7 @@ Read this before writing anything for X. Every rule in [content-common](../conte
 - **Other people's posts: quote post + one line of opinion, no link.** 12 of 26 money/work reaction posts were quote posts, including the top 3 (♥483, 117, 91). Don't reply to other people's posts with a blog link; don't reply on a schedule.
 - **Comments on our own posts: answer them directly** — 2026-10-29 (user decision). 17 of 20 accounts did, on 101 of 140 posts; the 3 that never did were a save-curation account, a discount-notice account, and the 0-like automation account.
 - **No source wording anywhere**: no source reply, no "(2026.10.27 확인)", no "출처", no "공고 원문 보고 출처 같이 남김" in the bio. No account in the sample posted a source reply. Sources stay in the work report (content-common).
-- No DM bait, no band or Telegram links, no "맞팔드려요".
+- No DM bait, no band or Telegram links, no "맞팔드려요" in copy. Following back is content-common's follow-back rule (follow back by default, skip impersonation/spam/bots, ≤5 per round, logged), not a post.
 
 ## Bot signals — if any of these is in the draft, rewrite it
 

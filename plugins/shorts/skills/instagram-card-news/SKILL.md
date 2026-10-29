@@ -40,4 +40,4 @@ A Threads post that summarizes a carousel is a Threads post first: it follows [t
 
 ## Posting
 
-**Never post without the user's explicit OK for that post.** Show the cards and caption first. Under `AGENT_HEADLESS=1` nothing is posted; report it as pending the user's OK.
+**Never post without the user's explicit OK for that post.** Show the cards and caption first. Under `AGENT_HEADLESS=1` nothing is posted; report it as pending the user's OK. Accounts that follow us are followed back per [content-common](../content-common/SKILL.md)'s follow-back rule (skip impersonation/spam/bots, ≤5 per round, logged).
