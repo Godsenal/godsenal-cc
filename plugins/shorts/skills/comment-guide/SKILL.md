@@ -35,7 +35,7 @@ Read this before writing any comment. Every rule in [content-common](../content-
 
 - Answer a question briefly, react to thanks, in the voice of the post (threads-voice; X: the [X section](#x--replies-and-comments); Instagram 해요체).
 - A fact in a reply is checked like one in a post; if you can't confirm it, don't state it.
-- No link or DM offer in a reply. If a commenter mistook a post for a DM-giveaway, say plainly that nothing is sent (예안 had to: "댓글달아쥬셔도 따로 가는 자료는 없습니당", [DasMiJkmOiZ](https://www.instagram.com/p/DasMiJkmOiZ/)).
+- No link or DM offer in a reply, except our own library link when a commenter on a reward post says the DM didn't arrive ("DM이 늦게 갈 수 있어요. 프로필 링크 자료실에도 같은 자료 있어요" in your own words, never the same sentence twice; reward posts are [instagram-card-news](../instagram-card-news/SKILL.md)'s). On a post without a reward, if a commenter mistook it for a DM-giveaway, say plainly that nothing is sent (예안 had to: "댓글달아쥬셔도 따로 가는 자료는 없습니당", [DasMiJkmOiZ](https://www.instagram.com/p/DasMiJkmOiZ/)).
 
 ## (b) Outreach comments on other people's posts
 
