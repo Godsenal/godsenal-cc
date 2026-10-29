@@ -24,7 +24,7 @@ Read this before writing any comment. Every rule in [content-common](../content-
 
 - **해요체, written like a person** (X: the [X section](#x--replies-and-comments) below sets length and tone). First read the comments and answers already on that post or video and follow their context and tone (user rule at the top of content-boost's GUIDE). One or two spoken sentences that react to one part of the post and add one thought; no stiff summary.
 - **No promo phrasing**: "짧게 정리한 영상:", "정리한 글:", "쇼츠로 정리해뒀어요", and any "정리해 둔/정리한" (2026-10-29 11시: "표로 정리해 둔 글이에요" was caught and changed to "이 글 표에 나와 있어요"). Link the way people normally drop a link.
-- **No source wording, no DM bait, no made-up experience** — no "출처", "○○ 발표에 따르면", "댓글 남기면 보내드려요", "써 보니" without a real case ([content-common](../content-common/SKILL.md)).
+- **No source wording, no DM bait, no made-up experience** — no "출처", "○○ 발표에 따르면", "댓글 남기면 보내드려요", "써 보니" without a real case ([content-common](../content-common/SKILL.md)). Never a first-person story the user didn't live ("들고 가서 못 받았어요", caught 2026-10-29); say what the short or blog post shows instead ("영상에 준비물 나와요").
 - **Nothing you couldn't confirm.** A sentence not confirmed on an official page is cut before posting (2026-10-28 12시, "빨래방 건조기가 열이 더 세다"). A sentence introducing a linked post says only what that post actually contains (2026-10-29 17시, "그림이랑 같이" cut). If the linked post's facts are out of date, don't mention that part.
 - **Never the same target twice, never a reused sentence, never the same structure every time** — a comment that restates the post's numbers at length and ends "~할까요?" reads as a template (2026-10-28, observed on @pluskr and @apt_lap). Check the ledger before picking a target.
 - **Check the logged-in account before typing** (YouTube @moneyalim, X @wolgeupnal, Instagram/Threads @haedollar; never a personal account), and log every comment (platform, account, target URL, permalink, time) in the work folder's ledger.
@@ -56,7 +56,7 @@ Read this before writing any comment. Every rule in [content-common](../content-
 ### Picking targets
 
 - **YouTube**: Korean video with Korean comments, uploaded within 2 weeks, that one of our shorts actually matches. A channel that only localized its titles (video and comments in English) is not a target.
-- **지식iN**: a real person's question from the last 2–3 days, not yet chosen, with at most one answer. Answer the question directly, then add the official facts (who, period, where to check) — that shape got chosen (495721729, 495737416). Correcting a wrong existing answer with an official source also helps. Questions auto-posted by "지식iN서비스트렌드" rarely get chosen.
+- **지식iN**: a real person's question from the last 2–3 days, not yet chosen, with at most one answer. Answer the question directly, then add the official facts (who, period, where to check) — that shape got chosen (495721729, 495737416). Correcting a wrong existing answer with an official source also helps. Skip the law category (법률/법학) and questions that already have an expert answer (변호사 등 전문가): answer registration is blocked there ("답변등록 불가", 2026-10-29). Prefer general categories; avoid 지식iN서비스트렌드-type categories and questions it auto-posted — they rarely get chosen.
 - **X**: an active Korean post from the last 24 hours that one of our topics fits; quote it with one line that answers or adds to its point.
 - **Threads / Instagram**: a Korean AI or economy explainer post from the last 24 hours with 5 or fewer comments. Skip stock-pick spam, "댓글에 ○○ 남기면" giveaway posts (every comment is the same word), impersonation accounts (yoshisam_ri.ch), and tiny same-topic accounts unless you have a fact to add.
 
@@ -81,10 +81,10 @@ Read this before writing any comment. Every rule in [content-common](../content-
 Real examples: ppuujaa_m [link](https://x.com/ppuujaa_m/status/2107683283442270717) — to "맞다 이거 미리 한도 늘려놔야 해 ㅠㅠ": "늘려야지 했는데 까먹음 ㅠㅠㅠㅠ" · qq3540 [link](https://x.com/qq3540/status/2114853571888136488) — to "기본소득은 어디서 받죠??": "온라인 잡아바 어플라이에서 신청하심 됩니다!" · Buldakguy [link](https://x.com/Buldakguy/status/2110995605036404972) — to "중간에 깰 수 있어요 님아": "중간에 깰 거면 왜 함"
 
 **On other people's posts**
-- **Quote post first** (voice and length in [x-voice](../x-voice/SKILL.md)). A reply only where a quote doesn't fit: one line of 30자 or less, no link (others' comments: median 13자, 83% at 30자 or less, 0 links in 607).
+- **Quote post first** (voice and length in [x-voice](../x-voice/SKILL.md)). A reply only where a quote doesn't fit: one line of 30자 or less, no link. Two different limits: a reply is ≤30자 (this skill), a quote post is 25–60자 (x-voice) (others' comments: median 13자, 83% at 30자 or less, 0 links in 607).
 - One fact plus one feeling, not a summary: taehyun901 "t.m.i. 로 결제일 에서 +1일 후에 즉시결제 도 가능합니다" (♥5), sm749 "4번 의료급여 대상자 한정 됩니다 왜 이럼!", bansss_ "12퍼 이상은 아뭇따 / 기본은 고민좀 해야됨" (♥8).
 - **Never "칭찬 + 보충 2문장 (+ 링크)"** and no source phrasing ("공단 안내상", "FAQ에도", "설명서 기준"). Rewritten from ours: "좋은 팁이에요. 올해부터 갱신 기간이 생일 전후 6개월로 바뀐 것도 같이 알아두면 좋아요. / 기간·준비물 정리한 글: (링크)" → "올해부터 생일 앞뒤 6개월로 바뀐 거 은근 모르더라구요"; "…서민금융통합지원센터(1397로 예약)로 가야 해서 … (링크)" → "2천 넘으면 온라인 안 되고 지점 가야 돼요 ㅠ".
 
-Count before posting (same counter as x-voice's self-check): over 30자, a link, or source wording → rewrite. Report `voice-check: x 답글 1줄 14자 | 해요→해요 | 봇 신호 0`.
+Count before posting (same counter as x-voice's self-check): over 30자 for a reply, a link, source wording, or a first-person experience the user didn't have → rewrite. Report `voice-check: x 답글 1줄 14자 | 해요→해요 | 봇 신호 0`.
 
 Platform mechanics that broke runs (editors, logged-out checks, search pacing) are in [references/operations.md](references/operations.md).
