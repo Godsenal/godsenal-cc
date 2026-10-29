@@ -24,6 +24,7 @@ Rules from the user's feedback on 2026-10-27–28. All of [content-common](../co
 - **Cover, first card, and the caption's first line** start from [hook-templates](../hook-templates/SKILL.md) and follow its 머니알림 rules.
 - **No forced cards** — 2026-10-27 "뜬금없는 2,30대 개억지 체크포인트": every card must follow from the story; no filler checklist or audience-targeting card bolted on.
 - **No useless caption lines, no image-less text cards** — 2026-10-27 "쓸데없는 캡션이랑 출처, 이미지는 하나도없음": each card carries a real visual — an actual tweet capture, a chart, or the mascot. No source card or credit line either (content-common's no-sources rule, 2026-10-29); the tweet captures themselves stay.
+- **Last card — no fixed CTA box** — 2026-10-29 (user decision 17:50, "CTA는 내용에 맞는 한 줄로 매번 바꿔"): never put the same closing box on every carousel (❤️ 좋아요 · 🔖 저장 · 💬 공유 · 👉 팔로우). Write one CTA line that fits that post's content, different each time; the same ending line every time reads as a bot signal.
 - **Mascot**: chosen by the user from several samples side by side; on 2026-10-28 the user picked a sea otter (해달). A new character only after another side-by-side comparison. It is the account's face only: no name, and it never narrates (2026-10-29, [content-common](../content-common/SKILL.md)'s no-mascot-voice rule).
 
 ## Name, bio, caption
