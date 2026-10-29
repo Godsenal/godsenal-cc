@@ -4,7 +4,8 @@ description: >-
   Sets how the gshorts accounts write comments, so they read like one person and stay up: (a) replies to
   comments on our own Threads, X, and Instagram posts, and (b) outreach comments on other people's posts —
   YouTube videos, Naver 지식iN answers, X quote posts, Instagram and Threads comments. It holds the 해요체
-  voice, no source wording, DM bait, or made-up experience, only facts checked on an official page, the link
+  voice (on X, one short line of about 10–30자 that follows the commenter's tone, measured on 2026-10-29),
+  no source wording, DM bait, or made-up experience, only facts checked on an official page, the link
   rules (no link on big YouTube channels, one link on small ones, at most 2 link comments per round, no link
   on X, Instagram, or Threads), per-platform daily limits, and how to watch for hidden or deleted comments
   and when to stop a platform. Rules come from the comment-boost runs of 2026-10-28–29. Use before writing
@@ -21,7 +22,7 @@ Read this before writing any comment. Every rule in [content-common](../content-
 
 ## Every comment
 
-- **해요체, written like a person.** First read the comments and answers already on that post or video and follow their context and tone (user rule at the top of content-boost's GUIDE). One or two spoken sentences that react to one part of the post and add one thought; no stiff summary.
+- **해요체, written like a person** (X: the [X section](#x--replies-and-comments) below sets length and tone). First read the comments and answers already on that post or video and follow their context and tone (user rule at the top of content-boost's GUIDE). One or two spoken sentences that react to one part of the post and add one thought; no stiff summary.
 - **No promo phrasing**: "짧게 정리한 영상:", "정리한 글:", "쇼츠로 정리해뒀어요", and any "정리해 둔/정리한" (2026-10-29 11시: "표로 정리해 둔 글이에요" was caught and changed to "이 글 표에 나와 있어요"). Link the way people normally drop a link.
 - **No source wording, no DM bait, no made-up experience** — no "출처", "○○ 발표에 따르면", "댓글 남기면 보내드려요", "써 보니" without a real case ([content-common](../content-common/SKILL.md)).
 - **Nothing you couldn't confirm.** A sentence not confirmed on an official page is cut before posting (2026-10-28 12시, "빨래방 건조기가 열이 더 세다"). A sentence introducing a linked post says only what that post actually contains (2026-10-29 17시, "그림이랑 같이" cut). If the linked post's facts are out of date, don't mention that part.
@@ -32,7 +33,7 @@ Read this before writing any comment. Every rule in [content-common](../content-
 
 2026-10-29 (user decision): answer comments on our own posts. Measured: 11 of 17 sampled Threads accounts replied on their own posts (aicoffeechat, 19 replies on one post); on X, 17 of 20 money accounts did, on 101 of 140 posts. Instagram wasn't measured; the same @haedollar account follows the same rule.
 
-- Answer a question briefly, react to thanks, in the voice of the post (threads-voice / x-voice; Instagram 해요체).
+- Answer a question briefly, react to thanks, in the voice of the post (threads-voice; X: the [X section](#x--replies-and-comments); Instagram 해요체).
 - A fact in a reply is checked like one in a post; if you can't confirm it, don't state it.
 - No link or DM offer in a reply. If a commenter mistook a post for a DM-giveaway, say plainly that nothing is sent (예안 had to: "댓글달아쥬셔도 따로 가는 자료는 없습니당", [DasMiJkmOiZ](https://www.instagram.com/p/DasMiJkmOiZ/)).
 
@@ -66,5 +67,24 @@ Read this before writing any comment. Every rule in [content-common](../content-
 - **Stop YouTube at 2 real deletions** among comments posted since the last resume (counting restarted 2026-10-28 23:41), and report it. One deletion left → no blog links at all.
 - **Threads / Instagram**: 2 hidden or deleted → stop that platform. Any suspension, "사람임을 확인하세요", or activity-limit screen, once → press nothing and stop **both** Instagram and Threads (same Meta account), and report it. Check for those screens before every Meta comment.
 - A stop is lifted only by the user. Report causes as `가설:` and change these rules only on confirmed facts ([content-common](../content-common/SKILL.md)).
+
+## X — replies and comments
+
+2026-10-29 18:16 the user: "댓글 남기는 것도 X 말투가 아님". Our 28 comments on other people's X posts had a median of 110자, none at 30자 or less, 20 with a link, and all 28 were "공감 한마디 + 사실 보충" — the shape automated accounts (afterwork2604, buup_data, goodm7203) leave, at ♥0–2. Measured the same day on 45 top Korean money/work posts: 314 author replies on their own posts (26 accounts) and 607 comments by others; the morning's 747 author replies and 1,350 comments matched. Data: `$HOME/.gbase/tasks/xvoice-1029/report.md`.
+
+**Replies to comments on our posts**
+- **One line of about 10자, never over 30자.** Author replies: median 10자, 95% at 30자 or less, 0 links in 314.
+- **Follow the commenter's tone**: 존댓말 → 해요 (74), 반말 → 반말 or a short noun ending ("까먹음 ㅠㅠ"). Only 3 replied 반말 to 존댓말; don't.
+- **Default is agreeing, empathy, or a joke** (82% new, 86% morning; information 5%). Give information only when asked, in one sentence.
+- `ㅋㅋ`, `ㅠㅠ`, `!!` are normal (ㅋ 13–22%, ㅠ 8–10%). No "좋은 질문이에요" opener, no fixed sentence — donbaek2 pasted "도움이 되었다면 다행입니다" 12 times. Nothing more to add goes into a new root, not a longer reply.
+
+Real examples: ppuujaa_m [link](https://x.com/ppuujaa_m/status/2107683283442270717) — to "맞다 이거 미리 한도 늘려놔야 해 ㅠㅠ": "늘려야지 했는데 까먹음 ㅠㅠㅠㅠ" · qq3540 [link](https://x.com/qq3540/status/2114853571888136488) — to "기본소득은 어디서 받죠??": "온라인 잡아바 어플라이에서 신청하심 됩니다!" · Buldakguy [link](https://x.com/Buldakguy/status/2110995605036404972) — to "중간에 깰 수 있어요 님아": "중간에 깰 거면 왜 함"
+
+**On other people's posts**
+- **Quote post first** (voice and length in [x-voice](../x-voice/SKILL.md)). A reply only where a quote doesn't fit: one line of 30자 or less, no link (others' comments: median 13자, 83% at 30자 or less, 0 links in 607).
+- One fact plus one feeling, not a summary: taehyun901 "t.m.i. 로 결제일 에서 +1일 후에 즉시결제 도 가능합니다" (♥5), sm749 "4번 의료급여 대상자 한정 됩니다 왜 이럼!", bansss_ "12퍼 이상은 아뭇따 / 기본은 고민좀 해야됨" (♥8).
+- **Never "칭찬 + 보충 2문장 (+ 링크)"** and no source phrasing ("공단 안내상", "FAQ에도", "설명서 기준"). Rewritten from ours: "좋은 팁이에요. 올해부터 갱신 기간이 생일 전후 6개월로 바뀐 것도 같이 알아두면 좋아요. / 기간·준비물 정리한 글: (링크)" → "올해부터 생일 앞뒤 6개월로 바뀐 거 은근 모르더라구요"; "…서민금융통합지원센터(1397로 예약)로 가야 해서 … (링크)" → "2천 넘으면 온라인 안 되고 지점 가야 돼요 ㅠ".
+
+Count before posting (same counter as x-voice's self-check): over 30자, a link, or source wording → rewrite. Report `voice-check: x 답글 1줄 14자 | 해요→해요 | 봇 신호 0`.
 
 Platform mechanics that broke runs (editors, logged-out checks, search pacing) are in [references/operations.md](references/operations.md).
