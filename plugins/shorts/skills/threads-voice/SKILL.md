@@ -7,7 +7,8 @@ description: >-
   reaction post about an AI tool the user actually used, a checklist of bot signals, and a self-check that
   counts lines, characters, and figures before handing off. Every rule comes from top Threads posts opened on
   2026-10-29, each with its URL. Use before writing or rewriting any Threads root post, thread reply, or
-  comment reply, including the Threads summary of a card-news carousel, or when the user says a Threads
+  comment reply, including the Threads summary of a card-news carousel (where and when to comment is
+  comment-guide's), or when the user says a Threads
   post sounds like a bot or is too long.
 ---
 
@@ -71,7 +72,7 @@ The caps come from 75 posts: money posts with 1만+ views sit at a median of 4 l
 
 - **Reaction posts, about 1 in 10** — 2026-10-29 "이런글도 올리는거지 claude 5.5 딸깍하니까 일할게 없긴하네요 ㅋㅋ 이런느낌". Mix in a one- or two-line post with no information: the user's own reaction to an AI tool they actually used that day ("claude 5.5 딸깍하니까 일할게 없긴하네요 ㅋㅋ"), or a feeling added to a fact from real news ("크... 드디어 터치스크린 맥북이 나왔네요", choi.openai [DfDdJHhAvVn](https://www.threads.com/@choi.openai/post/DfDdJHhAvVn)). `~네요 ㅋㅋ` is fine here and only here. **The 1-in-10 ratio is an assumption** (measured: 2.3% of 607 root posts; 5 of 6 AI-tool reactions beat their account median, everyday-life ones mostly didn't) — report it as `가정:` and adjust from reactions. No real use or real news that day → no reaction post. A real chat screenshot plus one line beats the line alone (sumrkite ♥9.4천), once it's checked for personal or company information.
 - **Never made up**: no experience the user didn't have ("써 보니", "처음 나왔을 때부터 써왔고" — quitting_time_lab pasted that into 13 of 53 posts), no invented counts, hours saved, or earnings, no everyday-life chatter unrelated to AI, no brag numbers.
-- **Reply to comments on our posts** — 2026-10-29 (user decision): answering comments on @haedollar's own posts is allowed; answer questions briefly and react to thanks, in the same voice. 11 of 17 sampled accounts did (aicoffeechat, 19 replies on one post). Replies on other people's posts and DM bait stay out. Follow-backs follow [content-common](../content-common/SKILL.md)'s follow-back rule (by default, skip impersonation/spam/bots, ≤5 per round, logged).
+- **Comments** — replies to comments on our posts and comments on other people's posts follow [comment-guide](../comment-guide/SKILL.md); write them in this skill's voice. Follow-backs follow [content-common](../content-common/SKILL.md)'s follow-back rule.
 
 ## (a) AI 회사 실적·돈·경제 뉴스
 

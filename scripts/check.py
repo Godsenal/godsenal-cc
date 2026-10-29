@@ -104,9 +104,9 @@ CONTRACTS = [
     ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
     ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
     ("top3-compilation-short", [shorts("shorts-common")]),
-    # content-common holds rules for every piece of content; shorts-common, instagram-card-news, naver-blog, threads-voice, and x-voice defer to it
+    # content-common holds rules for every piece of content; shorts-common, instagram-card-news, naver-blog, threads-voice, x-voice, and comment-guide defer to it
     ("content-common", [shorts("shorts-common"), shorts("instagram-card-news"), shorts("naver-blog"),
-                        shorts("threads-voice"), shorts("x-voice")]),
+                        shorts("threads-voice"), shorts("x-voice"), shorts("comment-guide")]),
     ("instagram-card-news", [shorts("content-common")]),
     ("naver-blog", [shorts("content-common")]),
     # hook-templates is read before every opening line; each content skill links it at its hook step
@@ -114,8 +114,12 @@ CONTRACTS = [
                          shorts("foreign-clip-short"), shorts("top3-compilation-short"), shorts("naver-blog"),
                          shorts("threads-voice"), shorts("x-voice")]),
     # every skill that writes Threads or X copy sends it through that platform's voice skill; the feedback intake names both
-    ("threads-voice", [shorts("content-common"), shorts("hook-templates"), shorts("instagram-card-news")]),
-    ("x-voice", [shorts("content-common"), shorts("hook-templates")]),
+    ("threads-voice", [shorts("content-common"), shorts("hook-templates"), shorts("instagram-card-news"),
+                       shorts("comment-guide")]),
+    ("x-voice", [shorts("content-common"), shorts("hook-templates"), shorts("comment-guide")]),
+    # comment rules live once in comment-guide; the skills that write posts point there instead of repeating them
+    ("comment-guide", [shorts("content-common"), shorts("threads-voice"), shorts("x-voice"),
+                       shorts("instagram-card-news")]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
