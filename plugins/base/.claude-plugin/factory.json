@@ -52,7 +52,7 @@
     "settle": {
       "invoke": "/gbase:monitor --until-settled",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
-      "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. With AGENT_SHIP_OWNER=orchestrator its fixes stay local commits, nothing is posted, and after any fix it reports `ship: local …` and `PR 본문 초안:` with a refreshed draft; agent pushes and replies. Never merges, rebases, or force-pushes. gbase-run fills pr_url from the branch's PR."
+      "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. With AGENT_SHIP_OWNER=orchestrator its fixes stay local commits, nothing is posted, and after any fix it reports `ship: local …` and `PR 본문 초안:` with a refreshed draft; agent pushes and replies. Never merges; rebases (pushing with --force-with-lease) only when the invocation explicitly asks to rebase (--task \"rebase onto main\"), and never force-pushes otherwise. gbase-run fills pr_url from the branch's PR."
     },
     "learn": {
       "invoke": "/gbase:correct",

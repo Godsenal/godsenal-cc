@@ -73,7 +73,7 @@ On `medium` (and headless `low`), insert `; one skeptic for low/medium` right af
 
 Clear fixes come back as working-tree edits (no commits — `branch-pr` groups them); judgment calls come back deferred. Polish rewrote these files after the finder read them, so locate each finding by the code it quotes, not by `file:line`, and re-judge any whose quoted code is gone. Where a review fix and polish collide, the review fix wins.
 
-If the findings haven't arrived when polish finishes, wait for them before Step 4 — the gate then runs once on the final tree instead of again after the fixes. If the finder fails, go on without it (Step 6 drops `--no-review`). Skip this step when the finder was skipped. Tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`.
+If the findings haven't arrived when polish finishes, wait for them before Step 4 — the gate then runs once on the final tree instead of again after the fixes. If the finder fails, go on without it (Step 6 drops `--no-review`). Skip this step when the finder was skipped. Tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`. Review's table and tally are this step's output, not `go`'s report: go on to Step 4 in the same turn. Under `claude -p` a turn that ends there ends the run once no background task is left to wake it — one headless `work` run stopped on the table with the change uncommitted and no PR.
 
 ### 4. Verification gate
 
