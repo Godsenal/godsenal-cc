@@ -1,0 +1,22 @@
+{
+  "type": "bar",
+  "caption": "Artificial Analysis Intelligence Index v5.0",
+  "subcaption": "종합 점수",
+  "max": 72,
+  "items": [
+    {"label": "Gemini 4\nCarbon", "value": 59, "highlight": true},
+    {"label": "Claude\nOpus 5.5", "value": 58},
+    {"label": "GPT-6\nAstra", "value": 57},
+    {"label": "Gemini 4\nArgon", "value": 50},
+    {"label": "Claude\nFable 5.1", "value": 49}
+  ],
+  "panel": {
+    "num": 2,
+    "title": "종합 점수 59점, 1위예요",
+    "body": [
+      "성능을 한데 묶은 종합 지수에서 59점이에요.",
+      "Opus 5.5가 58점, GPT-6 Astra가 57점이라",
+      "**1점 차 선두**예요. Argon은 50점이었어요."
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "type": "bar",
+  "caption": "Vending-Bench 2",
+  "subcaption": "가상 자판기 사업 최종 잔고",
+  "prefix": "$",
+  "max": 20500,
+  "items": [
+    {"label": "Gemini 4\nCarbon", "value": 16484, "highlight": true},
+    {"label": "GPT-6\nAstra", "value": 15515},
+    {"label": "Gemini 4\nArgon", "value": 13718},
+    {"label": "Claude\nOpus 5.5", "value": 9235},
+    {"label": "Claude\nFable 5.1", "value": 5422}
+  ],
+  "panel": {
+    "num": 4,
+    "title": "자판기 장사도 제일 잘했어요",
+    "body": [
+      "AI한테 가상 자판기 가게를 맡기는 테스트예요.",
+      "끝났을 때 잔고가 **$16,484**로 가장 많았어요.",
+      "GPT-6 Astra는 $15,515였어요."
+    ]
+  }
+}
