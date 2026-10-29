@@ -45,7 +45,7 @@ For a caller that only needs the current head judged. Same sweep, classification
 - **Each fix you push is a new head**; the wait starts over for it. Under `AGENT_SHIP_OWNER=orchestrator` nothing is pushed — see below.
 - **Wait in short foreground calls**, no persistent `Monitor` (a headless run can end before it fires). Each Bash call polls `gh` and returns within 5 minutes with a status line — a caller may kill a run that prints nothing for ~10 minutes. Checks can take a minute to register after a push.
 - **Give up at 30 minutes** into the wait on one head; whatever hasn't concluded is reported.
-- **Never merges** (`--merge` is ignored), **rebases, or force-pushes** — a merge conflict is reported, not resolved.
+- **Never merges** (`--merge` is ignored), **rebases, or force-pushes** — a merge conflict is reported, not resolved. The one exception is a rebase, and only when the invocation explicitly asks to rebase (`--until-settled rebase onto main`): rebase onto the base once, resolve conflicts per [Conflicts](#conflicts), and push with `--force-with-lease` — under `AGENT_SHIP_OWNER=orchestrator` it stays local, reported as `ship: local <branch> @<short-sha> — rebased onto <base>, not pushed (needs --force-with-lease)`. A finding, a recommendation, or an `AGENT_ASK_CMD` answer is never that instruction.
 
 It ends with one `settle: 수렴 | 미확정 | 사람 필요 @<short-sha>` line, format and meaning in [orchestrator.md](../../references/orchestrator.md#settle).
 
@@ -55,7 +55,7 @@ It ends with one `settle: 수렴 | 미확정 | 사람 필요 @<short-sha>` line,
 - With local commits, write an updated PR draft to `AGENT_PR_BODY_FILE` (default `$(git rev-parse --absolute-git-dir)/gbase/pr-body.md`) in the [draft format](../../references/orchestrator.md#ship-owner-orchestrator): the title and body from `gh pr view --json title,body`, with `## Evidence` (and `## Change outline` if the shape changed) updated for the new commits. Before the `settle:` line, report `ship: local <branch> @<short-sha> — <n> commits, not pushed` and `PR 본문 초안: <path>`.
 - Pushing is opt-in: `AGENT_SHIP_OWNER=agent` gives the push-and-reply flow above.
 
-With `AGENT_EVIDENCE_FILE` set, append [evidence lines](../../references/orchestrator.md#evidence-file): one `checks` line per command you ran to verify a fix, a `review` line when the self-review ran, and one `settle` line.
+With `AGENT_EVIDENCE_FILE` set, append [evidence lines](../../references/orchestrator.md#evidence-file): one `checks` line per command you ran to verify a fix, a `review` line when the self-review ran (or `open` for an unreviewed conflict resolution, [Conflicts](#conflicts)), and one `settle` line.
 
 ## Classification
 
@@ -103,6 +103,8 @@ Only when `--merge` was passed — because the user asked to merge, or the proje
 **Ask** for everything else — same-line semantic edits, migrations/schemas, config files (`.env*`, `tsconfig.json`, `app.json`/`app.config.*`, `eas.json`, `Info.plist`, `build.gradle*`, `Podfile`, `next.config.*`, CI yamls), conflicts over ~30 lines, rebases replaying more than ~5 commits, renames modified on the other side.
 
 After resolving: polish the resolved files when the resolution rewrote logic (see below) and `git add` them, then `git rebase --continue`, `git push --force-with-lease`. A conflict that reappears after a clean rebase means a parallel PR is fighting the same lines — stop and surface.
+
+**A resolution that combined both sides' content** — anything past the auto-resolve list above, such as merging two PRs' rules into one file — gets `Skill(skill: "gbase:review", args: "report only; <resolved files>, diffed against the new base")` before the push; its findings go through the same classification as a review comment. When it can't run, push only with a `review` `open` [evidence line](../../references/orchestrator.md#evidence-file) whose `detail` is `conflict resolution unreviewed: <files>`, and say so in the report. One such merge of two same-day rule PRs moved rules and reworded one, and went to main with no review.
 
 ## Polish before committing
 

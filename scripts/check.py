@@ -81,6 +81,16 @@ CONTRACTS = [
     ("gbase:worker", [skill("work"), SESSION_HOOK]),
     ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
     ("gbase:unslop", [BRANCH_PR, skill("work")]),
+    # content runs report lessons instead of editing the harness; the runner hands them to a work run
+    ("교훈:", [shorts("content-common"), shorts("shorts-common"), ORCHESTRATOR, RUNNER, FACTORY]),
+    # evidence records what a check ran on; a `differs:` input becomes a Review focus item
+    ("`input`", [ORCHESTRATOR, skill("go"), skill("reproduce")]),
+    ("differs:", [ORCHESTRATOR, skill("go"), skill("reproduce"), BRANCH_PR]),
+    ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
+    ("conflict resolution unreviewed", [skill("monitor")]),
+    ("--exclusive", [ORCHESTRATOR, RUNNER]),
+    # settle's one rebase exception, so it stays one rule and not an open door
+    ("explicitly asks to rebase", [skill("monitor"), ORCHESTRATOR, FACTORY, "README.md"]),
     # the runner reads mockup's report lines into result.json
     ("mockup url:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
     ("mockup shots:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
@@ -94,14 +104,18 @@ CONTRACTS = [
     ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
     ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
     ("top3-compilation-short", [shorts("shorts-common")]),
-    # content-common holds rules for every piece of content; shorts-common and instagram-card-news defer to it
-    ("content-common", [shorts("shorts-common"), shorts("instagram-card-news"), shorts("threads-voice")]),
+    # content-common holds rules for every piece of content; shorts-common, instagram-card-news, naver-blog, threads-voice, and x-voice defer to it
+    ("content-common", [shorts("shorts-common"), shorts("instagram-card-news"), shorts("naver-blog"),
+                        shorts("threads-voice"), shorts("x-voice")]),
     ("instagram-card-news", [shorts("content-common")]),
+    ("naver-blog", [shorts("content-common")]),
     # hook-templates is read before every opening line; each content skill links it at its hook step
     ("hook-templates", [shorts("content-common"), shorts("shorts-common"), shorts("instagram-card-news"),
-                         shorts("foreign-clip-short"), shorts("top3-compilation-short"), shorts("threads-voice")]),
-    # every skill that writes Threads copy sends it through threads-voice; its feedback intake names it
+                         shorts("foreign-clip-short"), shorts("top3-compilation-short"), shorts("naver-blog"),
+                         shorts("threads-voice"), shorts("x-voice")]),
+    # every skill that writes Threads or X copy sends it through that platform's voice skill; the feedback intake names both
     ("threads-voice", [shorts("content-common"), shorts("hook-templates"), shorts("instagram-card-news")]),
+    ("x-voice", [shorts("content-common"), shorts("hook-templates")]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore

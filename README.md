@@ -16,7 +16,7 @@ Inside Claude Code, run these slash commands:
 # (optional) Install the gapp plugin — app-building harness
 /plugin install gapp@godsenal
 
-# (optional) Install the gshorts plugin — faceless Korean short-form videos and Instagram card news
+# (optional) Install the gshorts plugin — faceless Korean short-form videos, Instagram card news, and Naver blog strategy
 /plugin install gshorts@godsenal
 ```
 
@@ -161,7 +161,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - **Converges instead of looping** with automated reviewers: pre-existing findings get a one-line reply and no fix, repeats of handled findings are ignored, and after three rounds from the same reviewer it stops auto-applying and asks whether the approach needs rethinking
 - Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
 - Stops automatically when the PR reaches `MERGED` or `CLOSED`
-- `--until-settled` ends earlier, once the current head's checks and expected review bots have concluded, with one `settle: 수렴 | 미확정 | 사람 필요 @<sha>` line; it waits in short foreground polls (each returns within 5 minutes), gives up 30 minutes into a head, and never merges, rebases, or force-pushes; under `AGENT_SHIP_OWNER=orchestrator` it pushes nothing and reports its local fix commits and a refreshed PR draft
+- `--until-settled` ends earlier, once the current head's checks and expected review bots have concluded, with one `settle: 수렴 | 미확정 | 사람 필요 @<sha>` line; it waits in short foreground polls (each returns within 5 minutes), gives up 30 minutes into a head, never merges, and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase; under `AGENT_SHIP_OWNER=orchestrator` it pushes nothing and reports its local fix commits and a refreshed PR draft
 
 **setup** (skill, model-invocable) — Prepare a repo for the ship loop in one pass; idempotent, one confirmation.
 
@@ -219,20 +219,25 @@ A program that runs agents with no person attached (e.g. `claude -p` from a daem
 
 The manifest [`plugins/base/.claude-plugin/factory.json`](plugins/base/.claude-plugin/factory.json) maps slots (`work`, `review`, `review2`, `polish`, `checks`, `behavior`, `ship`, `settle`, `learn`, `content`, `task`, `reproduce`, `mockup`) to an invocation, the variables it reads, and notes. `review2` runs `gbase:review` in report-only mode on Opus and Sonnet at once and merges the two tables, marking each finding `opus`, `sonnet`, or `both`. `content` runs gshorts' `content-common` with the format the request names; `task` runs a one-off prompt with no skill (research, a schedule change) so it still leaves a log and `result.json`. `scripts/check.py` checks that every slot names a real skill and that every skill that can ask points at the headless rules.
 
-**Runner.** [`scripts/gbase-run`](scripts/gbase-run) runs one slot headless from a checkout of this repo and writes a `result.json` a poller can read:
+**Runner.** [`scripts/gbase-run`](scripts/gbase-run) runs one slot headless from a checkout of this repo and writes a `result.json` a poller can read.
+
+- **Who:** a bot or daemon that starts Claude Code with no person attached (the content bots, the dev bots). A person in an interactive session types `/gbase:work` instead.
+- **When:** every Claude Code call such a bot makes: `--slot work` for a repo change, `--slot content` for gshorts content, `--slot task` for anything else (research, a schedule change) — never a bare `claude -p`.
+- **Why not `/gbase:work` in a bare `claude -p`:** that call has no headless variables (a question hangs), no worktree from origin (it builds on whatever branch is checked out), no `result.json`, `stop`, or lesson handoff, and leaves the bot no way to know it finished.
 
 ```
 scripts/gbase-run --repo ~/code/app --slot ship --task "로그인 500 수정" --worktree login-fix
 scripts/gbase-run --repo ~/code/app --slot work --task "T-12" --worktree t12 --ship-owner agent   # push·PR까지, result.json pr_url
 scripts/gbase-run --repo ~/code/app --slot review2
-scripts/gbase-run --repo ~/LTH/insta --slot content --task-file task.md   # 긴 작업은 파일로
+scripts/gbase-run --repo ~/LTH/insta --slot content --task-file task.md   # 긴 작업은 파일로; 교훈: 줄이 있으면 next: 줄로 work 런 명령을 출력
+scripts/gbase-run --repo ~/code/app --slot work --task-file rules.md --worktree rules --exclusive   # --exclusive 런끼리 차례로, 같은 레포의 다른 런이 끝난 뒤 시작
 scripts/gbase-run --answers answers.json        # 이전 실행의 결정 필요: 줄에 답하고 이어서 실행
 scripts/gbase-run status <run-id>               # 진행 중이면 "status": "running"
 scripts/gbase-run stop <run-id>                 # claude와 그 하위 프로세스까지 종료
 scripts/gbase-run list
 ```
 
-It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads gbase (plus the plugin a slot names, like gshorts for `content`) from the checkout with `--plugin-dir`, blocks `ScheduleWakeup`/`CronCreate`, starts a `--worktree` branch from `origin`'s default branch (or `--base`) rather than the checkout's current branch, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. `pr_url` is the PR an agent-owned run opened; `decisions` in it are parsed `결정 필요:` lines (`{text, question, applied, recommend, options, human}`). Since the plugins and `factory.json` come from that checkout, keep the checkout on `origin`'s default branch. A checkout left on an old feature branch runs that branch's skills and slots, regardless of the installed version (one on a 1.32.0 branch had none of the 1.34.0 runner options). Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
+It sets `AGENT_HEADLESS=1` and the other variables (ship owner `orchestrator` by default, so nothing is pushed), loads gbase (plus the plugin a slot names, like gshorts for `content`) from the checkout with `--plugin-dir`, blocks `ScheduleWakeup`/`CronCreate`, starts a `--worktree` branch from `origin`'s default branch (or `--base`) rather than the checkout's current branch, removes `GITHUB_TOKEN` from the child, and prints the `result.json` path as its last line. `pr_url` is the PR an agent-owned run opened (for `settle`, the branch's PR). Another run still going on the same repo (matched by origin URL, so two clones count as one) is warned about and listed in `concurrent`; `--exclusive` runs go one at a time and wait for it. A `work` or `ship` run that ends with its change unshipped (no `pr:` or `ship:` line) is resumed once to finish `gbase:go`. `교훈:` lines from a content run land in `lessons` and `lessons.md`, with a `next:` command for the `work` run that ships them; those runs share one `lessons` branch until its PR ends. `decisions` in `result.json` are parsed `결정 필요:` lines (`{text, question, applied, recommend, options, human}`). Since the plugins and `factory.json` come from that checkout, keep the checkout on `origin`'s default branch. A checkout left on an old feature branch runs that branch's skills and slots, regardless of the installed version (one on a 1.32.0 branch had none of the 1.34.0 runner options). Run directory layout, the `result.json` fields, and the answers file format: [orchestrator.md § Runner](plugins/base/references/orchestrator.md#runner).
 
 ### gapp
 
@@ -259,17 +264,19 @@ Pipeline:
 
 ### gshorts
 
-Korean content harness: faceless short-form videos for YouTube Shorts, Instagram Reels, and TikTok, plus Instagram card news and Threads posts. The skills hold the format the user has confirmed, feedback by feedback, and point at an external render pipeline (`tiktok-automation`) for the actual commands. They never ship code, keys, or account credentials.
+Korean content harness: faceless short-form videos for YouTube Shorts, Instagram Reels, and TikTok, plus Instagram card news, Naver blog strategy, and Threads/X posts. The skills hold the format the user has confirmed, feedback by feedback, and point at an external render pipeline (`tiktok-automation`) for the actual commands. They never ship code, keys, or account credentials.
 
 | Skill | What it does |
 |---|---|
-| **content-common** | Rules for every piece of content: names, bios, captions, cards, and scripts are written from high-performing references actually opened on the target platform, numbers, schedules, or scope from neither references nor the user are reported as `가정:` lines and kept out of public copy until confirmed, public copy carries no source credits and reads as one person's own first-hand writing (sources stay in the work report), opening lines start from hook-templates, text posts put the key numbers in the root, and every mistake or lesson is written into the plugin the same turn so other bots don't repeat it. Holds the **feedback intake**: each new piece of feedback is classified as content-wide, video-wide, or format-specific and written, dated, into the matching skill the same turn |
+| **content-common** | Rules for every piece of content: names, bios, captions, cards, and scripts are written from high-performing references actually opened on the target platform, numbers, schedules, or scope from neither references nor the user are reported as `가정:` lines and kept out of public copy until confirmed, public copy carries no source credits and reads as one person's own first-hand writing (sources stay in the work report), opening lines start from hook-templates, text posts put the key numbers in the root, and every mistake or lesson is reported the same turn so other bots don't repeat it. Operations: a post counts as published only when the logged-out public view shows it, automated likes, follows, replies, or link comments start only after the platform's official policy is read and quoted, and causes are reported as `가설:` while operating rules change only on confirmed facts. Holds the **feedback intake**: each new piece of feedback is classified as content-wide, video-wide, or format-specific and reported, dated, as a `교훈:` line for that skill; a content run never edits the harness source, and a `gbase:work` run (the runner's `next:` line) ships the lines as a PR |
 | **hook-templates** | 25 Korean first-line hook templates from a high-performing X post (source and metrics kept), per-platform notes (lighter on X, keyword first on Naver blog titles), and the 머니알림 rules: which templates fit, 6 "현직 OO" and 18 "상위 1%" banned, experience hooks (1, 3, 9, 17, 24, 25) only on a real case, no repeating a template in consecutive posts. Every content skill reads it at its hook step |
-| **threads-voice** | How a Threads post sounds and how long it is, measured from 75 top posts opened on 2026-10-29: root caps (money news 6 lines / 150자 / 2 figures, everyday-AI series 8 lines / 170자 / 1 figure), separate voice for each topic (해요체 mixed with self-talk vs. 반말 self-talk), a 12-item bot-signal checklist (no "여러분 ~?" closer, no `[대괄호]`, no signature emoji, no parenthetical qualifiers), a counting self-check, and before→after rewrites of real @haedollar posts. content-common, hook-templates, and instagram-card-news's Threads summary point here |
+| **threads-voice** | How a Threads post sounds and how long it is, measured from top posts opened on 2026-10-29: root caps (money news 6 lines / 150자 / 2 figures, AI news and tips 8 lines / 170자 / 1 figure), 해요체 for every information post (prompts keep their own voice), the @haedollar topic range (AI news, hands-on tips, AI companies' money), honest takes, a real one-line AI-tool reaction post about 1 in 10, direct replies to comments on our posts, a 13-item bot-signal checklist, a counting self-check, and before→after rewrites of real @haedollar posts. content-common, hook-templates, and instagram-card-news's Threads summary point here |
+| **x-voice** | How an X post sounds, how long it is, and how it engages, from 140 posts of 20 Korean money accounts opened on 2026-10-29: 해요체 or title-style information posts, short roots (top-quartile median 52자), quote post + one-line opinion instead of link replies on other people's posts, direct replies to comments on ours, no source wording, a bot-signal list and counting self-check. content-common and hook-templates point here |
 | **shorts-common** | Rules every short follows (five posts a day with one fixed show per clip slot, length, pacing, audio mix, narration, captions, checks, posting gate — never schedules without the user's OK), and options decided from 2–3 side-by-side samples. Ships a dated trend reference with sources |
 | **foreign-clip-short** | Official foreign show clips in framing D (black 9:16 canvas, fixed two-line title, ~1080×930 center crop, Korean subtitles), with per-show variants for the fixed daily series: Antiques Roadshow, Pawn Stars, Shark Tank / Dragons' Den, Kitchen Nightmares, and Undercover Boss as the spare |
 | **top3-compilation-short** | Starter for ranked TOP3 compilations. Only the request for the format is confirmed, so the open parts are marked TODO and settled by sample comparison |
 | **instagram-card-news** | Instagram card news (carousels) for an info account: references opened before any card, no forced or image-less cards, names patterned on real Korean info brands, no sourcing route or AI tone in the bio, no promises without a setup behind them, mascot picked from samples, posts only after the user's OK |
+| **naver-blog** | Naver blog strategy, diagnosis, post template, titles, and monetization order (애드포스트·체험단·쇼핑커넥트) from blogs that rank in 통합검색 now or publicly disclose revenue, opened on mobile Naver first (how to read post bodies, blog stats, cadence via the post-list API, AdPost slots). Diagnosis compares blog-level facts (이웃, 방문, category spread, 블로그 주제, operator identity) before post length or images, never invents an operator, and quotes official thresholds with a check date. Writing a single post stays with the caller's own skill |
 
 ## Usage
 
@@ -316,10 +323,12 @@ After installation, the following are available:
 /gshorts:content-common        # Rules for every piece of content + feedback intake (read first)
 /gshorts:hook-templates        # First-line hook templates + 머니알림 rules
 /gshorts:threads-voice         # Threads voice, root length caps, bot-signal self-check
+/gshorts:x-voice               # X voice, length, quote posts and replies, bot-signal self-check
 /gshorts:shorts-common         # Every-video rules
 /gshorts:foreign-clip-short    # Foreign show clip short (Shark Tank, Pawn Stars, Kitchen Nightmares …), framing D
 /gshorts:top3-compilation-short  # TOP3 compilation starter (TODO parts settled by samples)
 /gshorts:instagram-card-news   # Instagram card news (carousel) for an info account
+/gshorts:naver-blog            # Naver blog strategy, diagnosis, and post template from ranking blogs
 ```
 
 ## License

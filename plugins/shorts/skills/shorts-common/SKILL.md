@@ -4,7 +4,7 @@ description: >-
   Holds the user-confirmed rules that apply to every faceless Korean short-form video (YouTube Shorts,
   Instagram Reels, TikTok) — length, pacing, BGM/SFX mix, narration voice and tone, captions,
   explanation comment, AI label, sample comparison before deciding, delivery and posting gates — and the feedback-intake rule
-  that writes every new piece of user feedback into the matching gshorts skill the same turn. Use before
+  that reports every new piece of user feedback the same turn as a `교훈:` line for the matching gshorts skill. Use before
   planning, editing, or delivering any short, whenever the user gives feedback on a short ("속도감이 없다",
   "BGM이 약하다"), or when another gshorts format skill points here.
 ---
@@ -50,11 +50,11 @@ Quotes are the user's words with the date they were said. Undated items are from
 
 ## Sample comparison before deciding
 
-Any screen or format option (framing, title style, BGM level, pace, voice) is decided by the user from **2–3 samples side by side**, never by description. Render short excerpts of the same segment with only the option changed, put them in one folder with a one-line label each, and say what differs. Once the user picks, write the choice into the matching skill (intake below) and the pipeline default.
+Any screen or format option (framing, title style, BGM level, pace, voice) is decided by the user from **2–3 samples side by side**, never by description. Render short excerpts of the same segment with only the option changed, put them in one folder with a one-line label each, and say what differs. Once the user picks, report the choice as a `교훈:` line for the matching skill (intake below) and set the pipeline default.
 
 ## Feedback intake — same turn, every time
 
-Every new piece of feedback about a short is written, dated and quoted, into the matching skill before the work continues — every video → this file's "Rules for every video", one format → `foreign-clip-short` or `top3-compilation-short`. The full procedure (classification, rewriting a contradicted rule, where to edit, version bump) is [content-common's intake](../content-common/SKILL.md#feedback-intake--same-turn-every-time).
+Every new piece of feedback about a short becomes a dated, quoted `교훈:` line for the matching skill before the work continues — every video → this file's "Rules for every video", one format → `foreign-clip-short` or `top3-compilation-short`. The full procedure (classification, the line format, why a content run never edits the harness source, who ships it) is [content-common's intake](../content-common/SKILL.md#feedback-intake--same-turn-every-time).
 
 ## Checks before showing the user
 

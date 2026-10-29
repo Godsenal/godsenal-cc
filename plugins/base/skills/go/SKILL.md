@@ -73,7 +73,7 @@ On `medium` (and headless `low`), insert `; one skeptic for low/medium` right af
 
 Clear fixes come back as working-tree edits (no commits — `branch-pr` groups them); judgment calls come back deferred. Polish rewrote these files after the finder read them, so locate each finding by the code it quotes, not by `file:line`, and re-judge any whose quoted code is gone. Where a review fix and polish collide, the review fix wins.
 
-If the findings haven't arrived when polish finishes, wait for them before Step 4 — the gate then runs once on the final tree instead of again after the fixes. If the finder fails, go on without it (Step 6 drops `--no-review`). Skip this step when the finder was skipped. Tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`.
+If the findings haven't arrived when polish finishes, wait for them before Step 4 — the gate then runs once on the final tree instead of again after the fixes. If the finder fails, go on without it (Step 6 drops `--no-review`). Skip this step when the finder was skipped. Tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`. Review's table and tally are this step's output, not `go`'s report: go on to Step 4 in the same turn. Under `claude -p` a turn that ends there ends the run once no background task is left to wake it — one headless `work` run stopped on the table with the change uncommitted and no PR.
 
 ### 4. Verification gate
 
@@ -91,10 +91,11 @@ Bias toward shipping:
 - **Reuse the route's run.** Take the passing `behavior:` lines `gbase:work` wrote for this task as-is, except for a feature whose files a review fix touched after that run — re-run that one. A route `skip` line is not reused; try the feature here.
 - **Otherwise run it here.** The repo's verify skill — `.claude/skills/verify-*/` (from `gbase:create-verify`) or `.claude/skills/verify/` (pstack's generator), at the root or in the touched package — for the features in its `features/` map that the diff touches. Without one, a CLI or script run that exercises the change and needs no build, device, or server start; don't build a harness for it.
 - **Required means evidence or a reason.** An unreachable precondition (no simulator, no test account, no such run) is `behavior: skip — <reason>`, noted and passed. A diff-caused failure goes through the same fix-twice-then-ask rule.
+- **Say what it ran on.** When a check ran on a chosen input — a fixture, sample files, a simulator — and the bug report or real use has a different kind (resolution, format, metadata, device), name both: 1024px messenger copies passed while the phone's full-size originals still failed, and the report never said the inputs differed.
 
-Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (<evidence dir>)`. Hand these lines to `branch-pr` as the PR's `## Evidence`.
+Skip on `--no-verify`. Report one line per check: `verify: <command> → pass`, `behavior: <feature> → pass (<evidence dir>)`, adding `(input: <what it ran on>; differs: <difference>)` when the point above applies. Hand these lines to `branch-pr` as the PR's `## Evidence`.
 
-With `AGENT_EVIDENCE_FILE` set, append the [evidence lines](../../references/orchestrator.md#evidence-file) as results become final: one per check command and per behavior feature, plus one each for review (after Step 3) and polish. A skipped step still gets its `skip` line.
+With `AGENT_EVIDENCE_FILE` set, append the [evidence lines](../../references/orchestrator.md#evidence-file) as results become final: one per check command and per behavior feature (with `input` when it ran on a chosen input), plus one each for review (after Step 3) and polish. A skipped step still gets its `skip` line.
 
 ### 5. Branch & PR
 

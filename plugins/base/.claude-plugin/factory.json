@@ -52,7 +52,7 @@
     "settle": {
       "invoke": "/gbase:monitor --until-settled",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
-      "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. With AGENT_SHIP_OWNER=orchestrator its fixes stay local commits, nothing is posted, and after any fix it reports `ship: local …` and `PR 본문 초안:` with a refreshed draft; agent pushes and replies. Never merges, rebases, or force-pushes."
+      "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. With AGENT_SHIP_OWNER=orchestrator its fixes stay local commits, nothing is posted, and after any fix it reports `ship: local …` and `PR 본문 초안:` with a refreshed draft; agent pushes and replies. Never merges; rebases (pushing with --force-with-lease) only when the invocation explicitly asks to rebase (--task \"rebase onto main\"), and never force-pushes otherwise. gbase-run fills pr_url from the branch's PR."
     },
     "learn": {
       "invoke": "/gbase:correct",
@@ -67,7 +67,7 @@
     "content": {
       "invoke": "/gshorts:content-common <content request>",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
-      "notes": "One piece of gshorts content (a short, card news, an account name, bio, or caption) under content-common's rules; the request names the format, and that format's skill (shorts-common and its video formats, instagram-card-news) applies with it. Lives in the gshorts plugin: gbase-run loads every plugin of its checkout, an installed setup needs gshorts@godsenal. Outputs land in the work folder the request names; nothing is posted under AGENT_HEADLESS=1."
+      "notes": "One piece of gshorts content (a short, card news, a Naver blog plan, an account name, bio, or caption) under content-common's rules; the request names the format, and that format's skill (shorts-common and its video formats, instagram-card-news, naver-blog) applies with it. Lives in the gshorts plugin: gbase-run loads every plugin of its checkout, an installed setup needs gshorts@godsenal. Outputs land in the work folder the request names; nothing is posted under AGENT_HEADLESS=1. Never edits the harness source: each lesson is a `교훈:` report line, which gbase-run hands to a `work` run (`next:`)."
     },
     "task": {
       "invoke": "<task>",

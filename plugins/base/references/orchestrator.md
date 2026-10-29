@@ -22,6 +22,7 @@ The final assistant message carries these lines at column 0; grep for the prefix
 - `pr: <url>` — `branch-pr` after `gh pr create`, carried up by `go`: the PR an agent-owned run opened.
 - `settle: …` — `monitor --until-settled` ([below](#settle)).
 - `mockup: <index.html>`, `mockup url: <url> | none — <reason>`, `mockup shots: <dir>` — `gbase:mockup`.
+- `교훈: <target skill> — <date "user's words">: <rule>` — gshorts' `content-common` feedback intake: a lesson for the harness. A content run never edits the harness source (`plugins/…` of any checkout) itself; a `work` run ships the lines, reviewed, as a PR ([Runner](#runner) prints the command).
 
 ## Ship owner `orchestrator`
 
@@ -40,10 +41,11 @@ JSON Lines, appended with `>>`, never rewritten (the caller may have written lin
 | Field | Required | Value |
 |---|---|---|
 | `step` | yes | `review`, `polish`, `checks`, `behavior`, `reproduce`, `settle` |
-| `result` | yes | `pass`, `fail`, `skip`, `open` (`review` and `settle` only: ran, but something awaits a decision or hasn't concluded — not a failure) |
+| `result` | yes | `pass`, `fail`, `skip`, `open` (`review`, `settle`, and `reproduce` only: ran, but something awaits a decision or hasn't concluded — not a failure) |
 | `command` | yes | what ran: the shell command for `checks` and `reproduce`; the skill and feature for `behavior` (`/verify login`); the skill for `review` and `polish` |
 | `detail` | yes | one line, at most ~500 characters: on `fail` the lines that show the failure, on `skip` the reason, on `pass` what was observed, on `open` what is left |
-| `cause` | on `checks`/`behavior` `fail` | `diff` (the change caused it), `pre-existing`, `flaky`, or `environment` (no DB, device, or credential) |
+| `cause` | on `checks`/`behavior` `fail`, `reproduce` `open` | `diff` (the change caused it), `pre-existing`, `flaky`, or `environment` (no DB, device, or credential); on `reproduce` `open`: `input differs from report — <difference>` |
+| `input` | no | what the check ran on, when that's a choice: a fixture, a sample file, a simulator, a seed (`fixture same-scene-1028, 1024px messenger copies`). When it differs from what the bug report or real use has in a way the result could hang on (resolution, format, metadata, size, device), end it with `; differs: <difference>` (`; differs: device photos are 5712×4284 originals without EXIF`) |
 
 Lines per step:
 
@@ -52,14 +54,16 @@ Lines per step:
 - `checks` — one per verification command, with its final result after any fix attempts. `--no-verify` or no commands found → one `skip` line.
 - `behavior` — one per feature checked on its surface: by the repo's verify skill, by a CLI or script run when there is none (`command` is then that shell command), or reused from `gbase:work`'s route run. `low` risk, or nothing that could be run → one `skip` line.
 - `settle` — one per `monitor --until-settled` run: `pass` for `수렴`, `open` for `미확정`, `fail` for `사람 필요`; `detail` is the `settle:` line. Its fix verifications are `checks` lines.
-- `reproduce` — the result of the reproduction check now: `fail` means the bug reproduced or the criterion isn't met, `pass` means it didn't reproduce, `skip` means no executable check was possible.
+- `reproduce` — the result of the reproduction check now: `fail` means the bug reproduced or the criterion isn't met, `pass` means it didn't reproduce, `skip` means no executable check was possible, `open` means it didn't reproduce on an input of another kind than the report's (`cause` says how they differ).
 
 Write each line with a JSON encoder, never by hand-quoting:
 
 ```bash
-python3 -c 'import json,sys; k="step","result","command","detail","cause"; print(json.dumps({a:b for a,b in zip(k,sys.argv[1:]) if b}, ensure_ascii=False))' \
+python3 -c 'import json,sys; k="step","result","command","detail","cause","input"; print(json.dumps({a:b for a,b in zip(k,sys.argv[1:]) if b}, ensure_ascii=False))' \
   checks fail 'pnpm vitest run src/auth' 'auth.test.ts: expected 200, received 500' diff >> "$AGENT_EVIDENCE_FILE"
 ```
+
+A `checks` or `behavior` line whose `input` says `differs:` becomes a `(확인)` item in the PR's `## Review focus` (`실기기 확인 필요: <difference>`): passing on a fixture says nothing about the input that failed.
 
 ## Settle
 
@@ -75,7 +79,7 @@ settle: 사람 필요 @<short-sha> — <item>, …
 - `미확정` — something hadn't concluded 30 minutes into the wait on this head.
 - `사람 필요` — something only a person can resolve: a failing check monitor couldn't fix, a review comment that needs a decision, a standing `CHANGES_REQUESTED`, or a merge conflict.
 
-When more than one applies, `사람 필요` wins over `미확정`. The head sha is the last one monitor waited on; each fix it pushes starts a new wait. It never merges, rebases, or force-pushes in this mode.
+When more than one applies, `사람 필요` wins over `미확정`. The head sha is the last one monitor waited on; each fix it pushes starts a new wait. It never merges in this mode, and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase ([monitor](../skills/monitor/SKILL.md#--until-settled)); otherwise it never rebases or force-pushes. Wherever monitor does resolve a conflict, a resolution that combined both sides' content is reviewed before it's pushed, or leaves a `review` `open` evidence line ([monitor's Conflicts](../skills/monitor/SKILL.md#conflicts)).
 
 Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes nothing and posts nothing. It judges the pushed head once, commits its fixes locally, and, when there are any, writes an updated PR draft to `AGENT_PR_BODY_FILE` and ends with `ship: local …`, `PR 본문 초안: …`, and `settle: 미확정 @<pushed sha> — 푸시 대기: <n> commits` (or `사람 필요`). The caller pushes, updates the PR body from the draft (`gh pr edit --title "$(head -n 1 "$f")" --body "$(tail -n +3 "$f")"`), and runs settle again. `AGENT_SHIP_OWNER=agent` opts into pushing and replying.
 
@@ -113,7 +117,7 @@ Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes noth
 
 `content` names a skill of the gshorts plugin in this marketplace (`/gshorts:content-common`), so its caller loads gshorts too (the runner does). `task` has no skill: its `invoke` is a bare `<task>`, so the prompt is the task, run under the same runner for its log, result, and stop.
 
-`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work <task>` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own. With `AGENT_SHIP_OWNER=agent` the run also pushes and opens the PR (`pr:` line), then settles it (`settle:` line); it never merges. Under `AGENT_HEADLESS=1` `go` reviews every tier before the PR, `low` included.
+`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work <task>` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own. With `AGENT_SHIP_OWNER=agent` the run also pushes and opens the PR (`pr:` line), then settles it (`settle:` line); it never merges. Under `AGENT_HEADLESS=1` `go` reviews every tier before the PR, `low` included. Tasks that touch the same files — harness rule updates, the lessons of several content runs — go into one `work` run: two runs on the same skills at once made two PRs, and the second one's conflict was resolved without a review.
 
 A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. There is no `plan` slot: `gbase:how` explains the code a task touches, but it doesn't decide scope or acceptance criteria.
 
@@ -123,7 +127,7 @@ A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots i
 
 ```
 gbase-run --repo <path> --slot <slot> [--task "..." | --task-file <path>] [--worktree <name>]
-          [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>]
+          [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>] [--exclusive]
 gbase-run status <run-id>
 gbase-run stop <run-id>
 gbase-run list
@@ -132,7 +136,11 @@ gbase-run list
 - The prompt is the slot's `invoke`, with `--task` replacing a `<placeholder>` or appended. A slot whose `invoke` is `null` gets a prompt built from its `notes`. `--task-file` reads the task from a file — use it for a long task instead of `--task "$(…)"`, where a heredoc quoting slip pastes shell lines into the prompt.
 - The child runs with `AGENT_HEADLESS=1`, `AGENT_SHIP_OWNER` from `--ship-owner` (default `orchestrator`, so nothing leaves the machine), `AGENT_PR_BODY_FILE` and `AGENT_EVIDENCE_FILE` in the run directory, `GITHUB_TOKEN` removed, gbase loaded with `--plugin-dir` from the same checkout — plus the plugin a slot's `invoke` names (`content` → `plugins/shorts`) and any in `GBASE_PLUGIN_DIRS`, so other plugins' skills stay out of dev runs — and `--disallowedTools ScheduleWakeup,CronCreate` ([headless.md](headless.md#end-when-the-work-ends)). A slot whose `invoke` names a `/<plugin>:<skill>` no loaded dir has fails before claude starts. `AGENT_ASK_CMD` is `$GBASE_ASK_CMD` when set; otherwise `gbase-run question <run-id>`, which records each question in `questions.jsonl` and gives no answer, so the skill applies its recommendation and writes a `결정 필요:` line.
 - `--model` is passed to claude; a `models` slot ignores it and runs its own list.
-- `--worktree <name>` runs in `$GBASE_HOME/worktrees/<repo>-<path hash>-<name>` on branch `gbase/<name>`, created on first use with no upstream from `--base` (default: origin's default branch after `git fetch origin`; `HEAD` only when the repo has no `origin`) and reused after — never from whatever the main checkout has checked out, whose unpushed commits would ride into the PR. A reused branch isn't rebased; `base` in `result.json` shows how far it is from the base.
+- `--repo` may be any checkout of the repo; `repo` in `result.json` is its main worktree, while claude runs in the path given (or `--worktree`). Runs are matched to a repo by origin's URL (host and path), so two clones of one repo count as one.
+- Another run still `running` on the same repo → a warning on stderr and its run ids in `concurrent`. `--exclusive` runs take turns on a per-repo lock in `$GBASE_HOME/locks/` (the kernel's, so two that start in the same second still go one at a time, and a runner that dies frees it), and the holder then waits for the runs that were going on the repo when it got the lock — before creating a `--worktree` branch, so it starts from the newer base. One still in line has `"waiting": true` in `result.json` and isn't waited on. Use it for runs that edit the same files.
+- `--worktree <name>` runs in the worktree that already has branch `gbase/<name>`, else `$GBASE_HOME/worktrees/<repo>-<main checkout path hash>-<name>`, created on first use with no upstream from `--base` (default: origin's default branch after `git fetch origin`; `HEAD` only when the repo has no `origin`) and reused after — never from whatever the main checkout has checked out, whose unpushed commits would ride into the PR. A reused branch isn't rebased; `base` in `result.json` shows how far it is from the base. A branch whose tip is the head of a merged or closed PR (`gh pr list --head`) isn't reused: it's renamed `gbase/<name>-pr<N>`, its worktree moved to `<path>-pr<N>`, and the name starts over from the base.
+- A run whose report has `교훈:` lines (any slot but `work`) writes them into `lessons.md` in its run directory and prints, before the last line, `next: gbase-run --repo <this checkout> --slot work --task-file <run_dir>/lessons.md --worktree lessons --exclusive` — the `work` run that ships them; `next` in `result.json` holds the same command. Every lessons run shares the `lessons` branch until its PR ends, so a second content run's lessons join the open PR instead of opening another one on the same skill files and version line.
+- A `work` or `ship` run whose session ends with work left in its worktree (uncommitted changes, or commits no remote has) and no `pr:` line (`--ship-owner agent`) or `ship:` line (`orchestrator`) is resumed once with `claude --resume` and a prompt to finish `gbase:go` from where it stopped; that session gets `"resumed": true`, and its `cost_usd` covers both.
 - The last stdout line is the absolute path of `result.json`. Exit 0 when every session exited 0. SIGTERM, SIGINT, or SIGHUP (`gbase-run stop <run-id>` sends SIGTERM and waits) ends each claude session's process group — subagents and shells included, SIGKILL after 10 s — and still writes the result (`failed`, with `stopped_by`).
 - A slot whose `invoke` has a `<placeholder>` (`work`, `reproduce`) needs `--task`.
 
@@ -141,14 +149,16 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | Field | Value |
 |---|---|
 | `run_id`, `slot`, `task`, `repo`, `cwd`, `worktree`, `model`, `ship_owner` | the inputs; `cwd` is where claude ran |
-| `status` | `running` until the runner finishes, then `done` or `failed`; `status` reports `dead` for a `running` file whose runner process is gone |
+| `status` | `running` until the runner finishes, then `done` or `failed`; `status` reports `dead` for a `running` file whose runner process is gone, or whose pid now belongs to a process that started after the run |
 | `pid`, `started_at`, `finished_at`, `run_dir`, `prompt_path`, `log_path` | bookkeeping |
 | `exit_code` | the highest exit code of the claude sessions |
 | `branch`, `head_sha` | of `cwd` after the run |
 | `base` | `{ref, ahead, behind}`: commits of `cwd`'s `HEAD` after the run not in `ref` and the other way round, or `null` with no base; before pushing, check `ahead` against the commit count of the `ship:` line |
 | `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, except `options`, which is `[]` when the line lists none |
 | `ship`, `settle` | the last `ship:` / `settle:` line of any result message in the session (a session can end more than one turn), or `null` |
-| `pr_url` | the URL from the last `pr:` line (`--ship-owner agent`), or `null` |
+| `pr_url` | the URL from the last `pr:` line (`--ship-owner agent`); for `settle`, without one, the current branch's PR from `gh pr view`; else `null` |
+| `lessons`, `next` | the `교훈:` lines in order, and the `next:` command for them (`null` without lessons or on a `work` run) |
+| `concurrent` | run ids that were `running` on the same repo when this one started; absent when none |
 | `mockup` | `{html, url, screenshots}` from the `mockup` lines (`url` is `null` for `none`), or `null` |
 | `pr_body_file` | the path from `PR 본문 초안:`, else `pr-body.md` if it exists, else `null` |
 | `evidence` | the parsed evidence lines |

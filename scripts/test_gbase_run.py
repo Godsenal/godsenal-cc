@@ -47,6 +47,7 @@ FAKE_CLAUDE = textwrap.dedent('''\
         "settle": "ship: local feat/x @def5678 — 1 commits, not pushed\\nPR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"]
                   + "\\nsettle: 미확정 @abc1234 — 푸시 대기: 1 commits\\n",
         # agent-owned work run: go opened the PR and settled it
+        "lessons": "카드 1편 완료\\n교훈: content-common — 2026-10-29 \\"이거별로\\": 규칙 A\\n교훈: instagram-card-news — 규칙 B\\n",
         "agent": "PR을 열었습니다\\npr: <https://github.com/o/r/pull/9>.\\nsettle: 수렴 @abc1234\\n"
                  if os.environ["AGENT_SHIP_OWNER"] == "agent" else "no ship owner\\n",
     }
@@ -54,6 +55,15 @@ FAKE_CLAUDE = textwrap.dedent('''\
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
     print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-" + model, "model": model}))
     print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.01}))
+    if model == "stops":  # go ended its turn on review's table: the change sits uncommitted, no PR
+        if "--resume" in args:
+            final = "pr: https://github.com/o/r/pull/12\\nsettle: 수렴 @abc1234\\n"
+            open(os.path.join(run_dir, "resume-prompt"), "w").write(args[args.index("-p") + 1])
+        else:
+            open("change.txt", "w").write("x")
+            final = "| # | severity | file:line | finding | action |\\n|---|---|---|---|---|\\n| 1 | low | `a.py:1` | x | auto-fixed |\\n"
+        print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.5}))
+        sys.exit(0)
     if model == "twoturns":  # a later turn (a background task finishing) with no report lines
         print(json.dumps({"type": "result", "result": "기다리던 작업이 끝났습니다. 할 일은 없습니다.", "total_cost_usd": 0.02}))
 ''')
@@ -302,6 +312,140 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual((result["status"], result["stopped_by"]), ("failed", "SIGTERM"))
         time.sleep(0.2)
         self.assertFalse(_alive(child))
+
+    def test_lessons_hand_off_to_a_work_run(self):
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "content", "--task", "카드뉴스", "--model", "lessons")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["lessons"], ['교훈: content-common — 2026-10-29 "이거별로": 규칙 A',
+                                             "교훈: instagram-card-news — 규칙 B"])
+        lessons_md = Path(result["run_dir"]) / "lessons.md"
+        self.assertIn("교훈: instagram-card-news — 규칙 B", lessons_md.read_text())
+        self.assertEqual(out[-2], f"next: {result['next']}")
+        self.assertIn(f"--slot work --task-file {lessons_md} --worktree lessons --exclusive", result["next"])
+        self.assertIn("교훈:", Path(result["sessions"]["lessons"]["final_path"]).read_text())
+        # a work run is the one that ships them
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--model", "lessons")
+        self.assertIsNone(json.loads(Path(out[-1]).read_text())["next"])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        self.assertEqual((json.loads(Path(out[-1]).read_text())["lessons"], len(out)), ([], 1))
+
+    def test_repo_key_matches_clones_by_origin(self):
+        g = lambda repo, *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
+        other = self.tmp / "other-name"
+        subprocess.run(["git", "clone", "-q", str(self.repo), str(other)], check=True)
+        g(self.repo, "remote", "add", "origin", "git@github.com:Godsenal/godsenal-cc.git")
+        g(other, "remote", "set-url", "origin", "https://github.com/godsenal/godsenal-cc/")
+        self.assertEqual(gbase_run.repo_key(self.repo), "github.com/godsenal/godsenal-cc")
+        self.assertEqual(gbase_run.repo_key(other), "github.com/godsenal/godsenal-cc")
+        g(other, "remote", "set-url", "origin", "ssh://git@github.com:22/godsenal/godsenal-cc.git")
+        self.assertEqual(gbase_run.repo_key(other), "github.com:22/godsenal/godsenal-cc")
+
+    def test_run_on_a_linked_worktree_records_the_main_checkout(self):
+        wt = self.tmp / "wt"
+        subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-q", "-b", "feat", str(wt)], check=True)
+        _, out = self.run_cli("--repo", str(wt), "--slot", "ship")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["repo"], result["cwd"], result["branch"]), (str(self.repo.resolve()), str(wt.resolve()), "feat"))
+        # --worktree reuses the worktree that already has the branch, wherever it is
+        subprocess.run(["git", "-C", str(self.repo), "branch", "gbase/x"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-q", str(self.tmp / "old-x"), "gbase/x"], check=True)
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "x")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["cwd"], str((self.tmp / "old-x").resolve()))
+
+    def seed_running(self, run_id, pid):
+        run = Path(self.env["GBASE_HOME"]) / "runs" / run_id
+        run.mkdir(parents=True)
+        (run / "result.json").write_text(json.dumps({"run_id": run_id, "status": "running", "pid": pid,
+                                                     "repo": str(self.repo)}))
+
+    def test_concurrent_run_on_the_same_repo_warns_and_exclusive_waits(self):
+        self.seed_running("00000000-000000-work-aaaaaa", os.getpid())
+        self.seed_running("00000000-000000-work-dead00", 999999)
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["concurrent"], ["00000000-000000-work-aaaaaa"])
+        self.assertIn("running on the same repo", r.stderr)
+        # a runner that isn't our child (a child would linger as a zombie, which still looks alive)
+        (Path(self.env["GBASE_HOME"]) / "runs" / "00000000-000000-work-aaaaaa" / "result.json").unlink()
+        pid = subprocess.run(["sh", "-c", "sleep 2 >/dev/null 2>&1 & echo $!"], capture_output=True, text=True).stdout
+        self.seed_running("00000000-000001-work-bbbbbb", int(pid))
+        started = time.time()
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--exclusive")
+        self.assertGreaterEqual(time.time() - started, 2)
+        self.assertIn("waiting for them to end", r.stderr)
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["status"], "done")
+
+    def test_exclusive_runs_take_turns_on_a_repo_lock(self):
+        key = gbase_run.repo_key(self.repo)
+        lock_path = Path(self.env["GBASE_HOME"]) / "locks" / f"{gbase_run.hashlib.sha1(key.encode()).hexdigest()[:12]}.lock"
+        lock_path.parent.mkdir(parents=True)
+        held = open(lock_path, "w")
+        gbase_run.fcntl.flock(held, gbase_run.fcntl.LOCK_EX)  # an earlier --exclusive run started the same second
+        waiting = subprocess.Popen([sys.executable, str(RUNNER), "--repo", str(self.repo), "--slot", "ship", "--exclusive"],
+                                   env=self.env, stdout=subprocess.PIPE, text=True)
+        deadline = time.time() + 20
+        while not (runs := list((Path(self.env["GBASE_HOME"]) / "runs").glob("*/result.json"))) and time.time() < deadline:
+            time.sleep(0.2)
+        time.sleep(1)  # past the first lock attempt
+        self.assertTrue(json.loads(runs[0].read_text())["waiting"])
+        self.assertIsNone(waiting.poll())
+        # a run still in line isn't one to wait for, so the lock holder doesn't wait on it
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        self.assertNotIn("concurrent", json.loads(Path(out[-1]).read_text()))
+        held.close()
+        out, _ = waiting.communicate(timeout=30)
+        result = json.loads(Path(out.splitlines()[-1]).read_text())
+        self.assertEqual((result["status"], "waiting" in result), ("done", False))
+
+    def test_a_reused_pid_is_not_the_runner(self):
+        self.seed_running("r-reused", os.getpid())
+        path = Path(self.env["GBASE_HOME"]) / "runs" / "r-reused" / "result.json"
+        path.write_text(json.dumps({**json.loads(path.read_text()), "started_at": "2001-01-01T00:00:00+0000"}))
+        self.assertEqual(json.loads(self.run_cli("status", "r-reused")[0].stdout)["status"], "dead")
+        path.write_text(json.dumps({**json.loads(path.read_text()), "started_at": gbase_run.now()}))
+        self.assertEqual(json.loads(self.run_cli("status", "r-reused")[0].stdout)["status"], "running")
+
+    def test_a_shipping_run_that_stops_before_its_pr_is_resumed_once(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "stops")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["pr_url"], result["settle"]), ("https://github.com/o/r/pull/12", "settle: 수렴 @abc1234"))
+        self.assertEqual((result["sessions"]["stops"]["resumed"], result["sessions"]["stops"]["cost_usd"]), (True, 1.0))
+        self.assertIn("no `pr:` line", (Path(result["run_dir"]) / "resume-prompt").read_text())
+        # nothing in the worktree: nothing to resume
+        (self.repo / "change.txt").unlink()
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--ship-owner", "agent", "--model", "lessons")
+        self.assertNotIn("resumed", json.loads(Path(out[-1]).read_text())["sessions"]["lessons"])
+
+    def test_a_worktree_whose_pr_ended_starts_over(self):
+        g = lambda *a: subprocess.run(["git", "-C", str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "lessons")
+        first = Path(json.loads(Path(out[-1]).read_text())["cwd"])
+        tip = g("rev-parse", "gbase/lessons")
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "gh").write_text(f"#!/bin/sh\necho '[{{\"number\": 5, \"state\": \"MERGED\", \"headRefOid\": \"{tip}\"}}]'\n")
+        (bin_dir / "gh").chmod(0o755)
+        self.env["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "lessons")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["cwd"], str(first))  # a fresh one at the same path
+        self.assertTrue(Path(f"{first}-pr5").is_dir())
+        self.assertEqual(g("rev-parse", "gbase/lessons-pr5"), tip)
+        # the fresh branch isn't the merged PR's head, so the next run reuses it
+        g("-C", str(first), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "next")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "lessons")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["branch"], "gbase/lessons")
+        self.assertFalse(Path(f"{first}-pr5-pr5").exists())
+
+    def test_settle_finds_the_branch_pr_without_a_pr_line(self):
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "gh").write_text("#!/bin/sh\necho https://github.com/o/r/pull/33\n")
+        (bin_dir / "gh").chmod(0o755)
+        self.env["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "settle", "--model", "settle")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["pr_url"], "https://github.com/o/r/pull/33")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        self.assertIsNone(json.loads(Path(out[-1]).read_text())["pr_url"])  # only settle looks the PR up
 
     def test_status_reports_dead_runner(self):
         run = Path(self.env["GBASE_HOME"]) / "runs" / "r1"

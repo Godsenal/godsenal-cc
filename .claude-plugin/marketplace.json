@@ -10,7 +10,7 @@
     {
       "name": "gbase",
       "description": "Core productivity tools — base plugins",
-      "version": "1.34.2",
+      "version": "1.36.0",
       "author": {
         "name": "godsenal"
       },
@@ -29,8 +29,8 @@
     },
     {
       "name": "gshorts",
-      "description": "Korean content harness — faceless short-form videos, Instagram card news, and Threads posts: common rules, feedback intake, and one skill per format",
-      "version": "0.5.0",
+      "description": "Korean content harness — faceless short-form videos, Instagram card news, Naver blog strategy, and Threads/X posts: common rules, feedback intake, and one skill per format",
+      "version": "0.7.0",
       "author": {
         "name": "godsenal"
       },
