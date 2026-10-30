@@ -11,11 +11,13 @@
   "slots": {
     "work": {
       "invoke": "/gbase:work <task>",
+      "model": "opus",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
       "notes": "The front door for one task (a card, a ticket): picks the route (bug, feature, refactor, …), does the work, and ends in the ship slot's gbase:go — review ∥ polish, verification gate including the repo's verify skill, commits; with AGENT_SHIP_OWNER=agent it also pushes, opens the PR (`pr: <url>`) and settles it (`settle:`), never merging. Under AGENT_HEADLESS=1 even a low-risk change is reviewed before the PR. An orchestrator opens its dev run with this instead of naming review, polish and checks as separate steps; <task> is the task from the orchestrator's prompt, its ticket id included."
     },
     "review": {
       "invoke": "/gbase:review pre-PR mode; defer, don't ask",
+      "model": "opus",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
       "notes": "Adversarial review of the uncommitted changes, else the latest commit. Clear, local fixes come back as uncommitted working-tree edits; findings that need a decision come back in a severity table. Never posts to GitHub."
     },
@@ -27,11 +29,13 @@
     },
     "polish": {
       "invoke": "/gbase:polish",
+      "model": "sonnet",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
       "notes": "Behavior-preserving cleanup of the current diff, applied as uncommitted edits inside the diff only; edits outside the diff and large structural moves are reported, not applied, when headless."
     },
     "checks": {
       "invoke": null,
+      "model": "sonnet",
       "setup": "/gbase:setup",
       "reads": ["CLAUDE.md", "AGENTS.md"],
       "env": [],
@@ -39,6 +43,7 @@
     },
     "behavior": {
       "invoke": null,
+      "model": "sonnet",
       "setup": "/gbase:create-verify",
       "reads": [".claude/skills/verify/SKILL.md", ".claude/skills/verify-*/SKILL.md"],
       "env": [],
@@ -46,26 +51,31 @@
     },
     "ship": {
       "invoke": "/gbase:go",
+      "model": "sonnet",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
       "notes": "Review and polish in parallel, review fixes, verification gate, then commits. With AGENT_SHIP_OWNER=orchestrator it ends with `ship:` and `PR 본문 초안:` lines and never touches the remote; otherwise it pushes, opens the PR (`pr: <url>`), and monitors it — under AGENT_HEADLESS=1 with monitor --until-settled, ending with a `settle:` line."
     },
     "settle": {
       "invoke": "/gbase:monitor --until-settled",
+      "model": "sonnet",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
       "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. With AGENT_SHIP_OWNER=orchestrator its fixes stay local commits, nothing is posted, and after any fix it reports `ship: local …` and `PR 본문 초안:` with a refreshed draft; agent pushes and replies. Never merges; rebases (pushing with --force-with-lease) only when the invocation explicitly asks to rebase (--task \"rebase onto main\"), and never force-pushes otherwise. gbase-run fills pr_url from the branch's PR."
     },
     "learn": {
       "invoke": "/gbase:correct",
+      "model": "opus",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
       "notes": "Turns mistakes that recur in the repo's history into enforced checks, each proven to fail on a past instance; /gbase:correct --session runs it as a retrospective on one session. Edits are left uncommitted for the ship slot."
     },
     "mockup": {
       "invoke": "/gbase:mockup <design request>",
+      "model": "opus",
       "env": [],
       "notes": "Builds a clickable single-file HTML mockup of the request from the app's own screens, tokens, fonts and copy, with PNG screenshots per option and step, in $GBASE_MOCKUP_DIR (default ~/design-mockups)/<app>-<YYYYMMDD>-<topic>-r<N>/ — outside the repo, which stays untouched. Explicit only: no other slot or skill (work, ship, …) invokes it, and the model doesn't pick it up on its own. Ends with `mockup:`, `mockup url:` and `mockup shots:` lines. Never asks before the first round; feedback is the next run."
     },
     "content": {
       "invoke": "/gshorts:content-common <content request>",
+      "model": "opus",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
       "notes": "One piece of gshorts content (a short, card news, a Naver blog plan, an account name, bio, or caption) under content-common's rules; the request names the format, and that format's skill (shorts-common and its video formats, instagram-card-news, naver-blog) applies with it. Lives in the gshorts plugin: gbase-run loads every plugin of its checkout, an installed setup needs gshorts@godsenal. Outputs land in the work folder the request names; a work folder that isn't a git repo is run with `gbase-run --dir <folder>` instead of `--repo`. Nothing is posted under AGENT_HEADLESS=1. Never edits the harness source: each lesson is a `교훈:` report line, which gbase-run hands to a `work` run (`next:`)."
     },
@@ -76,6 +86,7 @@
     },
     "reproduce": {
       "invoke": "/gbase:reproduce <bug report or improvement request>",
+      "model": "opus",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_EVIDENCE_FILE"],
       "notes": "Writes an executable check that fails now (a test, script, HTTP request, or verify-skill journey) and reports its command, the quoted failing output, and the expected result. Never changes product code; an added test or script is left uncommitted."
     }

@@ -168,6 +168,18 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual((second["slot"], second["task"], second["answers_from"]), ("reproduce", "login 500s", first["run_id"]))
         self.assertIn("- Q? → B", Path(second["prompt_path"]).read_text())
         self.assertEqual(self.ask("Q?", second["run_id"]), "B")
+        self.assertEqual(second["model"], "x")
+
+    def test_slot_default_model_unless_given_or_answered_on_the_same_slot(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        ship = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((ship["model"], ship["evidence"][0]["detail"]), ("sonnet", "sonnet"))
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--model", "x")
+        work = json.loads(Path(out[-1]).read_text())
+        answers = self.tmp / "answers.json"
+        answers.write_text(json.dumps({"run_id": work["run_id"], "answers": []}))
+        _, out = self.run_cli("--answers", str(answers), "--slot", "ship")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["model"], "sonnet")
 
     def test_question_matches_answer_despite_spacing_punctuation_case_and_prefix(self):
         self.seed_answers([
