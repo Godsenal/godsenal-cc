@@ -128,11 +128,15 @@ A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots i
 ```
 gbase-run --repo <path> --slot <slot> [--task "..." | --task-file <path>] [--worktree <name>]
           [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>] [--exclusive]
+gbase-run --dir <folder> --slot task|content [--task "..." | --task-file <path>] [--model opus|sonnet] [--answers <file>]
+gbase-run start <the same arguments>
 gbase-run status <run-id>
 gbase-run stop <run-id>
 gbase-run list
 ```
 
+- A run in the background is one line: `gbase-run start …` (the run's arguments). It starts the runner in its own session and returns once `result.json` exists, printing the run id and then the `result.json` path; the runner's own output goes to `runner.log` in the run directory, so read the `next:` command from `next` in `result.json`; `status`/`stop` work on it as on any run. An argument the runner rejects fails `start` itself, with the runner's error. Don't write `nohup claude -p …` or `--dangerously-skip-permissions` on the command line: the runner already passes `--permission-mode`, and a long command with that flag is the one a permission classifier blocks (the morning content runs of 2026-10-29 and 10-30 never started).
+- `--dir <folder>` runs the `task` or `content` slot in a plain folder (`~/.gbase/tasks/<name>`), git or not, instead of `--repo`: no worktree, base, or concurrent-run check, so it can't take `--worktree`, `--base`, or `--exclusive`. `repo` in `result.json` is `null` and `dir` is the folder.
 - The prompt is the slot's `invoke`, with `--task` replacing a `<placeholder>` or appended. A slot whose `invoke` is `null` gets a prompt built from its `notes`. `--task-file` reads the task from a file — use it for a long task instead of `--task "$(…)"`, where a heredoc quoting slip pastes shell lines into the prompt.
 - The child runs with `AGENT_HEADLESS=1`, `AGENT_SHIP_OWNER` from `--ship-owner` (default `orchestrator`, so nothing leaves the machine), `AGENT_PR_BODY_FILE` and `AGENT_EVIDENCE_FILE` in the run directory, `GITHUB_TOKEN` removed, gbase loaded with `--plugin-dir` from the same checkout — plus the plugin a slot's `invoke` names (`content` → `plugins/shorts`) and any in `GBASE_PLUGIN_DIRS`, so other plugins' skills stay out of dev runs — and `--disallowedTools ScheduleWakeup,CronCreate` ([headless.md](headless.md#end-when-the-work-ends)). A slot whose `invoke` names a `/<plugin>:<skill>` no loaded dir has fails before claude starts. `AGENT_ASK_CMD` is `$GBASE_ASK_CMD` when set; otherwise `gbase-run question <run-id>`, which records each question in `questions.jsonl` and gives no answer, so the skill applies its recommendation and writes a `결정 필요:` line.
 - `--model` is passed to claude; a `models` slot ignores it and runs its own list.
@@ -144,11 +148,11 @@ gbase-run list
 - The last stdout line is the absolute path of `result.json`. Exit 0 when every session exited 0. SIGTERM, SIGINT, or SIGHUP (`gbase-run stop <run-id>` sends SIGTERM and waits) ends each claude session's process group — subagents and shells included, SIGKILL after 10 s — and still writes the result (`failed`, with `stopped_by`).
 - A slot whose `invoke` has a `<placeholder>` (`work`, `reproduce`) needs `--task`.
 
-Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`): `prompt.txt`, `log.jsonl` (the `stream-json` events; `log-<model>.jsonl` per session for a `models` slot), `final.md` (the last result message that carries a report line, else the last one; `final-<model>.md`), `evidence.jsonl`, `pr-body.md` when `go` drafted one, `questions.jsonl`, `answers.json`, `review.md` for a `models` slot, and `result.json`:
+Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`): `prompt.txt`, `log.jsonl` (the `stream-json` events; `log-<model>.jsonl` per session for a `models` slot), `final.md` (the last result message that carries a report line, else the last one; `final-<model>.md`), `evidence.jsonl`, `pr-body.md` when `go` drafted one, `questions.jsonl`, `answers.json`, `review.md` for a `models` slot, `runner.log` for a `start` run, and `result.json`:
 
 | Field | Value |
 |---|---|
-| `run_id`, `slot`, `task`, `repo`, `cwd`, `worktree`, `model`, `ship_owner` | the inputs; `cwd` is where claude ran |
+| `run_id`, `slot`, `task`, `repo`, `dir`, `cwd`, `worktree`, `model`, `ship_owner` | the inputs (`repo` is `null` for a `--dir` run, `dir` `null` otherwise); `cwd` is where claude ran |
 | `status` | `running` until the runner finishes, then `done` or `failed`; `status` reports `dead` for a `running` file whose runner process is gone, or whose pid now belongs to a process that started after the run |
 | `pid`, `started_at`, `finished_at`, `run_dir`, `prompt_path`, `log_path` | bookkeeping |
 | `exit_code` | the highest exit code of the claude sessions |
@@ -156,7 +160,7 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `base` | `{ref, ahead, behind}`: commits of `cwd`'s `HEAD` after the run not in `ref` and the other way round, or `null` with no base; before pushing, check `ahead` against the commit count of the `ship:` line |
 | `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, except `options`, which is `[]` when the line lists none |
 | `ship`, `settle` | the last `ship:` / `settle:` line of any result message in the session (a session can end more than one turn), or `null` |
-| `pr_url` | the URL from the last `pr:` line (`--ship-owner agent`); for `settle`, without one, the current branch's PR from `gh pr view`; else `null` |
+| `pr_url` | the URL from the last `pr:` line (`--ship-owner agent`); without one, for `settle` and for an agent-owned `work`/`ship` run, the current branch's open PR from `gh pr view` (a session that opened a PR can end with only its `settle:` line); else `null` |
 | `lessons`, `next` | the `교훈:` lines in order, and the `next:` command for them (`null` without lessons or on a `work` run) |
 | `concurrent` | run ids that were `running` on the same repo when this one started; absent when none |
 | `mockup` | `{html, url, screenshots}` from the `mockup` lines (`url` is `null` for `none`), or `null` |
