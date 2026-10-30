@@ -7,11 +7,13 @@ Skill behavior lives in the skills, not here.
 
   gbase-run --repo <path> --slot <slot> [--task "..." | --task-file <path>] [--worktree <name>]
             [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>] [--exclusive]
+  gbase-run --dir <folder> --slot task|content [--task "..." | --task-file <path>] [--model opus|sonnet] [--answers <file>]
+  gbase-run start <the same arguments>   # detached: prints the run id and result.json path, then returns
   gbase-run status <run-id>     # result.json; "status": "running" while the run is going
   gbase-run stop <run-id>       # SIGTERM the runner, which ends each claude's process group
   gbase-run list                # one JSON line per run, newest first
 
-The last stdout line of a run is the absolute path of its result.json; a run that reported `교훈:` lines
+The last stdout line of a run is the absolute path of its result.json (`start` prints it after the run id); a run that reported `교훈:` lines
 prints a `next:` line before it.
 
 Env: GBASE_CLAUDE (claude binary), GBASE_HOME (default ~/.gbase; runs/ and worktrees/ live there),
@@ -61,6 +63,7 @@ MOCKUP = re.compile(r"^mockup( url| shots)?: (.+)$", re.M)
 LESSON = re.compile(r"^교훈: .*$", re.M)  # content-common's feedback intake: a lesson for a work run to ship
 POLL = 5  # seconds between checks while --exclusive waits for another run on the same repo
 SHIPPING_SLOTS = {"work", "ship"}  # slots that end in go: a PR (agent owner) or a `ship:` line (orchestrator)
+DIR_SLOTS = {"task", "content"}  # slots that may run in a plain folder (--dir): nothing in them needs git
 # one more turn for a session that stopped before shipping its change (run 20261029-091345-work-53d226 ended on
 # go's review table: change uncommitted, no PR)
 RESUME_PROMPT = ("The run ended before the change shipped: the worktree has work in it and the report has no `{line}` "
@@ -408,8 +411,9 @@ def gh(cwd, *args):
 
 
 def pr_url_of(cwd):
-    """The open PR of cwd's branch, for a settle run whose report has no `pr:` line."""
-    url = gh(cwd, "pr", "view", "--json", "url", "-q", ".url")
+    """The open PR of cwd's branch, for a settle or agent-owned work/ship run whose report has no `pr:` line; a
+    merged or closed one is an earlier change's, not this run's."""
+    url = gh(cwd, "pr", "view", "--json", "url,state", "-q", 'select(.state == "OPEN") | .url')
     return url if url and url.startswith("http") else None
 
 
@@ -458,6 +462,8 @@ def write_lessons(run_id, run_dir, lessons):
 def cmd_run(argv):
     p = argparse.ArgumentParser(prog="gbase-run", description="Run one gbase orchestrator slot headless.")
     p.add_argument("--repo")
+    p.add_argument("--dir", help="task/content only: run in this folder, git or not, with no worktree, base, or "
+                                 "concurrent-run check")
     p.add_argument("--slot")
     task_arg = p.add_mutually_exclusive_group()
     task_arg.add_argument("--task", default="")
@@ -472,6 +478,7 @@ def cmd_run(argv):
                    help="one --exclusive run at a time on the repo (same origin URL), each starting once the runs "
                         "going there when its turn came have ended")
     a = p.parse_args(argv)
+    detached = os.environ.pop("GBASE_DETACHED", None) == "1"  # set by `gbase-run start`; popped so claude doesn't inherit it
 
     answers, prev = None, {}
     if a.answers:
@@ -483,15 +490,26 @@ def cmd_run(argv):
             prev = json.loads(prev_path.read_text(encoding="utf-8"))
     if a.task_file:
         a.task = Path(a.task_file).expanduser().read_text(encoding="utf-8").strip()
-    repo, slot = a.repo or prev.get("repo"), a.slot or prev.get("slot")
+    folder, repo = (a.dir, a.repo) if a.dir or a.repo else (prev.get("dir"), prev.get("repo"))
+    slot = a.slot or prev.get("slot")
     task, model = a.task or prev.get("task", ""), a.model or prev.get("model")
     a.ship_owner = a.ship_owner or prev.get("ship_owner") or "orchestrator"
-    if not repo or not slot:
-        p.error("--repo and --slot are required (or --answers naming a previous run_id)")
-    given = Path(repo).expanduser().resolve()
-    if git(given, "rev-parse", "--git-dir") is None:
-        sys.exit(f"gbase-run: {given} is not a git repository")
-    repo = main_checkout(given)  # recorded as the repo; claude still runs in `given` without --worktree
+    if not (repo or folder) or not slot:
+        p.error("--repo (or --dir) and --slot are required (or --answers naming a previous run_id)")
+    if folder:
+        if a.repo or a.worktree or a.base or a.exclusive:
+            p.error("--dir runs without git: drop --repo, --worktree, --base, and --exclusive")
+        if slot not in DIR_SLOTS:
+            p.error(f"--dir is for the {' and '.join(sorted(DIR_SLOTS))} slots; slot {slot} needs a --repo")
+        given = Path(folder).expanduser().resolve()
+        if not given.is_dir():
+            sys.exit(f"gbase-run: {given} is not a directory")
+        repo = None
+    else:
+        given = Path(repo).expanduser().resolve()
+        if git(given, "rev-parse", "--git-dir") is None:
+            sys.exit(f"gbase-run: {given} is not a git repository")
+        repo = main_checkout(given)  # recorded as the repo; claude still runs in `given` without --worktree
 
     manifest = json.loads((PLUGIN_DIR / ".claude-plugin" / "factory.json").read_text(encoding="utf-8"))
     spec = manifest["slots"].get(slot)
@@ -504,8 +522,8 @@ def cmd_run(argv):
         print(f"gbase-run: slot {slot} runs {', '.join(spec['models'])}; --model {model} ignored", file=sys.stderr)
 
     # a follow-up run continues in the previous run's checkout, where its edits are
-    same_repo = bool(prev.get("repo")) and str(main_checkout(Path(prev["repo"]))) == str(repo)
-    base = resolve_base(repo, a.base or (same_repo and (prev.get("base") or {}).get("ref")) or None)
+    same_repo = bool(repo and prev.get("repo")) and str(main_checkout(Path(prev["repo"]))) == str(repo)
+    base = repo and resolve_base(repo, a.base or (same_repo and (prev.get("base") or {}).get("ref")) or None)
     cwd = None if a.worktree else Path(prev["cwd"] if same_repo and prev.get("cwd") else given)
     run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{slot}-{secrets.token_hex(3)}"
     run_dir = RUNS / run_id
@@ -529,7 +547,8 @@ def cmd_run(argv):
 
     models = spec.get("models") or [model]
     result = {
-        "run_id": run_id, "status": "running", "slot": slot, "task": task, "repo": str(repo),
+        "run_id": run_id, "status": "running", "slot": slot, "task": task, "repo": repo and str(repo),
+        "dir": folder and str(given),
         "cwd": str(cwd) if cwd else None,
         "worktree": a.worktree, "model": model, "ship_owner": a.ship_owner,
         "answers_from": (answers or {}).get("run_id"), "pid": os.getpid(), "started_at": now(),
@@ -538,6 +557,12 @@ def cmd_run(argv):
         "log_path": str(run_dir / ("log.jsonl" if len(models) == 1 else f"log-{models[0]}.jsonl")),
     }
     write_json(result_path, result)
+    if detached:  # the caller has the run now; everything the runner prints after this goes to runner.log
+        print(f"{run_id}\n{result_path}", flush=True)
+        log = os.open(run_dir / "runner.log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        os.dup2(log, 1)
+        os.dup2(log, 2)
+        os.close(log)
 
     def stop(signum, _frame):  # end the children too; the threads then finish and finally records the run
         result["stopped_by"] = signal.Signals(signum).name
@@ -553,8 +578,8 @@ def cmd_run(argv):
         signal.signal(sig, stop)
     sessions = {}
     try:
-        key = repo_key(repo)
-        concurrent = running_on(key, run_id)
+        key = repo and repo_key(repo)
+        concurrent = running_on(key, run_id) if key else []
         if concurrent:
             result["concurrent"] = concurrent
             write_json(result_path, result)
@@ -626,14 +651,18 @@ def cmd_run(argv):
         pr_draft = run_dir / "pr-body.md"
         exit_code = max((s.get("exit_code", 1) for s in sessions.values()), default=1)
         lessons = list(dict.fromkeys(line for r in parsed for line in r["lessons"]))
+        # a session that opened a PR may end without its `pr:` line (go → monitor ran long and the last message
+        # kept only `settle:`; run 20261029-220851-work-a4b9c7): look the branch's PR up
+        looks_up = slot == "settle" or (slot in SHIPPING_SLOTS and a.ship_owner == "agent")
         pr_url = next((r["pr_url"] for r in parsed if r["pr_url"]), None) or (
-            pr_url_of(cwd) if slot == "settle" and cwd and not STOPPING.is_set() else None)
+            pr_url_of(cwd) if looks_up and cwd and not STOPPING.is_set() else None)
         result.update({
             "status": "done" if exit_code == 0 and len(sessions) == len(models) else "failed",
             "finished_at": now(),
             "exit_code": exit_code,
-            "branch": cwd and git(cwd, "rev-parse", "--abbrev-ref", "HEAD"),
-            "head_sha": cwd and git(cwd, "rev-parse", "HEAD"),
+            # a --dir folder inside some git tree isn't that repo's run
+            "branch": repo and cwd and git(cwd, "rev-parse", "--abbrev-ref", "HEAD"),
+            "head_sha": repo and cwd and git(cwd, "rev-parse", "HEAD"),
             "base": cwd and base_counts(cwd, base),
             "decisions": decisions,
             "questions": read_jsonl(run_dir / "questions.jsonl"),
@@ -657,6 +686,20 @@ def cmd_run(argv):
             print(f"next: {result['next']}")
         print(result_path)
     return 0 if result["status"] == "done" else 1
+
+
+def cmd_start(argv):
+    """`gbase-run start <run args>`: the run in a new session, detached from the caller. Returns once result.json
+    exists, printing the run id and its path, so a bot's command needs no nohup, redirect, or permission flag."""
+    proc = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), *argv],
+                            env={**os.environ, "GBASE_DETACHED": "1"}, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    out, err = proc.stdout.read(), proc.stderr.read()  # EOF once the runner moved its output to runner.log, or exited
+    sys.stderr.write(err)  # warnings from before the run detached, or why it failed to start (a bad argument)
+    if out.strip():
+        print(out.strip())
+        return 0
+    return proc.wait() or 1
 
 
 def killpg(proc, sig):
@@ -727,7 +770,7 @@ def cmd_stop(argv):
 def cmd_list(_argv):
     for d in sorted(RUNS.glob("*/result.json"), reverse=True):
         r = load_result(d.parent.name)
-        print(json.dumps({k: r.get(k) for k in ("run_id", "status", "slot", "repo", "started_at", "exit_code")},
+        print(json.dumps({k: r.get(k) for k in ("run_id", "status", "slot", "repo", "dir", "started_at", "exit_code")},
                          ensure_ascii=False))
 
 
@@ -771,7 +814,7 @@ def normalize_decision(text):
 
 def main():
     argv = sys.argv[1:]
-    commands = {"status": cmd_status, "stop": cmd_stop, "list": cmd_list, "question": cmd_question}
+    commands = {"start": cmd_start, "status": cmd_status, "stop": cmd_stop, "list": cmd_list, "question": cmd_question}
     if argv and argv[0] in commands:
         return commands[argv[0]](argv[1:]) or 0
     return cmd_run(argv)

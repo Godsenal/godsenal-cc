@@ -50,6 +50,8 @@ FAKE_CLAUDE = textwrap.dedent('''\
         "lessons": "카드 1편 완료\\n교훈: content-common — 2026-10-29 \\"이거별로\\": 규칙 A\\n교훈: instagram-card-news — 규칙 B\\n",
         "agent": "PR을 열었습니다\\npr: <https://github.com/o/r/pull/9>.\\nsettle: 수렴 @abc1234\\n"
                  if os.environ["AGENT_SHIP_OWNER"] == "agent" else "no ship owner\\n",
+        # go → monitor ran long and the last message kept only the settle line
+        "settled": "PR #64를 정리했습니다\\nsettle: 사람 필요 @7b0a03f\\n",
     }
     final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
@@ -445,7 +447,73 @@ class GbaseRunTest(unittest.TestCase):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "settle", "--model", "settle")
         self.assertEqual(json.loads(Path(out[-1]).read_text())["pr_url"], "https://github.com/o/r/pull/33")
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
-        self.assertIsNone(json.loads(Path(out[-1]).read_text())["pr_url"])  # only settle looks the PR up
+        self.assertIsNone(json.loads(Path(out[-1]).read_text())["pr_url"])  # an orchestrator-owned run opens no PR to look up
+
+    def fake_gh(self, url):
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "gh").write_text(f"#!/bin/sh\necho {url}\n")
+        (bin_dir / "gh").chmod(0o755)
+        self.env["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+
+    def test_agent_owned_work_run_finds_its_pr_without_a_pr_line(self):
+        self.fake_gh("https://github.com/o/r/pull/64")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "settled")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["pr_url"], result["settle"]), ("https://github.com/o/r/pull/64", "settle: 사람 필요 @7b0a03f"))
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--model", "settled")
+        self.assertIsNone(json.loads(Path(out[-1]).read_text())["pr_url"])  # an orchestrator-owned run opens no PR
+
+    def test_dir_runs_task_and_content_in_a_plain_folder(self):
+        folder = self.tmp / "tasks" / "carousel"
+        folder.mkdir(parents=True)
+        (folder / "prompt.md").write_text("캐러셀 초안 1편\n")
+        r, out = self.run_cli("--dir", str(folder), "--slot", "task", "--task-file", str(folder / "prompt.md"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["status"], result["repo"], result["dir"], result["cwd"]),
+                         ("done", None, str(folder.resolve()), str(folder.resolve())))
+        self.assertEqual((result["branch"], result["base"]), (None, None))
+        self.assertEqual(Path(result["prompt_path"]).read_text().strip(), "캐러셀 초안 1편")
+        # a follow-up answers run continues in the same folder
+        answers = self.tmp / "answers.json"
+        answers.write_text(json.dumps({"run_id": result["run_id"], "answers": [{"decision": "Q?", "answer": "B"}]}))
+        _, out = self.run_cli("--answers", str(answers))
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["cwd"], str(folder.resolve()))
+        _, out = self.run_cli("--dir", str(folder), "--slot", "content", "--task", "카드뉴스", "--model", "lessons")
+        self.assertTrue(json.loads(Path(out[-1]).read_text())["next"])
+        for args, err in [(["--slot", "work", "--task", "T"], "needs a --repo"),
+                          (["--slot", "task", "--task", "T", "--worktree", "w"], "drop --repo"),
+                          (["--slot", "task", "--task", "T", "--exclusive"], "drop --repo")]:
+            r, _ = self.run_cli("--dir", str(folder), *args)
+            self.assertIn(err, r.stderr)
+        r, _ = self.run_cli("--dir", str(self.tmp / "nope"), "--slot", "task", "--task", "T")
+        self.assertIn("is not a directory", r.stderr)
+
+    def test_start_returns_at_once_and_the_run_goes_on(self):
+        folder = self.tmp / "job"
+        folder.mkdir()
+        started = time.time()
+        r, out = self.run_cli("start", "--dir", str(folder), "--slot", "task", "--task", "T", "--model", "hang")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(time.time() - started, 10)  # the session itself never ends
+        run_id, path = out
+        self.assertEqual(Path(path), Path(self.env["GBASE_HOME"]).resolve() / "runs" / run_id / "result.json")
+        self.assertEqual(json.loads(self.run_cli("status", run_id)[0].stdout)["status"], "running")
+        r, out = self.run_cli("stop", run_id)
+        self.assertEqual(json.loads(out[-1])["stopped_by"], "SIGTERM")
+        # a run that ends on its own leaves the runner's output in runner.log
+        _, (run_id, path) = self.run_cli("start", "--dir", str(folder), "--slot", "task", "--task", "T")
+        deadline = time.time() + 30
+        while json.loads(self.run_cli("status", run_id)[0].stdout)["status"] == "running" and time.time() < deadline:
+            time.sleep(0.2)
+        self.assertEqual(json.loads(Path(path).read_text())["status"], "done")
+        self.assertEqual((Path(path).parent / "runner.log").read_text().strip().splitlines()[-1], path)
+        # a run that can't start fails the start itself
+        r, out = self.run_cli("start", "--dir", str(folder), "--slot", "work")
+        self.assertEqual((r.returncode != 0, out), (True, []))
+        self.assertIn("needs a --repo", r.stderr)
 
     def test_status_reports_dead_runner(self):
         run = Path(self.env["GBASE_HOME"]) / "runs" / "r1"
