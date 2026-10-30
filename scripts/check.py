@@ -89,6 +89,8 @@ CONTRACTS = [
     ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
     ("conflict resolution unreviewed", [skill("monitor")]),
     ("--exclusive", [ORCHESTRATOR, RUNNER]),
+    # bots start background runs with this one line, not a long nohup claude -p a permission classifier blocks
+    ("gbase-run start", [ORCHESTRATOR, RUNNER, FACTORY, "README.md"]),
     # settle's one rebase exception, so it stays one rule and not an open door
     ("explicitly asks to rebase", [skill("monitor"), ORCHESTRATOR, FACTORY, "README.md"]),
     # the runner reads mockup's report lines into result.json

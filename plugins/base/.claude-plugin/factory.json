@@ -67,12 +67,12 @@
     "content": {
       "invoke": "/gshorts:content-common <content request>",
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
-      "notes": "One piece of gshorts content (a short, card news, a Naver blog plan, an account name, bio, or caption) under content-common's rules; the request names the format, and that format's skill (shorts-common and its video formats, instagram-card-news, naver-blog) applies with it. Lives in the gshorts plugin: gbase-run loads every plugin of its checkout, an installed setup needs gshorts@godsenal. Outputs land in the work folder the request names; nothing is posted under AGENT_HEADLESS=1. Never edits the harness source: each lesson is a `교훈:` report line, which gbase-run hands to a `work` run (`next:`)."
+      "notes": "One piece of gshorts content (a short, card news, a Naver blog plan, an account name, bio, or caption) under content-common's rules; the request names the format, and that format's skill (shorts-common and its video formats, instagram-card-news, naver-blog) applies with it. Lives in the gshorts plugin: gbase-run loads every plugin of its checkout, an installed setup needs gshorts@godsenal. Outputs land in the work folder the request names; a work folder that isn't a git repo is run with `gbase-run --dir <folder>` instead of `--repo`. Nothing is posted under AGENT_HEADLESS=1. Never edits the harness source: each lesson is a `교훈:` report line, which gbase-run hands to a `work` run (`next:`)."
     },
     "task": {
       "invoke": "<task>",
       "env": [],
-      "notes": "A one-off run with no skill (research, a schedule change): the task is the whole prompt. Use it instead of a bare `claude -p` so the run still gets a stream-json log, result.json, status, and stop."
+      "notes": "A one-off run with no skill (research, a schedule change): the task is the whole prompt. Use it instead of a bare `claude -p` so the run still gets a stream-json log, result.json, status, and stop: `gbase-run start --slot task --dir <folder> --task-file <file>` runs it in the background in any folder, git or not."
     },
     "reproduce": {
       "invoke": "/gbase:reproduce <bug report or improvement request>",
