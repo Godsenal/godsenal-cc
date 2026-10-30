@@ -128,7 +128,7 @@ CONTRACTS = [
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
 SLOT_REQUIRED = {"invoke", "env", "notes"}
-SLOT_OPTIONAL = {"setup", "reads", "models"}
+SLOT_OPTIONAL = {"setup", "reads", "model", "models"}
 
 errors = []
 
@@ -299,6 +299,8 @@ def check_factory(pdir):
         models = spec.get("models")
         if models is not None and not (isinstance(models, list) and len(models) >= 2 and all(isinstance(m, str) and m for m in models)):
             fail(path, f"slot {slot}: models must list two or more model names")
+        if "model" in spec and (not isinstance(spec["model"], str) or not spec["model"] or models is not None):
+            fail(path, f"slot {slot}: model must be one model name, and not next to models")
         if not spec.get("notes"):
             fail(path, f"slot {slot}: empty notes")
         if spec.get("invoke") is None and not spec.get("reads"):

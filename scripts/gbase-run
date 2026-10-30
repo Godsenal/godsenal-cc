@@ -492,7 +492,7 @@ def cmd_run(argv):
         a.task = Path(a.task_file).expanduser().read_text(encoding="utf-8").strip()
     folder, repo = (a.dir, a.repo) if a.dir or a.repo else (prev.get("dir"), prev.get("repo"))
     slot = a.slot or prev.get("slot")
-    task, model = a.task or prev.get("task", ""), a.model or prev.get("model")
+    task = a.task or prev.get("task", "")
     a.ship_owner = a.ship_owner or prev.get("ship_owner") or "orchestrator"
     if not (repo or folder) or not slot:
         p.error("--repo (or --dir) and --slot are required (or --answers naming a previous run_id)")
@@ -518,6 +518,8 @@ def cmd_run(argv):
     if not task and re.search(r"<[^>]+>", spec["invoke"] or ""):
         sys.exit(f"gbase-run: slot {slot} needs --task for {spec['invoke']!r}")
     PLUGIN_DIRS[:] = plugin_dirs(slot, spec["invoke"])
+    # the answered run's model only on the same slot: a work run's opus isn't a ship run's choice
+    model = a.model or (prev.get("model") if slot == prev.get("slot") else None) or spec.get("model")
     if spec.get("models") and model:
         print(f"gbase-run: slot {slot} runs {', '.join(spec['models'])}; --model {model} ignored", file=sys.stderr)
 
