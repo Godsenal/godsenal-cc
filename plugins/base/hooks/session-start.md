@@ -11,6 +11,8 @@ Decide before your first edit, by what the change will touch, not by how easy it
 
 When the intent is already specific, enter that skill directly: `gbase:bug-fix`, `gbase:reproduce`, `gbase:how`, `gbase:why`, `gbase:blast-radius`, `gbase:go`.
 
+Before your first edit to anything a person sees on screen — a page, screen, component, onboarding, empty/loading/done state, on-screen copy, icon, or store screenshot — invoke `gbase:design-taste`, even for a single-file page and alongside any other design skill you load; its rules win where they disagree. Skip it for work with no UI (backend, scripts, CLI, infra).
+
 Delegate with gbase's agent types: `gbase:scout` for reading many files, logs, or transcripts; one `gbase:worker` per unit when a change splits into two or more independent code units.
 
 User instructions (CLAUDE.md, AGENTS.md, direct requests) take precedence. If another plugin's session-start mandate routes the same tasks to its own entry skill (pstack's `poteto-mode`), use `gbase:work` instead.
