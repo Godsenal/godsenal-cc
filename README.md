@@ -79,6 +79,13 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Saved to `$GBASE_MOCKUP_DIR` (default `~/design-mockups`) as `<app>-<YYYYMMDD>-<topic>-r<N>/`, outside the app repo; a revision is the next round. No copyrighted reference images, secrets, or real user data
 - Ends with `mockup:` / `mockup url:` / `mockup shots:` lines, which `gbase-run` reads into `result.json`
 
+**design-taste** (skill, model-invocable) — The user's own UI/UX taste, collected from their design feedback, loaded whenever a screen, component, onboarding, empty/loading state, on-screen copy, icon, or store screenshot is built or reviewed.
+
+- The UI leads the action (placement, a selected default, a peeking next card) instead of a caption that explains it; text stays only for input formats, money or irreversible consequences, errors, and an empty state's next step
+- Interactive onboarding placed where the user would otherwise wait; no feature, share button, or selling point nobody asked for; a redesign that visibly changes something; a reference's feel without copying its layout
+- Platform details count as done: safe areas, keyboard, the smallest screen, skeletons, current iOS materials, light and dark; screenshots before calling a screen done
+- Each rule cites the user's words in [`references/sources.md`](plugins/base/skills/design-taste/references/sources.md) with external references; new design feedback is reported as a `교훈: design-taste — …` line for a `work` run to ship. `mockup` and gapp's `design` load it first
+
 **how** (skill, model-invocable) — Explain how a part of the codebase works, with real files and functions. Ported from pstack's `how`.
 
 - Narrow questions are answered directly; a subsystem-wide one fans out 2–4 read-only explorers (Sonnet) on separate angles, then one explainer reconciles them
@@ -293,6 +300,7 @@ After installation, the following are available:
 /gbase:bug-fix                 # Fix a bug at its root cause — reproduce, narrow, verify on the same surface (skill, model-invocable)
 /gbase:reproduce <bug|request> # Turn a bug or request into a check that fails now — command, failing output, expected (skill, model-invocable)
 /gbase:mockup <request>        # Clickable single-file HTML mockup + screenshots, outside the repo (skill, explicit only)
+/gbase:design-taste            # The user's UI/UX taste rules, auto-loaded on screen work (skill, model-invocable)
 /gbase:how                     # How does X work — explained with real files (skill, model-invocable)
 /gbase:why                     # Why is X this way — cited from git, PRs, and connected sources (skill, model-invocable)
 /gbase:pause                   # Stop cleanly with a wip commit whose body is the resume note (skill, explicit only)
