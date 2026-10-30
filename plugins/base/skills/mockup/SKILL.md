@@ -21,6 +21,8 @@ A 시안 is something to look at and click, not a paragraph. Make the mockup fir
 
 When the current directory is the app's repo, read before drawing: the screen being changed and its neighbors (layout, navigation, component structure), the theme or token file (colors, spacing, radius), the fonts the app bundles, `DESIGN.md` if there is one, and the real strings (i18n files, the screen's text). A mockup in the app's own look is judged on the idea; one in a generic look gets judged on the look. Use real copy, and mark copy you invented. With no app repo, take the look from the request and say so.
 
+Read [`gbase:design-taste`](../design-taste/SKILL.md) before drawing; its rules are what the user rejects a 시안 for.
+
 Read only. The app's code isn't changed here, and nothing from the mockup goes into the app repo.
 
 Before any HTML, write the plan into `notes.md`: the tokens you took (a few named colors, type roles, spacing, radius, with the file each came from) and a small ASCII wireframe per option. Two wireframes that look alike mean two options that are alike; change one before building it.

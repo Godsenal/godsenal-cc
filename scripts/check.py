@@ -82,7 +82,9 @@ CONTRACTS = [
     ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
     ("gbase:unslop", [BRANCH_PR, skill("work")]),
     # content runs report lessons instead of editing the harness; the runner hands them to a work run
-    ("교훈:", [shorts("content-common"), shorts("shorts-common"), ORCHESTRATOR, RUNNER, FACTORY]),
+    ("교훈:", [shorts("content-common"), shorts("shorts-common"), skill("design-taste"), ORCHESTRATOR, RUNNER, FACTORY]),
+    # mockup and gapp's design load the user's taste rules before drawing
+    ("gbase:design-taste", [skill("mockup"), "plugins/app/skills/design/SKILL.md"]),
     # evidence records what a check ran on; a `differs:` input becomes a Review focus item
     ("`input`", [ORCHESTRATOR, skill("go"), skill("reproduce")]),
     ("differs:", [ORCHESTRATOR, skill("go"), skill("reproduce"), BRANCH_PR]),
