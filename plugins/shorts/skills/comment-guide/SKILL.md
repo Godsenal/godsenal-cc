@@ -6,7 +6,7 @@ description: >-
   YouTube videos, Naver 지식iN answers, X quote posts, Instagram and Threads comments. It holds the 해요체
   voice (on X, one short line of about 10–30자 that follows the commenter's tone, measured on 2026-10-29),
   no source wording, DM bait, or made-up experience, only facts checked on an official page, the link
-  rules (no link on big YouTube channels, one link on small ones, at most 2 link comments per round, no link
+  rules (no link on big YouTube channels, one link on small ones, no link
   on X, Instagram, or Threads), per-platform daily limits, and how to watch for hidden or deleted comments
   and when to stop a platform. Rules come from the comment-boost runs of 2026-10-28–29. Use before writing
   or posting any comment, reply, 지식iN answer, or X quote post, or when a comment was hidden or deleted.
@@ -41,14 +41,16 @@ Read this before writing any comment. Every rule in [content-common](../content-
 
 ### Links and limits
 
-| Platform (account) | Link | Limit |
+**Count limits (per day, per round, per channel) are not kept in this skill.** They live in one place only, the caller's work-folder guide (for 컨텐츠 부스팅: `$HOME/LTH/content-boost/GUIDE.md`, section "하루·회차 한도"), managed by 컨텐츠대장 (user decision 2026-10-30). Use only a number the user set or a platform's published limit; never invent one. If a limit seems needed for account safety, say why once and ask the user for the number.
+
+| Platform (account) | Link | Pacing |
 |---|---|---|
-| YouTube (@moneyalim) | Big channel (news/broadcaster — SBS, YTN, KBS, MBC, JTBC, 연합뉴스, 채널A, MBN, TV조선 … — or 50만+ subscribers): **no link**, content only. Smaller channel: **one** link, our matching short first, a Naver blog post only if no short fits; never a TikTok link | Same channel: one link comment a day |
+| YouTube (@moneyalim) | Big channel (news/broadcaster — SBS, YTN, KBS, MBC, JTBC, 연합뉴스, 채널A, MBN, TV조선 … — or 50만+ subscribers): **no link**, content only. Smaller channel: **one** link, our matching short first, a Naver blog post only if no short fits; never a TikTok link | Limit: see the guide |
 | 지식iN | One matching link (short or blog post) | — |
 | X (@wolgeupnal) | **No link.** Quote post + one line of opinion; never a link reply on someone else's post | — |
-| Threads, Instagram (@haedollar) | **No link** (stage 1) | Threads 10/day, Instagram 6/day (user decision 2026-10-30), 20+ min apart, alternate the two |
+| Threads, Instagram (@haedollar) | **No link** (stage 1) | Limit: see the guide. Space comments apart and alternate the two |
 
-- **At most 2 link comments per round.** The round cap is 3 comments (2026-10-28 15:54), and since X dropped links (2026-10-29 14:00) only YouTube and 지식iN carry one. A Meta comment is added on top, without a link.
+- Per-round caps (link comments, total comments, the extra Meta comment) are in the guide, not here. Since X dropped links (2026-10-29 14:00), only YouTube and 지식iN carry one.
 - Why the YouTube split (user decision 2026-10-28 16:46, kept on resume 23:41): 4 blog-link comments on big channels were missing from the logged-out list while small-channel ones stayed up. Blog-link comments kept getting hidden or deleted even on small channels; after the 23:41 resume the first real deletion was a blog link (fB2x-bzXWOc), so when no short fits, leave the slot empty rather than force a blog link.
 - Why X changed (user decision 2026-10-29 14:00 "1. ㄱㄱ"): 18 of 32 @wolgeupnal posts were link replies and looked like spam; the money accounts that do well quote with one line and no link. Log the quote post's own permalink as "X 인용(@wolgeupnal)".
 - No likes, no mass follows. Follow-backs follow content-common's follow-back rule.
