@@ -46,7 +46,7 @@ Read this before writing any comment. Every rule in [content-common](../content-
 | YouTube (@moneyalim) | Big channel (news/broadcaster — SBS, YTN, KBS, MBC, JTBC, 연합뉴스, 채널A, MBN, TV조선 … — or 50만+ subscribers): **no link**, content only. Smaller channel: **one** link, our matching short first, a Naver blog post only if no short fits; never a TikTok link | Same channel: one link comment a day |
 | 지식iN | One matching link (short or blog post) | — |
 | X (@wolgeupnal) | **No link.** Quote post + one line of opinion; never a link reply on someone else's post | — |
-| Threads, Instagram (@haedollar) | **No link** (stage 1) | Threads 5/day, Instagram 3/day, 20+ min apart, alternate the two |
+| Threads, Instagram (@haedollar) | **No link** (stage 1) | Threads 10/day, Instagram 6/day (user decision 2026-10-30), 20+ min apart, alternate the two |
 
 - **At most 2 link comments per round.** The round cap is 3 comments (2026-10-28 15:54), and since X dropped links (2026-10-29 14:00) only YouTube and 지식iN carry one. A Meta comment is added on top, without a link.
 - Why the YouTube split (user decision 2026-10-28 16:46, kept on resume 23:41): 4 blog-link comments on big channels were missing from the logged-out list while small-channel ones stayed up. Blog-link comments kept getting hidden or deleted even on small channels; after the 23:41 resume the first real deletion was a blog link (fB2x-bzXWOc), so when no short fits, leave the slot empty rather than force a blog link.
