@@ -57,13 +57,13 @@ API 형식과 질문 작성법은 외워 쓰지 말고 매번 `https://docs.type
    - `packages/core/src/normalize.ts`의 `CATEGORY_RULES` 정규식은 `other`로 떨어진 공고만 Jev로 재분류한다.
    - `apps/crawler/src/funding/extract.ts`의 "한국 기업 투자유치 확정인가"는 `noul`, 라운드는 `choice`로 판정한다. 금액·회사명 추출은 생성이라 Haiku가 계속 맡는다.
 2. **gshorts 댓글·답변 봇(comment-boost, 지식iN, X 인용)**:
-   - 대상 고르기 전 필터: 스팸·리딩방 글 `noul`, 답글 제한 `noul`, "우리 블로그 글로 답할 수 있는 질문인가" `score`. Claude가 후보를 다 읽기 전에 줄인다.
+   - 대상 고르기 전 필터: **들어가 있음**(2026-11-01) — gshorts `comment-guide/scripts/jev_prefilter.py`(스팸 `noul` + 끼어들 만함 `score`). 답글 제한 `noul`, "우리 블로그 글로 답할 수 있는 질문인가" `score`는 아직 없다.
    - 쓴 뒤 게이트: "답변이 블로그 글 내용과 어긋나지 않는다" `noul`, x-voice·threads-voice의 봇 신호 체크리스트를 항목별 `noul`로 검사한다. 글자·줄 수는 코드로 센다.
 3. **gshorts 콘텐츠 제작**:
    - 레퍼런스 글 여러 개를 `score`(성과 신호·형식 적합도)로 순위를 매긴다.
    - hook-templates 25개 중 이 주제에 맞는 것을 `choice`로 고른다.
    - 자막·대본 줄 중 첫 줄 후보를 `choice`로 고른다. Jev는 "긴 글에서 가장 좋은 부분 문자열 고르기"에 특히 강하다.
-   - 숏츠·카드뉴스 9:16 크롭에서 피사체 위치를 `box`로 찾는다(preview).
+   - 숏츠 크롭 초점: **들어가 있음**(2026-11-01) — gshorts `foreign-clip-short/scripts/jev_focus.py`(얼굴 `box` + 사람 있음 `noul`, preview). 카드뉴스 크롭은 아직 없다.
 4. **Grok Bot 메시지 라우팅(리마인더·여행·채용 등)**: 들어온 요청을 어느 봇/핸들러로 보낼지 `choice`, 급한지 `score`. 애매하면(confidence 낮음) 지금처럼 Claude에 넘긴다.
 5. **gbase 하네스**(개인 레포만):
    - `go`/`branch-pr`의 risk tier는 `choice`로 2차 의견을 받는다.

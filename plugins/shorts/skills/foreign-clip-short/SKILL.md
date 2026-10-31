@@ -74,6 +74,7 @@ Narration stays at 3–4 lines in every variant (2026-10-26 "해설 양은 지�
 - Subtitles inside the footage at 60% of its height (B).
 - Cover: same style with the title (a frame at 0.5–1s showing the title and the product, per shorts-common).
 - Pipeline: `frame: box` (default) in `plan.json`; per-cut focus `x` (0–1); a numeric `crop` (<1) hides burned-in name bars. Details in `docs/SHARK_TANK.md`.
+- **Face-aware focus** (user decision 2026-11-01): after `plan.json` is final and before rendering, run `python3 <this skill>/scripts/jev_focus.py out/<folder>/work/plan.json`. It asks Jev (Box, preview) where the main face is in each cut and moves `x` only where the face would be cut by the current window; shots without a person and faces already inside stay as they are. **Open `out/<folder>/check/jev-focus.jpg` before rendering** (red = face, gray = old window, yellow = new) and put back any `x` it moved onto the wrong person — it is unreliable on wide multi-person shots, which is why its box-confidence gate is 0.5. On a 20-cut Kitchen Nightmares plan it moved 2 cuts, both faces the center crop had cut. No `TYPESAFE_API_KEY` or a Jev/ffmpeg error → the plan is left untouched (center crop as before).
 
 ## Narration examples (tone rules are in shorts-common)
 
