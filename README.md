@@ -210,6 +210,12 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Documents the trap that cost a session: `import --browser chrome --profile X` reports success, but task spaces still open on the **default** profile, so the account never changes
 - Verify the logged-in account over the service's API (`/api/users/@me/`) *before* acting — the UI looks signed in either way, and the mismatch only surfaces as "that project isn't in the list"
 - Re-auth walls on sensitive settings (API keys, billing) stay a human step: hand off, wait for confirmation, take over
+
+**jev** (skill, model-invocable) — Put TypeSafe's Jev (Choice / Score / Noul / Box decisions with calibrated probabilities) into bot and app steps that classify, route, score, filter, or pick.
+
+- Bot-by-bot use-case map ranked by impact (kr-it-jobs classifier first, then gshorts comment/answer gates and content picks, Grok Bot routing, gbase harness)
+- Shell and headless calls go through the `jev` CLI that dotfiles installs on bots machines; the key comes only from `TYPESAFE_API_KEY`, and without it the bot falls back to its old path and reports `결정 필요:`
+- Run Jev beside the existing rule or LLM and review 20–50 disagreements before swapping; low `confidence` routes back to Claude or a person; no company code or personal data goes out
 - Recovering an undocumented signature: call it wrong on purpose and read the error
 
 ### Running gbase from an orchestrator
@@ -318,6 +324,7 @@ After installation, the following are available:
 /gbase:correct [--session]     # Turn recurring review/CI mistakes into checks; --session = retro on one session (skill)
 /gbase:karpathy [--user]       # Merge Karpathy's behavioral guidelines into CLAUDE.md — additive + idempotent (skill)
 /gbase:ego-profile             # Switch ego-browser to another account/profile (skill, model-invocable)
+/gbase:jev                     # Where and how to use Jev (TypeSafe) typed decisions in bots (skill, model-invocable)
 
 /gapp:kickoff                  # New app idea → office-hours interview → decisions + HARNESS.md
 /gapp:next                     # Resume: where am I? → runs the next stage automatically
