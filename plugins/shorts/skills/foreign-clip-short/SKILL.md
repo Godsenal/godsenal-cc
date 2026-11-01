@@ -76,6 +76,13 @@ Narration stays at 3–4 lines in every variant (2026-10-26 "해설 양은 지�
 - Pipeline: `frame: box` (default) in `plan.json`; per-cut focus `x` (0–1); a numeric `crop` (<1) hides burned-in name bars. Details in `docs/SHARK_TANK.md`.
 - **Face-aware focus** (user decision 2026-11-01): after `plan.json` is final and before rendering, run `python3 <this skill>/scripts/jev_focus.py out/<folder>/work/plan.json`. It asks Jev (Box, preview) where the main face is in each cut and moves `x` only where the face would be cut by the current window; shots without a person and faces already inside stay as they are. **Open `out/<folder>/check/jev-focus.jpg` before rendering** (red = face, gray = old window, yellow = new) and put back any `x` it moved onto the wrong person — it is unreliable on wide multi-person shots, which is why its box-confidence gate is 0.5. On a 20-cut Kitchen Nightmares plan it moved 2 cuts, both faces the center crop had cut. No `TYPESAFE_API_KEY` or a Jev/ffmpeg error → the plan is left untouched (center crop as before).
 
+  **재현 경로** (Mac mini 봇·headless). Resolve the script from the `gshorts@godsenal` `installPath` in `~/.claude/plugins/installed_plugins.json` on every run, never a hardcoded version path. That file can hold several entries (user and project scope, an older version without the script), so take the first one where the script exists. Run it through `zsh -c` so `~/.zshenv` loads `TYPESAFE_API_KEY`; a launchd job that starts bash or python directly never reads that file, so the script falls back to `skipped`.
+  ```bash
+  S=$(python3 -c 'import json,os,sys; e=json.load(open(os.path.expanduser("~/.claude/plugins/installed_plugins.json")))["plugins"]["gshorts@godsenal"]; print(next(p for p in (i["installPath"]+"/skills/"+sys.argv[1] for i in e) if os.path.exists(p)))' foreign-clip-short/scripts/jev_focus.py)
+  zsh -c "python3 '$S' out/<folder>/work/plan.json"
+  ```
+  Copy its stderr line (`jev-focus: ok: 자리 N개 중 M개 x 변경, …`, or `skipped: …`) into the run's notes.
+
 ## Narration examples (tone rules are in shorts-common)
 
 - Hook: "샤크탱크 역사상 가장 빠른 딜이었다는데", "21살 발명품에 샤크들이 싸웠다는데", "잡초 뽑다 주운 돌을 30년이나 갖고 있었다는데".
