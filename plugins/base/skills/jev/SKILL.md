@@ -40,7 +40,9 @@ API 형식과 질문 작성법은 외워 쓰지 말고 매번 `https://docs.type
   jev ask request.json        # 질문 여러 개를 한 요청에 (항상 이쪽이 싸고 빠르다)
   ```
 - 앱 코드: `@typesafe-ai/sdk`(Node 22+) 또는 `typesafe-sdk`(Python). 둘 다 `TYPESAFE_API_KEY`를 읽는다.
-- 키는 `TYPESAFE_API_KEY` 환경변수로만 받는다. 이 Mac mini에서는 `~/.zshrc.local`에 둔다. 값을 파일·로그·PR·커밋에 남기지 않는다. 키가 없으면 `jev`는 exit 3으로 끝난다. 이때 봇은 하던 방식(기존 규칙이나 LLM)으로 돌아가고, 리포트에 `결정 필요: TYPESAFE_API_KEY 없음` 한 줄을 남긴다.
+- 키는 `TYPESAFE_API_KEY` 환경변수로만 받는다. 이 Mac mini에서는 `~/.zshrc.secrets`(600, chezmoi 밖)에 있고 `~/.zshrc.local`에는 없다. 키 값도 파일 내용도 출력하지 않는다(`cat`·`echo $TYPESAFE_API_KEY` 금지, 있는지는 `[ -n "$TYPESAFE_API_KEY" ]`로만 본다). 파일·로그·PR·커밋에도 남기지 않는다. `TYPESAFE_API_KEY`가 없으면 `jev`는 exit 3으로 끝난다. 이때 봇은 하던 방식(기존 규칙이나 LLM)으로 돌아가고, 리포트에 `결정 필요: TYPESAFE_API_KEY 없음` 한 줄을 남긴다.
+- **비대화형 실행은 zsh를 거쳐야 키가 보인다.** Mac mini 전용 `~/.zshenv`가 `~/.zshrc.secrets`를 source하므로 봇·headless(`gbase-run`, `claude -p`)는 `zsh -c '…'`나 `zsh -lc '…'`로 띄운다. bash·python을 바로 띄우는 launchd 잡은 `~/.zshenv`를 읽지 않으니 `~/.secrets/<job>.env`를 직접 source한다(키는 그 파일에 넣는다).
+- age 키(`~/.config/chezmoi/key.txt`)가 없는 머신은 암호화된 시크릿을 풀지 못해 평문 600 파일로 운영 중일 수 있다.
 
 ## 넣는 방법 (실수 방지)
 
