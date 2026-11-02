@@ -92,11 +92,7 @@ It validates the JSON (title ≤16자, ≤3 body lines, values fit, hold ≥4 s)
 - **Bot signals** — 2026-10-29 (user decision 17:34), same as [threads-voice](../threads-voice/SKILL.md)'s: no "(저장/공유)"-style tag at the head of the first line (8 of 57 references had one; we don't), no closing "여러분 ~? 👇" question. End on the take.
 - **Ending** — one CTA line written for that post, never the same line twice in a row (the last-card rule above applies to the caption too); it says the same follow reason as the follow card, in other words. One DM line only when the post has a reward slide; it names the keyword and the resource exactly as on the slide (19 of 57 references used a DM line; the conditions are [content-common](../content-common/SKILL.md)'s).
 - **No credits, no mascot voice** — no "출처" or "📷 ○○" line (12 of 57 references had one) and no 금동이 or third-person character lines ([content-common](../content-common/SKILL.md)).
-- **Self-check** — count before handing off and put one line in the work report, e.g. `caption-check: 첫줄 24자 | 238자 11줄 | 이모지 2 | 태그 3 | 봇 신호 0`:
-
-```bash
-python3 -c 'import re,sys;t=open(sys.argv[1]).read();g=re.findall(r"#\S+",t);b=re.sub(r"#\S+","",t);L=[l.strip() for l in b.splitlines() if l.strip()];e=re.findall("[\U0001F000-\U0001FAFF☀-➿]",b);print("첫줄",len(L[0]),"자 |",len("".join(L)),"자",len(L),"줄 | 이모지",len(e),"| 태그",len(g))' caption.txt
-```
+- **Self-check** — run content-common's `ig_clean.py` on the caption, then `python3 <content-common>/scripts/ig_caption.py caption.txt` (it counts Korean hashtags and FAILs a DM line unless you pass `--reward-slide`). Fix every FAIL, then put its last line in the work report, e.g. `caption-check: 첫줄 24자 | 238자 11줄 | 이모지 2 | 태그 3 | 봇 신호 0`, and compare it with the table above.
 
 ## Threads summary
 
