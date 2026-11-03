@@ -57,6 +57,7 @@ CONTRACTS = [
     ("ship-owner: orchestrator", [skill("go"), BRANCH_PR]),
     ("pr-body-file:", [skill("go"), BRANCH_PR]),
     ("ship: local", [BRANCH_PR, ORCHESTRATOR, skill("monitor")]),
+    ("ship: skip —", [HEADLESS, ORCHESTRATOR]),  # a shipping step the caller put out of scope, not a decision
     ("pr 본문 초안:", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, skill("monitor")]),
     ("--until-settled", [skill("monitor"), skill("go"), ORCHESTRATOR]),
     # agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url

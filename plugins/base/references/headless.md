@@ -42,6 +42,10 @@ One line per decision, at the end of the final report, each starting at column 0
 결정 필요: <되돌리기 어려운 단계> → 하지 않음 (추천: <추천한 것>; 사람이 할 일: <…>)
 ```
 
+Each line stands alone: a bot that greps only these lines has to be able to ask the person from it. Name the thing in the line (the flag, the file, the PR number) instead of pointing at the report — no `위 2건`, `아래`, `이 PR의 2건`; two decisions are two lines. A line that only pointed back ("위 2건을 확인해 주세요", no options) reached no one.
+
+A step the caller put out of scope or forbade (push, PR, deploy: "do not push", "Out of scope: push/PR") gets no `결정 필요:` line; a `ship: skip — <reason>` line (or the usual `ship: local …`) says it wasn't done. Asking about it anyway made a decision the bot had to drop as noise.
+
 `→` is followed by what this run actually applied; `추천:` is what the skill would pick with a person present, even when it equals the applied default. A caller parses these parts, so keep the order, the `; ` between them, and the ` / ` between options, and keep the reasoning out of the line — put it in the report above.
 
 A skill called by another skill hands its lines up; the outermost skill's report carries all of them.

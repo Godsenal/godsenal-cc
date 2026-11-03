@@ -23,6 +23,21 @@ FAKE_CLAUDE = textwrap.dedent('''\
     import json, os, subprocess, sys
     args = sys.argv[1:]
     model = args[args.index("--model") + 1] if "--model" in args else "default"
+    cfg = os.environ.get("CLAUDE_CONFIG_DIR", "")
+    marker = lambda name: bool(cfg) and os.path.exists(os.path.join(cfg, name))
+    if "--max-turns" in args:  # gbase-run's account preflight: logged-out fails it, logged-out-run doesn't
+        if cfg:
+            open(os.path.join(cfg, "preflights"), "a").write("x")
+        bad = marker("logged-out")
+        print(json.dumps({"type": "result", "is_error": bad, "result": "Not logged in · Please run /login" if bad else "ok"}))
+        sys.exit(1 if bad else 0)
+    if marker("logged-out") or marker("logged-out-run") or marker("limited-run"):  # ends before any tool call
+        print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-x", "model": model}))
+        limited = marker("limited-run")
+        print(json.dumps({"type": "result", "is_error": True, "terminal_reason": "api_error",
+                          **({"api_error": "usage_limit_reached"} if limited else {}),
+                          "result": "You've hit your 5-hour limit · resets 1:50pm" if limited else "Not logged in · Please run /login"}))
+        sys.exit(1)
     assert args[args.index("--plugin-dir") + 1].endswith("plugins/base")
     assert "ScheduleWakeup" in args[args.index("--disallowedTools") + 1]
     assert "GITHUB_TOKEN" not in os.environ
@@ -34,6 +49,13 @@ FAKE_CLAUDE = textwrap.dedent('''\
         open(os.path.join(run_dir, "child.pid"), "w").write(str(child.pid))
         print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-hang", "model": model}), flush=True)
         child.wait()
+    open(os.path.join(run_dir, "ran-on"), "a").write(os.path.basename(cfg) + "\\n")
+    print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill",
+                                                                    "input": {"skill": "gbase:go"}}]}}))
+    if model == "commits":  # a session that commits c.txt in its checkout
+        open("c.txt", "w").write(os.environ.get("FAKE_CONTENT", "run") + "\\n")
+        subprocess.run(["git", "add", "c.txt"], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "run commit"], check=True)
     subprocess.run(["sh", "-c", os.environ["AGENT_ASK_CMD"] + ' "$@"', "ask", "Q?", "--recommend", "A", "--option", "B"])
     with open(os.environ["AGENT_EVIDENCE_FILE"], "a") as f:
         f.write(json.dumps({"step": "checks", "result": "pass", "command": "true", "detail": model}) + "\\n")
@@ -89,8 +111,10 @@ class GbaseRunTest(unittest.TestCase):
         fake.write_text(FAKE_CLAUDE)
         fake.chmod(0o755)
         self.env = {**os.environ, "GBASE_CLAUDE": str(fake), "GBASE_HOME": str(self.tmp / "home"),
-                    "GITHUB_TOKEN": "stale"}
-        self.env.pop("GBASE_ASK_CMD", None)
+                    "GITHUB_TOKEN": "stale", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        for k in ("GBASE_ASK_CMD", "GBASE_ACCOUNTS", "CLAUDE_CONFIG_DIR"):
+            self.env.pop(k, None)
 
     def seed_answers(self, answers):
         run_dir = self.tmp / "home" / "runs" / "r1"
@@ -113,7 +137,8 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(result["status"], "done")
         self.assertEqual(result["branch"], "main")
         self.assertEqual(result["decisions"], [{"text": "결정 필요: x → y (추천: z; 다른 선택지: z / w)", "question": "x",
-                                                "applied": "y", "recommend": "z", "options": ["z", "w"], "human": None}])
+                                                "applied": "y", "recommend": "z", "options": ["z", "w"], "human": None,
+                                                "incomplete": False}])
         self.assertTrue(result["ship"].startswith("ship: local feat/x"))
         self.assertEqual(result["pr_body_file"], str(Path(result["run_dir"]) / "pr-body.md"))
         self.assertEqual(result["evidence"][0]["detail"], "haiku")
@@ -141,6 +166,9 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(result["pr_url"], "https://github.com/o/r/pull/9")
         self.assertEqual(result["settle"], "settle: 수렴 @abc1234")
         self.assertIsNone(result["ship"])
+        line = f"Claude Code · agent · 계정 default · run {result['run_id']} · 스킬 gbase:work→go"
+        self.assertEqual((result["provenance"], result["account"]), (line, "default"))
+        self.assertEqual(self.run_cli("cite", result["run_id"])[1], [line])
         # answering its decisions keeps the run agent-owned
         answers = self.tmp / "answers.json"
         answers.write_text(json.dumps({"run_id": result["run_id"], "answers": []}))
@@ -207,12 +235,26 @@ class GbaseRunTest(unittest.TestCase):
                  "결정 필요: no arrow (aside)", "결정 필요: Pick A · B? → A · B"]
         parsed = [gbase_run.parse_decision(line) for line in lines]
         self.assertEqual([d.pop("text") for d in parsed], lines)
+        self.assertEqual([d.pop("incomplete") for d in parsed], [False] * 5)
         self.assertEqual(parsed, [
             {"question": "rename a → b?", "applied": "열어둠 (draft)", "recommend": "고침", "options": ["x → y", "z (w)"], "human": None},
             {"question": "x", "applied": "y", "recommend": None, "options": ["z"], "human": None},
             {"question": "merge", "applied": "하지 않음", "recommend": None, "options": [], "human": "gh pr merge 7"},
             {"question": "no arrow (aside)", "applied": None, "recommend": None, "options": [], "human": None},
             {"question": "Pick A · B?", "applied": "A · B", "recommend": None, "options": [], "human": None}])
+
+    def test_a_decision_that_points_at_the_report_is_incomplete(self):
+        # run 20261102-121409-work-3e7261: the question is only in final.md
+        d = gbase_run.parse_decision("결정 필요: 위 2건을 확인해 주세요. 그대로 두면 이 PR 상태대로 머지 대기입니다.")
+        self.assertEqual((d["recommend"], d["options"], d["incomplete"]), (None, [], True))
+        self.assertTrue(gbase_run.parse_decision("결정 필요: 이 PR의 2건 → 그대로 둠")["incomplete"])
+        self.assertFalse(gbase_run.parse_decision("결정 필요: 위 2건 → 둠 (추천: 고침)")["incomplete"])  # 추천 says what
+        # run 20261102-235341-work-bae706: self-contained, so not incomplete; the prompt had put push out of scope,
+        # which headless.md now keeps from becoming a decision at all
+        d = gbase_run.parse_decision("결정 필요: `feat/feedback`를 원격에 올리거나 PR을 열려면 쓸 수 있는 remote를 정하고 "
+                                     "push를 따로 요청해 주세요")
+        self.assertFalse(d["incomplete"])
+        self.assertFalse(gbase_run.parse_decision("결정 필요: 위험한 마이그레이션을 지금 돌릴까요? → 안 돌림")["incomplete"])
 
     def test_question_matches_a_pasted_full_report_line(self):
         self.seed_answers([
@@ -318,9 +360,10 @@ class GbaseRunTest(unittest.TestCase):
                 break
             time.sleep(0.1)
         child = int(pids[0].read_text())
-        r, out = self.run_cli("stop", pids[0].parent.name)
+        r, out = self.run_cli("stop", pids[0].parent.name, "--reason", "TTL만 넣는 작업이라 끊음")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(json.loads(out[-1])["stopped_by"], "SIGTERM")
+        self.assertEqual((json.loads(out[-1])["stopped_by"], json.loads(out[-1])["stop_reason"]),
+                         ("SIGTERM", "TTL만 넣는 작업이라 끊음"))
         runner.wait(timeout=10)
         result = json.loads((pids[0].parent / "result.json").read_text())
         self.assertEqual((result["status"], result["stopped_by"]), ("failed", "SIGTERM"))
@@ -526,6 +569,138 @@ class GbaseRunTest(unittest.TestCase):
         r, out = self.run_cli("start", "--dir", str(folder), "--slot", "work")
         self.assertEqual((r.returncode != 0, out), (True, []))
         self.assertIn("needs a --repo", r.stderr)
+
+    def accounts(self, **markers):
+        """GBASE_ACCOUNTS of config dirs a, b, … ; markers name files the fake claude reacts to (logged-out fails
+        the preflight too, logged-out-run and limited-run only the real session)."""
+        names = []
+        for name, files in markers.items():
+            d = self.tmp / "acct" / name
+            d.mkdir(parents=True, exist_ok=True)
+            for f in d.iterdir():
+                f.unlink()
+            for f in files:
+                (d / f).touch()
+            names.append(f"{name}:{d}")
+        self.env.update(GBASE_ACCOUNTS=",".join(names), GBASE_PREFLIGHT_TTL="0")
+
+    def g(self, *args, cwd=None):
+        return subprocess.run(["git", "-C", str(cwd or self.repo), *args], capture_output=True, text=True).stdout.strip()
+
+    def test_a_logged_out_account_hands_the_run_to_the_next_and_leaves_no_worktree(self):
+        # the session itself fails on "Not logged in" (the preflight passed): the same prompt runs on b
+        self.accounts(a=["logged-out-run"], b=[])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w1")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["status"], result["account"], result["failure"]), ("done", "b", None))
+        self.assertEqual([(f["kind"], f["account"], f["stage"]) for f in result["failures"]], [("auth", "a", "run")])
+        self.assertEqual((Path(result["run_dir"]) / "ran-on").read_text().split(), ["b"])
+        self.assertIn("계정 b", result["provenance"])
+        # the preflight catches it: no session, and no worktree made for the account that can't run
+        self.accounts(a=["logged-out"], b=["logged-out"])
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w2")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["status"], result["failure"]["kind"], result["account"]), ("failed", "auth", None))
+        self.assertEqual([f["stage"] for f in result["failures"]], ["preflight", "preflight"])
+        self.assertIn("no account can run", r.stderr)
+        self.assertFalse(gbase_run.worktree_path(self.repo.resolve(), "w2").exists())
+        self.assertEqual(self.g("branch", "--list", "gbase/w2"), "")
+        # every session fails before any tool call: the worktree made for the run goes with it
+        self.accounts(a=["logged-out-run"], b=["limited-run"])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w3")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["failure"]["kind"], result["failure"]["account"], result["worktree_removed"]),
+                         ("usage_limit", "b", True))
+        self.assertIn("5-hour limit", result["failure"]["detail"])
+        self.assertFalse(Path(result["cwd"]).exists())
+        self.assertEqual(self.g("branch", "--list", "gbase/w3"), "")
+
+    def test_an_account_that_auth_failed_on_the_task_goes_last_and_answers_keep_the_account(self):
+        self.accounts(a=["logged-out-run"], b=[])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "reproduce", "--task", "T-9")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["account"], "b")
+        self.accounts(a=[], b=[])  # a works again, but the same task starts on b
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "reproduce", "--task", "T-9")
+        first = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((first["account"], first["failures"]), ("b", []))
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "reproduce", "--task", "T-10")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["account"], "a")
+        answers = self.tmp / "answers.json"
+        answers.write_text(json.dumps({"run_id": first["run_id"], "answers": []}))
+        _, out = self.run_cli("--answers", str(answers))
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["account"], "b")
+
+    def test_preflight_is_cached(self):
+        self.accounts(a=[])
+        self.env["GBASE_PREFLIGHT_TTL"] = "300"
+        for _ in range(2):
+            self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        self.assertEqual((self.tmp / "acct" / "a" / "preflights").read_text(), "x")
+
+    def test_without_origin_the_base_is_the_checked_out_branch_and_land_brings_the_commit(self):
+        self.g("checkout", "-q", "-b", "feat/feedback")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "fb", "--model", "commits")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["base"], {"ref": "feat/feedback", "ahead": 1, "behind": 0})
+        self.assertEqual(result["landed"], {"ref": "feat/feedback", "contains_head": False})
+        self.assertEqual(result["next"], f"커밋 {result['head_sha'][:7]}는 gbase/fb에만 있음. feat/feedback에 넣으려면 "
+                                         f"`gbase-run land {result['run_id']}`")
+        self.assertEqual(out[-2], f"next: {result['next']}")
+        r, out = self.run_cli("land", result["run_id"])
+        self.assertEqual((r.returncode, json.loads(out[-1])["method"]), (0, "fast-forward"), r.stderr)
+        self.assertEqual(self.g("rev-parse", "HEAD"), result["head_sha"])
+        self.assertEqual(self.g("status", "--porcelain"), "")  # the checked-out branch moved with its files
+        landed = json.loads(self.run_cli("status", result["run_id"])[0].stdout)
+        self.assertEqual((landed["landed"]["contains_head"], landed["next"]), (True, None))
+        # the branch moved on meanwhile: the run's commit is cherry-picked
+        self.env["FAKE_CONTENT"] = "second"
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "fb", "--model", "commits")
+        second = json.loads(Path(out[-1]).read_text())
+        self.g("commit", "-q", "--allow-empty", "-m", "elsewhere")
+        r, out = self.run_cli("land", second["run_id"])
+        self.assertEqual((r.returncode, json.loads(out[-1])["method"]), (0, "cherry-pick"), r.stderr)
+        self.assertEqual((self.repo / "c.txt").read_text(), "second\n")
+        # a later run on the same worktree: the commit landed by cherry-pick isn't picked again
+        self.env["FAKE_CONTENT"] = "second-b"
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "fb", "--model", "commits")
+        r, out = self.run_cli("land", json.loads(Path(out[-1]).read_text())["run_id"])
+        self.assertEqual((r.returncode, json.loads(out[-1])["method"]), (0, "cherry-pick"), r.stderr)
+        self.assertEqual((self.repo / "c.txt").read_text(), "second-b\n")
+        # a conflict stops it with the branch where it was
+        self.env["FAKE_CONTENT"] = "third"
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "fb", "--model", "commits")
+        third = json.loads(Path(out[-1]).read_text())
+        (self.repo / "c.txt").write_text("mine\n")
+        self.g("commit", "-qam", "mine")
+        tip = self.g("rev-parse", "HEAD")
+        r, _ = self.run_cli("land", third["run_id"])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("conflict", r.stderr)
+        self.assertEqual((self.g("rev-parse", "HEAD"), self.g("status", "--porcelain")), (tip, ""))
+        self.assertEqual(self.g("worktree", "list").count("\n"), 1)  # the scratch worktree is gone
+
+    def test_gc_removes_landed_worktrees_and_keeps_dirty_or_unlanded_ones(self):
+        runs = {}
+        for name, model in [("merged", "commits"), ("empty", None), ("dirty", None), ("open", "commits"),
+                            ("open-pr42", "commits")]:
+            self.env["FAKE_CONTENT"] = name
+            _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", name,
+                                  *(("--model", model) if model else ()))
+            runs[name] = json.loads(Path(out[-1]).read_text())
+        self.g("merge", "-q", "--ff-only", "gbase/merged")
+        (Path(runs["dirty"]["cwd"]) / "notes.txt").write_text("wip")
+        r, out = self.run_cli("gc", "--older-than", "3d")
+        self.assertTrue(all(json.loads(line)["action"] == "keep" for line in out), out)  # all younger than 3 days
+        r, out = self.run_cli("gc", "--older-than", "0m", "--dry-run")
+        planned = {Path(json.loads(line)["path"]).name.rsplit("-", 1)[-1]: json.loads(line)["action"] for line in out}
+        self.assertEqual(planned, {"merged": "would remove", "empty": "would remove", "dirty": "keep", "open": "keep",
+                                   "pr42": "keep"})  # a name ending in -pr<N> isn't an ended PR by itself
+        self.assertTrue(Path(runs["merged"]["cwd"]).exists())
+        r, out = self.run_cli("gc", "--older-than", "0m")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        gone = {name: not Path(run["cwd"]).exists() for name, run in runs.items()}
+        self.assertEqual(gone, {"merged": True, "empty": True, "dirty": False, "open": False, "open-pr42": False})
+        self.assertNotEqual(self.g("branch", "--list", "gbase/merged"), "")  # branches stay
 
     def test_status_reports_dead_runner(self):
         run = Path(self.env["GBASE_HOME"]) / "runs" / "r1"
