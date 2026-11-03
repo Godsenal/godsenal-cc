@@ -585,7 +585,8 @@ class GbaseRunTest(unittest.TestCase):
         self.env.update(GBASE_ACCOUNTS=",".join(names), GBASE_PREFLIGHT_TTL="0")
 
     def g(self, *args, cwd=None):
-        return subprocess.run(["git", "-C", str(cwd or self.repo), *args], capture_output=True, text=True).stdout.strip()
+        r = subprocess.run(["git", "-C", str(cwd or self.repo), *args], capture_output=True, text=True, env=self.env)
+        return r.stdout.strip()
 
     def test_a_logged_out_account_hands_the_run_to_the_next_and_leaves_no_worktree(self):
         # the session itself fails on "Not logged in" (the preflight passed): the same prompt runs on b
