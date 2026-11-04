@@ -6,6 +6,8 @@ description: >-
   프로젝트가 목록에 없다"가 나온다. 이때 로그아웃·재로그인으로 헤매지 말고 여기 적힌
   `listProfiles()` + `newTaskSpace(name, profileId)` 를 쓴다. "다른 계정으로", "회사 계정 말고",
   "프로필 바꿔서", "계정 전환" 같은 말이 나오거나, ego에서 예상과 다른 계정으로 붙었을 때 쓴다.
+  헤드리스 런(gbase-run, 봇)에서 task space를 만들거나 사람에게 넘길 때의 수명 규칙(이름에 run id,
+  끝날 때 닫기, 넘긴 space 번호를 `결정 필요:` 줄에)도 여기 있다.
 ---
 
 # ego-browser 계정/프로필 전환
@@ -76,6 +78,20 @@ import는 **복사**다 — ego 안에서 계정을 바꿔도 유저의 실제 C
 계정이 맞아도 민감 설정 화면(API 키, 결제, 보안)은 **재인증**을 요구하는 서비스가 많다.
 비밀번호 입력·OAuth 완료는 에이전트가 하지 않는다. `handOffTaskSpace(task.id)` 로 넘기고,
 무엇을 눌러야 하는지 한 줄로 알려준 뒤 유저의 "계속"을 기다린다. 그 다음 `takeOverTaskSpace(task.id)`.
+
+## space 수명 (헤드리스 런)
+
+사람이 붙어 있지 않은 런이 연 space가 런이 끝난 뒤에도 남아, 다음 런이 그걸 "다른 작업이 쓰는 중"으로 보고
+멈췄다(ego_conflict, 2026-11-04 회고). 그래서:
+
+- **이름에 run id를 넣는다.** ``newTaskSpace(`${runId} <작업>`, profileId)``. run id는 `$GBASE_RUN_ID`다(gbase-run이 넣고,
+  직접 띄운 런은 `~/.claude-runs/<run-id>/`의 디렉터리 이름을 봇이 넣는다). 봇의 space gate는 이 이름으로 런이 끝났는지 본다
+  ([harness.md](../../references/harness.md#shared-ego-space-gate-shared-browser-space-gate)).
+- **런을 끝내기 전에 내가 만든 space는 닫는다.** 닫는 헬퍼 이름은 아래 전역 훑기로 확인한다. 남은 space는
+  `listTaskSpaces()`로 확인한다.
+- **사람에게 넘긴 space는 닫지 않는다.** `handOffTaskSpace()`로 넘겼으면 그 space 번호(id)를 `결정 필요:` 줄에
+  넣는다: `결정 필요: <서비스> 재인증 → 하지 않음 (추천: space <id>에서 로그인; 사람이 할 일: space <id>에서 <누를 것>)`.
+  결제·확인 화면이 그 안에 남아 있을 수 있다.
 
 ## 문서에 없는 헬퍼
 
