@@ -40,8 +40,9 @@ FAKE_CLAUDE = textwrap.dedent('''\
         sys.exit(1)
     assert args[args.index("--plugin-dir") + 1].endswith("plugins/base")
     assert "ScheduleWakeup" in args[args.index("--disallowedTools") + 1]
-    assert "GITHUB_TOKEN" not in os.environ
+    assert "GITHUB_TOKEN" not in os.environ and "GBASE_NOTIFY_CMD" not in os.environ
     run_dir = os.path.dirname(os.environ["AGENT_EVIDENCE_FILE"])
+    assert os.environ["GBASE_RUN_ID"] == os.path.basename(run_dir)
     with open(os.path.join(run_dir, "plugin-dirs"), "w") as f:
         f.write("\\n".join(args[i + 1] for i, a in enumerate(args) if a == "--plugin-dir"))
     if model == "hang":  # a session that never ends, with a grandchild like a subagent's shell
@@ -320,7 +321,16 @@ class GbaseRunTest(unittest.TestCase):
         task.write_text("인스타 카드뉴스 1편: 'quoted' $(not run)\n")
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "task", "--task-file", str(task))
         result = json.loads(Path(out[-1]).read_text())
-        self.assertEqual(Path(result["prompt_path"]).read_text().strip(), "인스타 카드뉴스 1편: 'quoted' $(not run)")
+        prompt = Path(result["prompt_path"]).read_text()
+        self.assertTrue(prompt.startswith("인스타 카드뉴스 1편: 'quoted' $(not run)\n\n"), prompt)
+        # a bare task loads no skill: the headless rules ride in the prompt
+        self.assertIn("약관·법적 동의, 대표자·본인 확인 체크, 사실 진술 체크박스", prompt)
+        self.assertIn("`결정 필요: [질문] → [적용한 것] (추천: [추천]; 다른 선택지: [a] / [b])`", prompt)
+        self.assertIn(str(gbase_run.PLUGIN_DIR / "references" / "headless.md"), prompt)
+        # the copy bots paste into a direct `claude -p` template is the same paragraph
+        harness = (gbase_run.PLUGIN_DIR / "references" / "harness.md").read_text()
+        self.assertIn(gbase_run.TASK_HEADLESS.format(headless="(gbase checkout)/plugins/base/references/headless.md"),
+                      harness)
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "content", "--task", "카드뉴스")
         result = json.loads(Path(out[-1]).read_text())
         self.assertEqual(Path(result["prompt_path"]).read_text().strip(), "/gshorts:content-common 카드뉴스")
@@ -371,6 +381,7 @@ class GbaseRunTest(unittest.TestCase):
         self.assertFalse(_alive(child))
 
     def test_lessons_hand_off_to_a_work_run(self):
+        self.accounts(a=[])  # no missing-accounts warning in `next`
         r, out = self.run_cli("--repo", str(self.repo), "--slot", "content", "--task", "카드뉴스", "--model", "lessons")
         result = json.loads(Path(out[-1]).read_text())
         self.assertEqual(result["lessons"], ['교훈: content-common — 2026-10-29 "이거별로": 규칙 A',
@@ -530,7 +541,7 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual((result["status"], result["repo"], result["dir"], result["cwd"]),
                          ("done", None, str(folder.resolve()), str(folder.resolve())))
         self.assertEqual((result["branch"], result["base"]), (None, None))
-        self.assertEqual(Path(result["prompt_path"]).read_text().strip(), "캐러셀 초안 1편")
+        self.assertTrue(Path(result["prompt_path"]).read_text().startswith("캐러셀 초안 1편\n\n"))
         # a follow-up answers run continues in the same folder
         answers = self.tmp / "answers.json"
         answers.write_text(json.dumps({"run_id": result["run_id"], "answers": [{"decision": "Q?", "answer": "B"}]}))
@@ -630,6 +641,104 @@ class GbaseRunTest(unittest.TestCase):
         answers.write_text(json.dumps({"run_id": first["run_id"], "answers": []}))
         _, out = self.run_cli("--answers", str(answers))
         self.assertEqual(json.loads(Path(out[-1]).read_text())["account"], "b")
+
+    def test_without_an_accounts_list_the_run_warns_in_next(self):
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["status"], "done")
+        self.assertEqual(len(result["warnings"]), 1)
+        self.assertIn("계정 목록 없음", result["next"])
+        self.assertIn("gbase-run doctor", result["next"])
+        self.assertEqual(out[-2], f"next: {result['next']}")
+        self.accounts(a=[])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["warnings"], result["next"], len(out)), ([], None, 1))
+
+    def test_account_flag_goes_first_and_aliases_are_one_account(self):
+        self.accounts(a=[], b=[])
+        self.env["GBASE_ACCOUNTS"] += f",vixen:{self.tmp / 'acct' / 'b'}"
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--account", "b")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["account"], (Path(result["run_dir"]) / "ran-on").read_text().split()), ("b", ["b"]))
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--account", "vixen")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["account"], "b")  # the alias runs as the first name on its config dir
+        self.assertIn("계정 b", self.run_cli("cite", result["run_id"])[1][0])
+        # an account that's down still hands the run on
+        self.accounts(a=[], b=["logged-out-run"])
+        self.env["GBASE_ACCOUNTS"] += f",vixen:{self.tmp / 'acct' / 'b'}"
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--account", "vixen")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["account"], [f["account"] for f in result["failures"]]), ("a", ["b"]))
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--account", "nope")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--account nope is not in the accounts list (a, b, vixen", r.stderr)
+        # no list: the recipe's --account still runs, as default
+        self.env.pop("GBASE_ACCOUNTS")
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--account", "c5")
+        self.assertEqual((r.returncode, json.loads(Path(out[-1]).read_text())["account"]), (0, "default"), r.stderr)
+        self.assertIn("--account c5 ignored: no accounts list", r.stderr)
+
+    def test_notify_runs_once_per_run_and_its_failure_keeps_the_status(self):
+        calls = self.tmp / "notified"
+        script = self.tmp / "notify.sh"
+        script.write_text(f'#!/bin/sh\nshift\necho "$@" >> {calls}\n')
+        script.chmod(0o755)
+        self.env["GBASE_NOTIFY_CMD"] = f"{script} --key=SECRETKEY"  # a key the command carries stays out of records
+        self.accounts(a=[])
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        ok = json.loads(Path(out[-1]).read_text())
+        self.accounts(a=["logged-out"])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship")
+        failed = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((ok["status"], ok["notify"], failed["status"], failed["notify"]), ("done", "ok", "failed", "ok"))
+        self.assertEqual(calls.read_text().splitlines(), [f"{ok['run_id']} done 0 {out[-1].replace(failed['run_id'], ok['run_id'])}",
+                                                          f"{failed['run_id']} failed 1 {out[-1]}"])
+        for run in (ok, failed):
+            for f in Path(run["run_dir"]).iterdir():
+                self.assertNotIn("SECRETKEY", f.read_text(), f)
+        self.assertNotIn("SECRETKEY", r.stderr + r.stdout)
+        # a notify command that fails, given on the command line: the run is still done
+        self.accounts(a=[])
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--notify-cmd", "false")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((r.returncode, result["status"], result["notify"]), (0, "done", "failed"))
+        self.assertIn("notify command failed (exit 1)", r.stderr)
+        self.assertEqual(len(calls.read_text().splitlines()), 2)  # --notify-cmd replaced GBASE_NOTIFY_CMD
+
+    def test_doctor_reports_accounts_gc_and_worktrees(self):
+        r, _ = self.run_cli("doctor")
+        report = json.loads(r.stdout)
+        self.assertEqual((r.returncode, report["accounts_source"], report["gc_last"]), (1, None, None))
+        self.assertTrue(any("계정 목록 없음" in p for p in report["problems"]))
+        self.assertTrue(any("gc 기록 없음" in p for p in report["problems"]))
+        self.accounts(a=[], b=["logged-out"])
+        self.env["GBASE_ACCOUNTS"] += f",vixen:{self.tmp / 'acct' / 'a'},gone:{self.tmp / 'acct' / 'nope'}"
+        self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w1")
+        self.run_cli("gc", "--older-than", "3d", "--dry-run")
+        r, _ = self.run_cli("doctor")
+        report = json.loads(r.stdout)
+        self.assertEqual([(a["name"], a["ok"], a["aliases"]) for a in report["accounts"]],
+                         [("a", True, ["vixen"]), ("b", False, []), ("gone", False, [])])
+        self.assertIn("auth", report["accounts"][1]["problem"])
+        self.assertEqual(report["accounts"][2]["problem"], "config dir 없음")
+        self.assertEqual((report["gc_last"], report["gc_dry_run_last"]["keep"]), (None, 1))
+        self.assertEqual(report["worktrees"]["count"], 1)
+        self.assertGreater(report["worktrees"]["size_kb"], 0)
+        self.accounts(a=[])
+        self.run_cli("gc", "--older-than", "3d")
+        r, _ = self.run_cli("doctor")
+        report = json.loads(r.stdout)
+        self.assertEqual((r.returncode, report["problems"], report["gc_last"]["keep"]), (0, [], 1))
+        # a gc that stopped, and a claude binary that's gone (preflight alone would call every account ok)
+        (Path(self.env["GBASE_HOME"]) / "gc-last.json").write_text('{"at": "2026-01-01T00:00:00+0900"}')
+        self.env["GBASE_CLAUDE"] = str(self.tmp / "no-claude")
+        r, _ = self.run_cli("doctor")
+        problems = json.loads(r.stdout)["problems"]
+        self.assertEqual(r.returncode, 1)
+        self.assertTrue(any("마지막 gc가 2026-01-01" in p for p in problems), problems)
+        self.assertTrue(any("claude 실행 파일 없음" in p for p in problems), problems)
 
     def test_preflight_is_cached(self):
         self.accounts(a=[])

@@ -13,7 +13,7 @@ A check-in ("continue?", "does this look right?") isn't a question here — cont
 
 ## Irreversible steps stay closed
 
-Merging, deploying (including a merge or push that triggers a deploy), force-pushing, rewriting pushed history, deleting data, publishing or store submission, messaging people, and committing a secret are never taken on a recommendation or on an `AGENT_ASK_CMD` answer. The step is not done; it gets a `결정 필요:` line saying what a person would do. A step the invocation itself requested (`--merge`) still runs when the skill's own conditions hold without asking — a gate that would ask means the step is not done.
+Merging, deploying (including a merge or push that triggers a deploy), force-pushing, rewriting pushed history, deleting data, publishing or store submission, paying, messaging people, committing a secret, and ticking a box the run has no evidence for (약관·법적 동의, 대표자·본인 확인 체크, 사실 진술 체크박스) are never taken on a recommendation or on an `AGENT_ASK_CMD` answer; task runs had decided the same box differently from one run to the next (2026-11-04 retro). The step is not done; it gets a `결정 필요:` line saying what a person would do. A step the invocation itself requested (`--merge`) still runs when the skill's own conditions hold without asking — a gate that would ask means the step is not done.
 
 ## End when the work ends
 

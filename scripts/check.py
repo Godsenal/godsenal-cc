@@ -29,6 +29,7 @@ def shorts(name):
 BRANCH_PR = "plugins/base/commands/branch-pr.md"
 ORCHESTRATOR = "plugins/base/references/orchestrator.md"
 HEADLESS = "plugins/base/references/headless.md"
+HARNESS = "plugins/base/references/harness.md"
 SESSION_HOOK = "plugins/base/hooks/session-start.md"
 FACTORY = "plugins/base/.claude-plugin/factory.json"
 RUNNER = "scripts/gbase-run"
@@ -67,6 +68,8 @@ CONTRACTS = [
     ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
     # headless forbids wakeups in prose; the runner enforces it by denying the tools
     ("schedulewakeup,croncreate", [HEADLESS, ORCHESTRATOR, RUNNER]),
+    # bare task runs load no skill: the runner (and a bot's direct template, via harness.md) carries the forbid list
+    ("대표자·본인 확인 체크", [HEADLESS, ORCHESTRATOR, RUNNER, HARNESS]),
     # the runner splits decision lines on these keys into recommend / options / human
     ("(추천:", [HEADLESS, RUNNER]),
     ("다른 선택지", [HEADLESS, RUNNER]),

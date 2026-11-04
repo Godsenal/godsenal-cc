@@ -81,8 +81,8 @@
     },
     "task": {
       "invoke": "<task>",
-      "env": [],
-      "notes": "A one-off run with no skill (research, a schedule change): the task is the whole prompt. Use it instead of a bare `claude -p` so the run still gets a stream-json log, result.json, status, and stop: `gbase-run start --slot task --dir <folder> --task-file <file>` runs it in the background in any folder, git or not."
+      "env": ["AGENT_HEADLESS"],
+      "notes": "A one-off run with no skill (research, a schedule change): the task is the prompt, followed by a short paragraph of headless.md's rules (no question; irreversible steps and evidence-less terms, identity, or statement-of-fact boxes become `결정 필요:` lines), since no skill loads them. Use it instead of a bare `claude -p` so the run still gets a stream-json log, result.json, status, stop, and notify: `gbase-run start --slot task --dir <folder> --task-file <file> --account <name>` runs it in the background in any folder, git or not."
     },
     "reproduce": {
       "invoke": "/gbase:reproduce <bug report or improvement request>",

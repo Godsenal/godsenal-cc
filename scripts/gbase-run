@@ -7,7 +7,9 @@ Skill behavior lives in the skills, not here.
 
   gbase-run --repo <path> --slot <slot> [--task "..." | --task-file <path>] [--worktree <name>]
             [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>] [--exclusive]
+            [--account <name>] [--notify-cmd "<cmd>"]
   gbase-run --dir <folder> --slot task|content [--task "..." | --task-file <path>] [--model opus|sonnet] [--answers <file>]
+            [--account <name>] [--notify-cmd "<cmd>"]
   gbase-run start <the same arguments>   # detached: prints the run id and result.json path, then returns
   gbase-run status <run-id>     # result.json; "status": "running" while the run is going
   gbase-run stop <run-id> [--reason "..."]  # SIGTERM the runner, which ends each claude's process group
@@ -15,6 +17,7 @@ Skill behavior lives in the skills, not here.
   gbase-run cite <run-id>       # the run's provenance line (model, account, run id, skills)
   gbase-run land <run-id> [--onto <branch>]  # fast-forward or cherry-pick a local-only run's commits onto a branch
   gbase-run gc [--older-than 3d] [--dry-run] # remove finished runs' worktrees whose work landed or was never made
+  gbase-run doctor              # accounts, each account's preflight, last gc, worktree count and size; exit 1 on a problem
 
 The last stdout line of a run is the absolute path of its result.json (`start` prints it after the run id); a run that reported `교훈:` lines
 prints a `next:` line before it.
@@ -24,8 +27,9 @@ GBASE_PLUGIN_DIR (default: plugins/base of this checkout; factory.json is read f
 (os.pathsep-separated plugin dirs loaded besides it and the plugin a slot's invoke names, from plugins/*),
 GBASE_PERMISSION_MODE (default bypassPermissions), GBASE_ASK_CMD (AGENT_ASK_CMD for the child; default
 records questions only), GBASE_ACCOUNTS (`name:config-dir,...`, else $GBASE_HOME/accounts with one `name:config-dir`
-per line: the accounts tried in order on a usage limit or a failed login), GBASE_PREFLIGHT_TTL (seconds an account
-check is cached, default 300).
+per line: the accounts tried in order on a usage limit or a failed login; names sharing a config dir are one account,
+the first name canonical), GBASE_PREFLIGHT_TTL (seconds an account check is cached, default 300), GBASE_NOTIFY_CMD
+(the --notify-cmd default: run once when a run ends, as `<cmd> <run-id> <status> <exit-code> <result.json path>`).
 """
 import argparse
 import fcntl
@@ -35,6 +39,7 @@ import os
 import re
 import secrets
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -55,6 +60,7 @@ DISALLOWED_TOOLS = "ScheduleWakeup,CronCreate"
 STOP_GRACE = 10  # seconds between SIGTERM and SIGKILL for a claude process group
 HOME = Path(os.environ.get("GBASE_HOME") or "~/.gbase").expanduser().resolve()
 RUNS = HOME / "runs"
+ACCOUNTS_FILE = HOME / "accounts"
 SEVERITY = ["critical", "high", "medium", "low"]
 PROCS = []  # running claude children, terminated when the runner is stopped
 
@@ -93,18 +99,54 @@ PREFLIGHT_TTL = int(os.environ.get("GBASE_PREFLIGHT_TTL") or 300)
 DEFAULT_CONFIG_DIR = Path("~/.claude").expanduser()
 
 
-def load_accounts():
+def accounts_source():
+    """Where the accounts list comes from, or None when there is none."""
+    if os.environ.get("GBASE_ACCOUNTS") is not None:
+        return "GBASE_ACCOUNTS"
+    return str(ACCOUNTS_FILE) if ACCOUNTS_FILE.is_file() else None
+
+
+def config_key(path):
+    return str(Path(path).expanduser().resolve()) if path else None
+
+
+def load_accounts(aliases=None):
     """[(name, config dir)] from GBASE_ACCOUNTS or $GBASE_HOME/accounts, or None when neither is set: the run then
-    uses claude's own environment as the one account `default`, unchecked."""
+    uses claude's own environment as the one account `default`, unchecked. Names that share a config dir (`c5` and
+    `vixen` both on ~/.claude-5) are one login: the first is kept, and `aliases` (a dict) gets alias → that name."""
     raw = os.environ.get("GBASE_ACCOUNTS")
-    if raw is None and (HOME / "accounts").is_file():
-        raw = (HOME / "accounts").read_text(encoding="utf-8")
+    if raw is None and ACCOUNTS_FILE.is_file():
+        raw = ACCOUNTS_FILE.read_text(encoding="utf-8")
     entries = [e.strip() for e in re.split(r"[,\n]", raw or "") if e.strip() and not e.strip().startswith("#")]
-    accounts = []
+    accounts, by_dir = [], {}
     for entry in entries:
         name, _, path = entry.partition(":")
-        accounts.append((name.strip(), path.strip() or None))
+        name, path = name.strip(), path.strip() or None
+        first = by_dir.setdefault(config_key(path), name)
+        if first != name:
+            if aliases is not None:
+                aliases[name] = first
+            continue
+        accounts.append((name, path))
     return accounts or None
+
+
+def resolve_account(name):
+    """The canonical account name for --account (an alias maps to the first name on its config dir); exits on a
+    name the accounts list doesn't have. With no list there is nothing to pick from: the run goes on as `default`
+    and warns, so a recipe that always passes --account still runs on a machine without the list."""
+    aliases = {}
+    configured = load_accounts(aliases)
+    if configured is None:
+        print(f"gbase-run: --account {name} ignored: no accounts list ({ACCOUNTS_FILE} or GBASE_ACCOUNTS)",
+              file=sys.stderr)
+        return None
+    names = [n for n, _ in configured]
+    canonical = aliases.get(name, name)
+    if canonical not in names:
+        sys.exit(f"gbase-run: --account {name} is not in the accounts list ({', '.join(names + sorted(aliases))}; "
+                 f"{accounts_source() or f'none: set GBASE_ACCOUNTS or {ACCOUNTS_FILE}'})")
+    return canonical
 
 
 def account_env(env, path):
@@ -112,7 +154,7 @@ def account_env(env, path):
     if path is None:
         return env
     env = dict(env)
-    if Path(path).expanduser().resolve() == DEFAULT_CONFIG_DIR.resolve():
+    if config_key(path) == config_key(DEFAULT_CONFIG_DIR):
         # claude's default dir runs with the variable unset: claude keys its stored login by the variable, so
         # CLAUDE_CONFIG_DIR=~/.claude can read as logged out where plain `claude` is logged in (추정, from the
         # 2026-11-02 runs that failed only through the runner)
@@ -140,12 +182,16 @@ def prestart_failure(info):
     return (kind, fail_detail(text)) if kind else None
 
 
+def read_json(path, default=None):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
 def account_cache(update=None):
     path = HOME / "accounts.json"
-    try:
-        cache = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        cache = {}
+    cache = read_json(path, {})
     if update:
         cache.update(update)
         HOME.mkdir(parents=True, exist_ok=True)
@@ -201,13 +247,18 @@ class Accounts:
     """The accounts a run may use, in order; `current()` is the first that passes its preflight (configured
     accounts only), `fail()` drops one a session found logged out or limited. Shared by a models slot's threads."""
 
-    def __init__(self, env, task, prefer=None):
-        configured = load_accounts()
+    def __init__(self, env, task, prefer=None, pick=None):
+        aliases = {}
+        configured = load_accounts(aliases)
         self.checked = configured is not None
-        burned = auth_failed_on(task)
-        # stable: the answered run's account first, then the configured order; one that just auth-failed on this
-        # task goes last (run ea5cd1 retried the account d5bdaa had failed on, and failed the same way)
-        self.queue = sorted(configured or [("default", None)], key=lambda a: (a[0] in burned, a[0] != prefer))
+        # older runs may have recorded an alias, which is now its config dir's first name
+        burned = {aliases.get(n, n) for n in auth_failed_on(task)}
+        prefer = aliases.get(prefer, prefer)
+        # stable: --account first, then the answered run's account, then the configured order; one that just
+        # auth-failed on this task goes after the others (run ea5cd1 retried the account d5bdaa had failed on, and
+        # failed the same way), unless --account named it
+        self.queue = sorted(configured or [("default", None)],
+                            key=lambda a: (a[0] != pick, a[0] in burned, a[0] != prefer))
         self.env, self.failures, self.lock = env, [], threading.Lock()
 
     def current(self):
@@ -257,6 +308,16 @@ def git(cwd, *args):
     return r.stdout.strip() if r.returncode == 0 else None
 
 
+# a bare task loads no skill, so headless.md's rules reach it only through the prompt (task runs decided terms and
+# identity checkboxes differently from one run to the next; 2026-11-04 retro)
+TASK_HEADLESS = (
+    "사람이 붙어 있지 않은 실행이다(AGENT_HEADLESS=1). 묻지 말고 되돌릴 수 있는 쪽으로 진행하고, 사람이 정할 것은 최종 "
+    "보고 끝에 줄마다 `결정 필요: [질문] → [적용한 것] (추천: [추천]; 다른 선택지: [a] / [b])`로 적는다. 다음은 추천이나 "
+    "추정으로 하지 않고 `결정 필요: [단계] → 하지 않음 (추천: [추천]; 사람이 할 일: [할 일])`로 남긴다: 머지, 배포, "
+    "force-push, 데이터 삭제, 게시·스토어 제출, 결제, 사람에게 메시지 보내기, 시크릿 커밋, 그리고 약관·법적 동의, "
+    "대표자·본인 확인 체크, 사실 진술 체크박스 중 근거가 없는 것. 규칙 전문: {headless}")
+
+
 def build_prompt(slot, spec, task, answers):
     invoke = spec["invoke"]
     if invoke is None:
@@ -270,6 +331,8 @@ def build_prompt(slot, spec, task, answers):
         prompt = re.sub(r"<[^>]+>", lambda _: task, invoke, count=1)
     else:
         prompt = f"{invoke} {task}".strip() if task else invoke
+    if slot == "task":
+        prompt += "\n\n" + TASK_HEADLESS.format(headless=PLUGIN_DIR / "references" / "headless.md")
     if answers and answers.get("answers"):
         src = f"이전 실행 {answers['run_id']}에서" if answers.get("run_id") else "이전 실행에서"
         # a pasted `결정 필요:` line carries its own `→ applied (추천: …)` tail; only its question goes in the prompt
@@ -667,7 +730,12 @@ def cmd_run(argv):
     p.add_argument("--exclusive", action="store_true",
                    help="one --exclusive run at a time on the repo (same origin URL), each starting once the runs "
                         "going there when its turn came have ended")
+    p.add_argument("--account", help="try this account first (a name or alias from the accounts list)")
+    p.add_argument("--notify-cmd", default=os.environ.get("GBASE_NOTIFY_CMD"),
+                   help="run once when the run ends: <cmd> <run-id> <status> <exit-code> <result.json> "
+                        "(default $GBASE_NOTIFY_CMD)")
     a = p.parse_args(argv)
+    pick = resolve_account(a.account) if a.account else None
     detached = os.environ.pop("GBASE_DETACHED", None) == "1"  # set by `gbase-run start`; popped so claude doesn't inherit it
 
     answers, prev = None, {}
@@ -726,8 +794,10 @@ def cmd_run(argv):
     if answers:
         write_json(run_dir / "answers.json", answers)
 
-    env = {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}  # a stale token breaks gh here
+    # a stale GITHUB_TOKEN breaks gh here; the notify command may carry a webhook key the session has no use for
+    env = {k: v for k, v in os.environ.items() if k not in ("GITHUB_TOKEN", "GBASE_NOTIFY_CMD")}
     env.update({
+        "GBASE_RUN_ID": run_id,  # for names the session leaves behind (ego task spaces: ego-profile)
         "AGENT_HEADLESS": "1",
         "AGENT_SHIP_OWNER": a.ship_owner,
         "AGENT_PR_BODY_FILE": str(run_dir / "pr-body.md"),
@@ -769,7 +839,7 @@ def cmd_run(argv):
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):  # HUP: the terminal closed; claude is in its own group
         signal.signal(sig, stop)
     sessions, created = {}, False
-    accounts = Accounts(env, task, prefer=prev.get("account"))
+    accounts = Accounts(env, task, prefer=prev.get("account"), pick=pick)
     try:
         key = repo and repo_key(repo)
         concurrent = running_on(key, run_id) if key else []
@@ -883,6 +953,10 @@ def cmd_run(argv):
         failure = accounts.failures[-1] if status == "failed" and accounts.failures and len(idle) == len(sessions) else None
         land_hint = (f"커밋 {head_sha[:7]}는 {branch}에만 있음. {base}에 넣으려면 `gbase-run land {run_id}`"
                      if landed and not landed["contains_head"] and head_sha else None)
+        # 1.41.0's account switching never ran on the Mac mini: no accounts file, and nothing said so (2026-11-04)
+        warnings = [] if accounts.checked else [
+            f"계정 목록 없음({ACCOUNTS_FILE} 또는 GBASE_ACCOUNTS): 계정 전환·preflight 없이 default로 실행함. "
+            "`gbase-run doctor`로 확인"]
         result.update({
             "status": status,
             "finished_at": now(),
@@ -906,7 +980,9 @@ def cmd_run(argv):
             "evidence": read_jsonl(run_dir / "evidence.jsonl"),
             "lessons": lessons,
             # a work run ships lessons; any other run's go to one, on a fresh worktree of this checkout
-            "next": write_lessons(run_id, run_dir, lessons) if lessons and slot != "work" else land_hint,
+            "next": (write_lessons(run_id, run_dir, lessons) if lessons and slot != "work" else land_hint)
+            or (warnings[0] if warnings else None),
+            "warnings": warnings,
             "sessions": sessions,
         })
         if (run_dir / "stop-reason").exists():
@@ -924,10 +1000,30 @@ def cmd_run(argv):
             (run_dir / "review.md").write_text(review_md(findings, models), encoding="utf-8")
             result.update({"findings": findings, "report_file": str(run_dir / "review.md")})
         write_json(result_path, result)
+        if a.notify_cmd:
+            result["notify"] = notify(a.notify_cmd, result, result_path)
+            write_json(result_path, result)
         if result["next"]:
             print(f"next: {result['next']}")
         print(result_path)
     return 0 if result["status"] == "done" else 1
+
+
+def notify(cmd, result, result_path):
+    """Run the notify command once for a finished run: `ok`, or `failed` (non-zero exit, timeout, or no such
+    command). Its output is dropped and the command line is never recorded: it may hold a webhook key."""
+    try:
+        r = subprocess.run(["sh", "-c", cmd + ' "$@"', "notify", result["run_id"], result["status"],
+                            str(result["exit_code"]), str(result_path)],
+                           stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+        why = f"exit {r.returncode}" if r.returncode else None
+    except subprocess.TimeoutExpired:
+        why = "timed out"
+    except OSError:
+        why = "could not run"
+    if why:
+        print(f"gbase-run: notify command failed ({why}); the run's status stays as it is", file=sys.stderr)
+    return "failed" if why else "ok"
 
 
 def cmd_start(argv):
@@ -1180,6 +1276,7 @@ def cmd_gc(argv):
         if r.get("cwd") and last.get(r["cwd"], {}).get("status") != "running":
             last[r["cwd"]] = r
     root = HOME / "worktrees"
+    tally = {}
     for repo in sorted({str(main_checkout(Path(r["repo"]))) for r in runs if Path(r["repo"]).is_dir()}):
         repo = Path(repo)
         for path, branch in worktrees(repo)[1:]:
@@ -1193,10 +1290,67 @@ def cmd_gc(argv):
                 action = "would remove"
             elif action == "remove" and not remove_worktree(repo, path):
                 action, reason = "keep", "keep: git worktree remove failed"
+            tally[action] = tally.get(action, 0) + 1
             print(json.dumps({"path": str(path), "branch": branch, "run_id": run and run["run_id"], "action": action,
                               "reason": reason.split(": ", 1)[1]}, ensure_ascii=False))
         if not a.dry_run:
             git(repo, "worktree", "prune")
+    # read by doctor: a daily gc that never runs shows up as an old (or missing) `at`
+    HOME.mkdir(parents=True, exist_ok=True)
+    write_json(HOME / ("gc-dry-run.json" if a.dry_run else "gc-last.json"), {"at": now(), **tally})
+
+
+def dir_kb(path):
+    try:
+        out = subprocess.run(["du", "-sk", str(path)], capture_output=True, text=True, timeout=600).stdout
+        return int(out.split()[0])
+    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
+        return None
+
+
+def cmd_doctor(argv):
+    """`doctor`: one JSON object — the accounts list (or that there is none), each account's preflight, the last gc
+    and gc --dry-run, and the worktrees' count and size — with every problem in `problems`; exit 1 when there is one.
+    Run it after updating the runner, so a feature that needs setup (accounts, the daily gc, a notify command) is
+    seen to be on."""
+    if argv:
+        sys.exit("usage: gbase-run doctor")
+    problems, aliases = [], {}
+    configured = load_accounts(aliases)
+    accounts = []
+    if configured is None:
+        problems.append(f"계정 목록 없음: {ACCOUNTS_FILE}에 `name:config-dir`를 한 줄씩 적거나 GBASE_ACCOUNTS를 설정")
+    if configured and not (Path(claude_bin()).is_file() or shutil.which(claude_bin())):
+        # preflight treats a check that couldn't run as passing, so every account would read ok
+        problems.append(f"claude 실행 파일 없음: {claude_bin()} (GBASE_CLAUDE)")
+    env = {k: v for k, v in os.environ.items() if k not in ("GITHUB_TOKEN", "GBASE_NOTIFY_CMD")}
+    for name, path in configured or []:
+        missing = path is not None and not Path(path).expanduser().is_dir()
+        bad = None if missing else preflight(name, path, env)
+        problem = "config dir 없음" if missing else bad and f"{bad[0]}: {bad[1]}"
+        accounts.append({"name": name, "config_dir": path, "aliases": sorted(k for k, v in aliases.items() if v == name),
+                         "ok": not problem, "problem": problem})
+        if problem:
+            problems.append(f"계정 {name}: {problem}")
+    gc = read_json(HOME / "gc-last.json")
+    if gc is None:
+        problems.append("gc 기록 없음: 매일 `gbase-run gc --older-than 3d`가 도는지 확인(첫 실제 gc는 --dry-run 목록을 "
+                        "사람이 본 뒤)")
+    elif time.time() - datetime.strptime(gc["at"], "%Y-%m-%dT%H:%M:%S%z").timestamp() > 2 * 86400:
+        problems.append(f"마지막 gc가 {gc['at']}: 매일 도는 gc가 멈췄는지 확인")
+    root = HOME / "worktrees"
+    dirs = [d for d in root.iterdir() if d.is_dir()] if root.is_dir() else []
+    print(json.dumps({
+        "home": str(HOME),
+        "accounts_source": accounts_source(),
+        "accounts": accounts,
+        "notify_cmd": bool(os.environ.get("GBASE_NOTIFY_CMD")),  # set or not; the command itself may hold a key
+        "gc_last": gc,
+        "gc_dry_run_last": read_json(HOME / "gc-dry-run.json"),
+        "worktrees": {"path": str(root), "count": len(dirs), "size_kb": dir_kb(root) if dirs else 0},
+        "problems": problems,
+    }, ensure_ascii=False, indent=2))
+    return 1 if problems else 0
 
 
 def cmd_question(argv):
@@ -1240,7 +1394,7 @@ def normalize_decision(text):
 def main():
     argv = sys.argv[1:]
     commands = {"start": cmd_start, "status": cmd_status, "stop": cmd_stop, "list": cmd_list, "question": cmd_question,
-                "cite": cmd_cite, "land": cmd_land, "gc": cmd_gc}
+                "cite": cmd_cite, "land": cmd_land, "gc": cmd_gc, "doctor": cmd_doctor}
     if argv and argv[0] in commands:
         return commands[argv[0]](argv[1:]) or 0
     return cmd_run(argv)
