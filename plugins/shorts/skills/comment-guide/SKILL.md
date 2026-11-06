@@ -22,7 +22,7 @@ Read this before writing any comment. Every rule in [content-common](../content-
 
 ## Every comment
 
-- **해요체, written like a person** (X: the [X section](#x--replies-and-comments) below sets length and tone). First read the comments and answers already on that post or video and follow their context and tone (user rule at the top of content-boost's GUIDE). One or two spoken sentences that react to one part of the post and add one thought; no stiff summary.
+- **해요체, written like a person** (X: the [X section](#x--replies-and-comments) below sets length and tone; Threads and Instagram: the [Threads and Instagram voice](#voice-on-threads-and-instagram) section). First read the comments and answers already on that post or video and follow their context and tone (user rule at the top of content-boost's GUIDE). YouTube and 지식iN: one or two spoken sentences that react to one part of the post and add one thought; no stiff summary.
 - **No promo phrasing**: "짧게 정리한 영상:", "정리한 글:", "쇼츠로 정리해뒀어요", and any "정리해 둔/정리한" (2026-10-29 11시: "표로 정리해 둔 글이에요" was caught and changed to "이 글 표에 나와 있어요"). Link the way people normally drop a link.
 - **No source wording, no DM bait, no made-up experience** — no "출처", "○○ 발표에 따르면", "댓글 남기면 보내드려요", "써 보니" without a real case ([content-common](../content-common/SKILL.md)). Never a first-person story the user didn't live ("들고 가서 못 받았어요", caught 2026-10-29); say what the short or blog post shows instead ("영상에 준비물 나와요").
 - **Nothing you couldn't confirm.** A sentence not confirmed on an official page is cut before posting (2026-10-28 12시, "빨래방 건조기가 열이 더 세다"). A sentence introducing a linked post says only what that post actually contains (2026-10-29 17시, "그림이랑 같이" cut). If the linked post's facts are out of date, don't mention that part.
@@ -38,6 +38,18 @@ Read this before writing any comment. Every rule in [content-common](../content-
 - No link or DM offer in a reply, except our own library link when a commenter on a reward post says the DM didn't arrive ("DM이 늦게 갈 수 있어요. 프로필 링크 자료실에도 같은 자료 있어요" in your own words, never the same sentence twice; reward posts are [instagram-card-news](../instagram-card-news/SKILL.md)'s). On a post without a reward, if a commenter mistook it for a DM-giveaway, say plainly that nothing is sent (예안 had to: "댓글달아쥬셔도 따로 가는 자료는 없습니당", [DasMiJkmOiZ](https://www.instagram.com/p/DasMiJkmOiZ/)).
 
 ## (b) Outreach comments on other people's posts
+
+### Voice on Threads and Instagram
+
+2026-11-06 the user: the @haedollar Instagram comments "너무 AI같아. 내용말하고 ~해야겠어요 반복되고", and X's comments read best. Of the 15 Instagram comments in the run records (11-02 to 11-06), every one was two sentences that restated the post and then analyzed it; 7 ended in "~같아요", "~겠네요/~겠죠", or "~궁금해요". Measured the same day: 97 comments by others under 22 Threads AI and money posts (opened logged in, the text read from each post's page; the sample is rough and includes one long thread). Median 48자, 33% at 30자 or less, ㅋ/ㅠ in 17 of 97. Examples as people wrote them: "하아. 뼈 아프다." · "진짜 너무 공감합니다 ㅋㅋㅋ" · "동의합니다 미치겠습니다" · "뜨끔했잖아." · "걱정이 되지만 음" · "이건 무료로 해줘야하는거 아니가?" · "작업보다 지켜보는 데 한도를 쓰고 있었다는 게 좀 웃프네요". Each one reacts to the post; none restates it.
+
+- **One line, a reaction first.** Start with the feeling ("하아", "진짜 공감", "뜨끔"), not a restatement of the post. Length: 가정 30자 안팎, 40자 넘으면 줄인다. X 답글 상한(30자)보다 조금 넉넉하게 잡은 값이고, 샘플 중간값 48자에서 나온 추정이라 반응을 보고 고친다.
+- **No restating the post.** Don't repeat its fact or number. A reply that could be pasted under any post with the same topic is the target.
+- **No closing analysis.** Banned as a last clause: "~같아요", "~겠네요", "~겠죠", "~궁금해요", "~해야겠어요", and "~게 더 중요해요". Two sentences means rewrite as one.
+- **A question only when it's real** ("이거 얼마예요?", "어떻게 되나요?"), at most one in three comments, short. Never a question as the closing line of a template.
+- `ㅋㅋ`, `ㅠ`, `ㅎㅎ`, and casual 반말-ish 해요 ("~거든요", "~잖아요") are fine when the commenter's tone is casual. Follow the post's tone.
+- No link, no source wording, no DM bait, no first-person experience (the same rules as above).
+- **Self-check** before posting: count lines and characters. One line, 40자 or less, no banned ending, the same ending not used on the last three comments → post. Otherwise rewrite. Report `voice-check: ig 댓글 1줄 NN자 | 반응형 | 봇 신호 0`.
 
 ### Links and limits
 
