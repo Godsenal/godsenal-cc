@@ -33,6 +33,7 @@ HARNESS = "plugins/base/references/harness.md"
 SESSION_HOOK = "plugins/base/hooks/session-start.md"
 FACTORY = "plugins/base/.claude-plugin/factory.json"
 RUNNER = "scripts/gbase-run"
+RUNNER_DOC = "plugins/base/references/runner.md"  # the runner's usage and result.json, split out of orchestrator.md
 CONTRACTS = [
     ("⚠️ requires ordered rollout", [skill("compat-check"), BRANCH_PR]),
     # compat-check's output template itself, not just prose that mentions the tokens
@@ -63,11 +64,11 @@ CONTRACTS = [
     ("--until-settled", [skill("monitor"), skill("go"), ORCHESTRATOR]),
     # agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url
     ("`pr: <url>`", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
-    ("pr_url", [ORCHESTRATOR, RUNNER]),
+    ("pr_url", [RUNNER_DOC, RUNNER]),
     ("settle: 수렴", [skill("monitor"), ORCHESTRATOR]),
     ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
     # headless forbids wakeups in prose; the runner enforces it by denying the tools
-    ("schedulewakeup,croncreate", [HEADLESS, ORCHESTRATOR, RUNNER]),
+    ("schedulewakeup,croncreate", [HEADLESS, RUNNER_DOC, RUNNER]),
     # bare task runs load no skill: the runner (and a bot's direct template, via harness.md) carries the forbid list
     ("대표자·본인 확인 체크", [HEADLESS, ORCHESTRATOR, RUNNER, HARNESS]),
     # the runner splits decision lines on these keys into recommend / options / human
@@ -94,9 +95,9 @@ CONTRACTS = [
     ("differs:", [ORCHESTRATOR, skill("go"), skill("reproduce"), BRANCH_PR]),
     ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
     ("conflict resolution unreviewed", [skill("monitor")]),
-    ("--exclusive", [ORCHESTRATOR, RUNNER]),
+    ("--exclusive", [RUNNER_DOC, RUNNER]),
     # bots start background runs with this one line, not a long nohup claude -p a permission classifier blocks
-    ("gbase-run start", [ORCHESTRATOR, RUNNER, FACTORY, "README.md"]),
+    ("gbase-run start", [RUNNER_DOC, RUNNER, FACTORY, "README.md"]),
     # settle's one rebase exception, so it stays one rule and not an open door
     ("explicitly asks to rebase", [skill("monitor"), ORCHESTRATOR, FACTORY, "README.md"]),
     # the runner reads mockup's report lines into result.json
