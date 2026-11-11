@@ -121,7 +121,7 @@ Then surface the deferred findings: a severity-ordered table (`file:line`, failu
 ## On failure
 
 - Polish fails → surface it; ask whether to continue without it or abort. *headless:* continue without it.
-- `branch-pr` fails → stop, print `git status`, and point at the backup stash (`git stash apply stash@{0}`, not `pop`).
+- `branch-pr` fails → stop, print `git status`, and point at the backup ref `branch-pr` printed (`git restore --source=refs/gbase/backup/<ts> --worktree -- .`).
 - Monitor can't start (no `gh` auth, no PR) → surface and stop; the PR is already up (`pr:` line still in the report).
 
 ## Usage

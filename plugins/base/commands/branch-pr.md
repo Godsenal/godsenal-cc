@@ -100,31 +100,29 @@ Analyze changed files and compile the following:
 
 **Nothing to ship** (clean tree — no modified, staged, or untracked files) → stop here and tell the user;
 in [local mode](#local-mode), only when no commits are ahead of the base either.
-Do not proceed to Step 2: the backup `git stash push` would create nothing, and the `git stash apply`
-that follows would resurrect whatever unrelated stash the user already had at `stash@{0}`.
+Do not proceed to Step 2: there is nothing to back up.
 
 ### Step 2: Create Backup
 
-Always create a backup before starting:
+Always create a backup before starting. It is a commit under its own ref, written from a copy of the index, so
+the working tree and the real index are never touched and nothing has to be reapplied:
 
 ```bash
-# Create a stash backup with timestamp
-git stash push -m "branch-pr-backup-$(date +%Y%m%d-%H%M%S)" --include-untracked
+ts="$(date +%Y%m%d-%H%M%S)-$$"
+idx=$(mktemp)
+cp "$(git rev-parse --git-path index)" "$idx"
+GIT_INDEX_FILE="$idx" git add -A
+backup=$(git commit-tree "$(GIT_INDEX_FILE="$idx" git write-tree)" -p HEAD -m "branch-pr-backup-$ts")
+rm -f "$idx"
+git update-ref "refs/gbase/backup/$ts" "$backup"
+git diff --stat HEAD "refs/gbase/backup/$ts" | tail -1   # must list the changes you saw in Step 1
 ```
 
-Confirm the backup was actually created, then reapply the changes while **keeping** the stash as a
-persistent backup (`apply`, not `pop`):
+The backup holds every modified, staged, and untracked file (ignored files are not in it). Keep the ref name
+for the report. Restore with `git restore --source=refs/gbase/backup/<ts> --worktree -- .`.
 
-```bash
-git stash list | head -1   # must show the branch-pr-backup message you just wrote
-git stash apply
-```
-
-If `git stash push` printed `No local changes to save` (Step 1 should have already stopped you), **do not
-run `git stash apply`** — with no fresh backup on the stack it would apply an unrelated, pre-existing stash.
-
-The stash stays in the list (as `stash@{0}`) so it remains a real recovery point through the rest of the
-run. Recover anytime with `git stash apply` / inspect with `git stash list`.
+Not `git stash`: the stash list is shared by every worktree of the repo, so with two runs side by side
+`git stash apply` can bring back the other run's backup, and each run left one more entry in the user's list.
 
 ### Step 3: Decide Branch Name
 
@@ -347,8 +345,8 @@ Return the PR URL to the user, and put it in the final report as `pr: <url>` at 
 
 ### Step 9: Cleanup
 
-Don't ask. Leave the backup stash in place and print one line so the user can drop it themselves later:
-- "Backup stash left at `stash@{0}` — `git stash drop stash@{0}` to remove, `git stash list` to view."
+Don't ask. Leave the backup ref in place and print one line so the user can remove it themselves later:
+- "Backup left at `refs/gbase/backup/<ts>` — `git update-ref -d refs/gbase/backup/<ts>` to remove, `git for-each-ref refs/gbase/backup` to list."
 
 ## Error Handling
 
@@ -356,7 +354,7 @@ On any error:
 1. Stop all operations immediately
 2. Print current state (`git status`)
 3. Provide recovery instructions:
-   - "To restore from backup: `git stash apply stash@{0}` (apply, not pop — keep the backup for another try)"
+   - "To restore from backup: `git restore --source=refs/gbase/backup/<ts> --worktree -- .` (the ref stays, so it can be used again)"
    - "To delete the branch: `git checkout main && git branch -D <branch-name>`"
 
 ## Usage Example
@@ -379,7 +377,7 @@ compat-check: ⚠️ schema.ts adds a NOT NULL column — needs migrate-before-d
   Added a "Rollout / Deploy order" section to the PR.
 
 PR opened: https://github.com/owner/repo/pull/142
-Backup stash left at stash@{0} — `git stash drop stash@{0}` to remove.
+Backup left at refs/gbase/backup/<ts> — `git update-ref -d refs/gbase/backup/<ts>` to remove.
 ```
 
 No "proceed?" prompt — it only stops for the [Ask only when necessary](#ask-only-when-necessary) cases
