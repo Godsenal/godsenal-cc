@@ -16,7 +16,9 @@ Skill behavior lives in the skills, not here.
   gbase-run list                # one JSON line per run, newest first
   gbase-run cite <run-id>       # the run's provenance line (model, account, run id, skills)
   gbase-run land <run-id> [--onto <branch>]  # fast-forward or cherry-pick a local-only run's commits onto a branch
-  gbase-run gc [--older-than 3d] [--dry-run] # remove finished runs' worktrees whose work landed or was never made
+  gbase-run gc [--older-than 3d] [--backups-older-than 14d] [--dry-run]
+                                # remove finished runs' worktrees whose work landed or was never made, and old
+                                # branch-pr backup commits
   gbase-run doctor              # accounts, each account's preflight, last gc, worktree count and size; exit 1 on a problem
 
 The last stdout line of a run is the absolute path of its result.json (`start` prints it after the run id); a run that reported `교훈:` lines
@@ -1296,11 +1298,13 @@ def gc_reason(repo, path, branch, run, max_age):
 
 
 def cmd_gc(argv):
-    """`gc [--older-than 3d] [--dry-run]`: remove $GBASE_HOME/worktrees/* whose last run is done or failed, that
+    """`gc [--older-than 3d] [--backups-older-than 14d] [--dry-run]`: remove $GBASE_HOME/worktrees/* whose last run is done or failed, that
     have no uncommitted changes, and whose work is in the base, in a merged or closed PR, or was never made. Branches
     stay; one JSON line per worktree."""
     p = argparse.ArgumentParser(prog="gbase-run gc")
     p.add_argument("--older-than", type=parse_age, default=parse_age("3d"))
+    p.add_argument("--backups-older-than", type=parse_age, default=parse_age("14d"),
+                   help="branch-pr's backup commits (refs/gbase/backup/*) older than this go too (default 14d)")
     p.add_argument("--dry-run", action="store_true")
     a = p.parse_args(argv)
     runs = sorted((r for r in (load_result(d.parent.name) for d in RUNS.glob("*/result.json")) if r and r.get("repo")),
@@ -1327,6 +1331,17 @@ def cmd_gc(argv):
             tally[action] = tally.get(action, 0) + 1
             print(json.dumps({"path": str(path), "branch": branch, "run_id": run and run["run_id"], "action": action,
                               "reason": reason.split(": ", 1)[1]}, ensure_ascii=False))
+        # branch-pr leaves one backup commit per run under refs/gbase/backup/: a recovery point, not history
+        refs = git(repo, "for-each-ref", "--format=%(refname) %(committerdate:unix)", "refs/gbase/backup") or ""
+        for ref, stamp in (line.rsplit(" ", 1) for line in refs.splitlines()):
+            if time.time() - int(stamp) < a.backups_older_than:
+                continue
+            removed = a.dry_run or git(repo, "update-ref", "-d", ref) is not None
+            action = "would remove" if a.dry_run else "remove" if removed else "keep"
+            tally["backups " + action] = tally.get("backups " + action, 0) + 1
+            print(json.dumps({"ref": ref, "repo": str(repo), "action": action,
+                              "reason": "backup older than --backups-older-than" if removed
+                              else "git update-ref -d failed"}, ensure_ascii=False))
         if not a.dry_run:
             git(repo, "worktree", "prune")
     # read by doctor: a daily gc that never runs shows up as an old (or missing) `at`

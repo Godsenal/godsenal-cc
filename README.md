@@ -254,7 +254,7 @@ scripts/gbase-run stop <run-id> --reason "..."  # claude와 그 하위 프로세
 scripts/gbase-run list
 scripts/gbase-run cite <run-id>                 # "Claude Code · opus · 계정 default · run <id> · 스킬 gbase:work→go" 한 줄
 scripts/gbase-run land <run-id>                 # origin 없는 레포: 런의 커밋을 base 브랜치에 fast-forward 또는 cherry-pick
-scripts/gbase-run gc --older-than 3d            # 끝난 런의 worktree 중 base·PR에 들어갔거나 커밋 없는 것만 삭제 (--dry-run)
+scripts/gbase-run gc --older-than 3d            # 끝난 런의 worktree 중 base·PR에 들어갔거나 커밋 없는 것만 삭제, 14일 지난 branch-pr 백업 커밋도 삭제 (--dry-run)
 scripts/gbase-run doctor                        # 계정 목록·계정별 preflight·마지막 gc·worktree 수와 크기; 문제가 있으면 exit 1
 GBASE_NOTIFY_CMD=~/bin/notify-run scripts/gbase-run start …   # 런이 끝나면 <cmd> <run-id> <status> <exit-code> <result.json> 한 번 (실패해도 status는 그대로)
 ```

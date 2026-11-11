@@ -346,7 +346,7 @@ Return the PR URL to the user, and put it in the final report as `pr: <url>` at 
 ### Step 9: Cleanup
 
 Don't ask. Leave the backup ref in place and print one line so the user can remove it themselves later:
-- "Backup left at `refs/gbase/backup/<ts>` — `git update-ref -d refs/gbase/backup/<ts>` to remove, `git for-each-ref refs/gbase/backup` to list."
+- "Backup left at `refs/gbase/backup/<ts>` — `git update-ref -d refs/gbase/backup/<ts>` to remove, `git for-each-ref refs/gbase/backup` to list; `gbase-run gc` removes it after 14 days."
 
 ## Error Handling
 
