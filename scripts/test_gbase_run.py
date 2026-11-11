@@ -838,6 +838,22 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(gone, {"merged": True, "empty": True, "dirty": False, "open": False, "open-pr42": False})
         self.assertNotEqual(self.g("branch", "--list", "gbase/merged"), "")  # branches stay
 
+    def test_gc_removes_old_backup_refs_and_keeps_recent_ones(self):
+        self.run_cli("--repo", str(self.repo), "--slot", "ship")  # gc looks only at repos a run used
+        head = self.g("rev-parse", "HEAD")
+        self.g("update-ref", "refs/gbase/backup/20261101-000000-1", head)
+        lines = lambda out: [json.loads(line) for line in out if '"ref"' in line]
+        _, out = self.run_cli("gc")  # the commit is seconds old: kept under the 14-day default
+        self.assertEqual(lines(out), [])
+        _, out = self.run_cli("gc", "--backups-older-than", "0m", "--dry-run")
+        self.assertEqual([(l["ref"], l["action"]) for l in lines(out)],
+                         [("refs/gbase/backup/20261101-000000-1", "would remove")])
+        self.assertNotEqual(self.g("for-each-ref", "refs/gbase/backup"), "")
+        _, out = self.run_cli("gc", "--backups-older-than", "0m")
+        self.assertEqual(lines(out)[0]["action"], "remove")
+        self.assertEqual(self.g("for-each-ref", "refs/gbase/backup"), "")
+        self.assertEqual(json.loads((self.tmp / "home" / "gc-last.json").read_text())["backups remove"], 1)
+
     def test_status_reports_dead_runner(self):
         run = Path(self.env["GBASE_HOME"]) / "runs" / "r1"
         run.mkdir(parents=True)
