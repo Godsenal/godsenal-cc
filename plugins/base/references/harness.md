@@ -1,6 +1,6 @@
 # Harness recipes
 
-Text for bot skills that live outside this repo (`detached-claude-run`, `shared-browser-space-gate`). A bot copies it into its own skill; a change starts here, so the next copy picks it up. The runner contract itself is [orchestrator.md](orchestrator.md#runner).
+Text for bot skills that live outside this repo (`detached-claude-run`, `shared-browser-space-gate`). A bot copies it into its own skill; a change starts here, so the next copy picks it up. The runner itself is documented in [runner.md](runner.md).
 
 ## Starting a Claude run (`detached-claude-run`)
 
