@@ -33,7 +33,7 @@ Put the route's steps into the todo list verbatim, before task-specific items. A
 **Bug** — a defect to fix: `gbase:bug-fix`, then **2. Ship** below.
 
 **Feature** — new or changed behavior.
-1. `gbase:how` over the area it touches.
+1. `gbase:how` over the area it touches, when you don't already know it: an unfamiliar module, or a task that names no files. A task that already gives the files and the shape skips it (`skip: the task names the files`).
 2. Name the data shape before writing logic.
 3. Split it into units, each with its own check. Independent units go to `gbase:worker`s launched together (see Subagents); dependent units are built here in order, each verified before the next.
 4. Verify on the surface the user touches (the repo's verify skill, the CLI, the screen) — not only tests.
@@ -83,10 +83,8 @@ Add `--merge` only when the user asked for merging (this session) or the project
 ## Subagents
 
 - **Bulk goes out, conclusions come back.** Exploring many files, reading long logs, CI output or transcripts, and independent investigations go to `subagent_type: "gbase:scout"` (Sonnet, no edit tools), several in one message when independent; keep only their summaries here.
-- **Two or more independent code units → one `subagent_type: "gbase:worker"` per unit, launched together** (one message, `run_in_background: true`, `isolation: "worktree"`). Brief each with the unit, its check, and file pointers, not pasted context. Workers see only committed `HEAD`, not your uncommitted edits: paste any shared shape they depend on into each brief, and keep units off files you've changed.
-  - Independent means neither needs the other's result and they don't write the same files. A single unit, a design call, or units that write the same files stay here, in sequence.
-  - When they're back, take each change as a patch, without commits (no hooks to fail): `git -C <wt> add -A && git -C <wt> diff --cached --binary | git apply`. Read it, run the checks once on the whole, then clean up with `git worktree remove --force <wt> && git branch -D <its branch>`.
-  - Skills that dispatch their own agents (`review`, `polish`, `how`, `why`) keep their types.
+- **Two or more independent code units → one `subagent_type: "gbase:worker"` per unit, launched together.** Independent means neither needs the other's result and they don't write the same files; a single unit, a design call, or units that write the same files stay here, in sequence. Read [references/workers.md](references/workers.md) before launching them: the launch settings, what a worker can't see, and how to take the changes back.
+- Skills that dispatch their own agents (`review`, `polish`, `how`, `why`) keep their types.
 - **Fresh agent per new task**, briefed with the original ask, every later instruction, and the previous agent's report. Continue an existing agent only when the work needs state that lives in it (its checkout, a running simulator or server).
 - **You own their output.** Read the diff yourself and write your own summary; never relay "done" unchecked.
 - **A second opinion is the same prompt on another model** — agreement is the signal, not a persona.
