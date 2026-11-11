@@ -7,7 +7,7 @@ Skill behavior lives in the skills, not here.
 
   gbase-run --repo <path> --slot <slot> [--task "..." | --task-file <path>] [--worktree <name>]
             [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>] [--exclusive]
-            [--account <name>] [--notify-cmd "<cmd>"]
+            [--account <name>] [--notify-cmd "<cmd>"] [--max-turns <n>]
   gbase-run --dir <folder> --slot task|content [--task "..." | --task-file <path>] [--model opus|sonnet] [--answers <file>]
             [--account <name>] [--notify-cmd "<cmd>"]
   gbase-run start <the same arguments>   # detached: prints the run id and result.json path, then returns
@@ -71,6 +71,7 @@ PR_BODY = re.compile(r"^PR 본문 초안: (.+)$", re.M)
 SETTLE = re.compile(r"^settle: .*$", re.M)
 PR_URL = re.compile(r"^pr: <?(https?://[^\s<>`]+)", re.M)  # go/branch-pr's `pr: <url>` line
 MOCKUP = re.compile(r"^mockup( url| shots)?: (.+)$", re.M)
+FOLLOWUP = re.compile(r"^남은 작업: (.+)$", re.M)  # work's size gate: a slice of the task left for a later run
 LESSON = re.compile(r"^교훈: .*$", re.M)  # content-common's feedback intake: a lesson for a work run to ship
 POLL = 5  # seconds between checks while --exclusive waits for another run on the same repo
 SHIPPING_SLOTS = {"work", "ship"}  # slots that end in go: a PR (agent owner) or a `ship:` line (orchestrator)
@@ -393,6 +394,7 @@ def report(text):
         "pr_url": (PR_URL.findall(text) or [""])[-1].rstrip(".,;)") or None,
         "mockup": mockup(text),
         "lessons": LESSON.findall(text),
+        "followups": [f.strip() for f in FOLLOWUP.findall(text)],
     }
 
 
@@ -452,7 +454,18 @@ def review_md(findings, models):
     return "\n".join(out) + "\n"
 
 
-def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False):
+# A session's turn cap, a guard against a run that never converges, not a budget: the longest of the first 168
+# work runs took 264 turns. 0 turns the cap off.
+MAX_TURNS = 300
+WRAPUP_TURNS = 30
+# one more short session for a run the cap ended mid-work, so it leaves a report a next run can start from
+WRAPUP_PROMPT = ("This run reached its turn limit ({limit}) before finishing. Start no new work and don't ship. Leave the "
+                 "worktree as it is, and report in Korean: what is done and how it was checked, what is half-done and in "
+                 "which files, and each piece still to do as its own `남은 작업: <task>` line at column 0, written so a fresh "
+                 "run can take it with no other context. End with one `결정 필요:` line asking whether to continue.")
+
+
+def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max_turns=0):
     cmd = [claude_bin(), "-p", prompt, "--output-format", "stream-json", "--verbose",
            *(("--resume", resume) if resume else ()),
            *(arg for d in PLUGIN_DIRS for arg in ("--plugin-dir", str(d))),
@@ -460,6 +473,8 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False):
            "--permission-mode", os.environ.get("GBASE_PERMISSION_MODE", "bypassPermissions")]
     if model:
         cmd += ["--model", model]
+    if max_turns:
+        cmd += ["--max-turns", str(max_turns)]
     info = {"log_path": str(log_path), "results": [], "session_id": None, "model": model, "cost_usd": None,
             "tool_uses": 0, "is_error": False, "errors": [], "skills": []}
     with open(log_path, "a" if resume or append else "w", encoding="utf-8") as log:
@@ -496,6 +511,8 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False):
                 info["results"].append(event.get("result") or "")
                 info["cost_usd"] = event.get("total_cost_usd")
                 info["is_error"] = info["is_error"] or bool(event.get("is_error"))
+                if event.get("subtype") == "error_max_turns":
+                    info["capped"] = True
                 info["errors"] += [str(event[k]) for k in ("api_error", "error") if event.get(k)]
         info["exit_code"] = proc.wait()
     return info
@@ -734,6 +751,9 @@ def cmd_run(argv):
     p.add_argument("--notify-cmd", default=os.environ.get("GBASE_NOTIFY_CMD"),
                    help="run once when the run ends: <cmd> <run-id> <status> <exit-code> <result.json> "
                         "(default $GBASE_NOTIFY_CMD)")
+    p.add_argument("--max-turns", type=int, default=int(os.environ.get("GBASE_MAX_TURNS") or MAX_TURNS),
+                   help=f"turn cap for each session; a run that reaches it gets one short wrap-up session and reports "
+                        f"`turn_limit` (default $GBASE_MAX_TURNS, else {MAX_TURNS}; 0 = no cap)")
     a = p.parse_args(argv)
     pick = resolve_account(a.account) if a.account else None
     detached = os.environ.pop("GBASE_DETACHED", None) == "1"  # set by `gbase-run start`; popped so claude doesn't inherit it
@@ -884,7 +904,8 @@ def cmd_run(argv):
             account, tries = accounts.current(), 0
             while account:
                 try:
-                    s = run_claude(prompt, cwd, account_env(env, account[1]), m, log, append=tries > 0)
+                    s = run_claude(prompt, cwd, account_env(env, account[1]), m, log, append=tries > 0,
+                                   max_turns=a.max_turns)
                 except OSError as e:  # claude binary missing or not executable
                     sessions[m or "default"] = {"log_path": str(log), "results": [], "exit_code": 127, "error": str(e)}
                     return
@@ -897,19 +918,30 @@ def cmd_run(argv):
                 account = accounts.current()
             if not account:
                 return
+
+            def again(text, turns):  # one more session on the same conversation; its report joins the first one's
+                try:
+                    more = run_claude(text, cwd, account_env(env, account[1]), m, log, resume=s["session_id"],
+                                      max_turns=turns)
+                except OSError as e:  # the first session's report stays
+                    s["resume_error"] = str(e)
+                    return False
+                costs = [c for c in (s["cost_usd"], more["cost_usd"]) if c is not None]
+                s.update(results=s["results"] + more["results"], exit_code=more["exit_code"],
+                         cost_usd=sum(costs) if costs else None)
+                return True
+
+            if s.pop("capped", False):  # the cap ended it mid-work: no shipping resume, only the wrap-up report
+                s["turn_limit"] = a.max_turns
+                if s["session_id"] and not STOPPING.is_set():
+                    again(WRAPUP_PROMPT.format(limit=a.max_turns), WRAPUP_TURNS)
+                return
             line = s["exit_code"] == 0 and s["session_id"] and not STOPPING.is_set() and unshipped(
                 slot, a.ship_owner, s["results"], cwd, base)
             if not line:
                 return
-            try:
-                more = run_claude(RESUME_PROMPT.format(line=line), cwd, account_env(env, account[1]), m, log,
-                                  resume=s["session_id"])
-            except OSError as e:  # the first session's report stays
-                s["resume_error"] = str(e)
-                return
-            costs = [c for c in (s["cost_usd"], more["cost_usd"]) if c is not None]
-            s.update(results=s["results"] + more["results"], exit_code=more["exit_code"], resumed=True,
-                     cost_usd=sum(costs) if costs else None)
+            if again(RESUME_PROMPT.format(line=line), a.max_turns):
+                s["resumed"] = True
 
         threads = [threading.Thread(target=one, args=(m,)) for m in models] if cwd and not STOPPING.is_set() else []
         for t in threads:
@@ -922,7 +954,7 @@ def cmd_run(argv):
         skills = list(dict.fromkeys([*re.findall(r"^/([\w-]+:[\w-]+)", prompt),
                                      *(k for s in sessions.values() for k in s.get("skills", []))]))
         for s in sessions.values():
-            for k in ("errors", "skills", "is_error"):
+            for k in ("errors", "skills", "is_error", "capped"):
                 s.pop(k, None)
         results = {m: s.pop("results") for m, s in sessions.items()}
         finals = {m: final_text(texts) for m, texts in results.items()}
@@ -979,6 +1011,8 @@ def cmd_run(argv):
             "mockup": next((r["mockup"] for r in parsed if r["mockup"]), None),
             "evidence": read_jsonl(run_dir / "evidence.jsonl"),
             "lessons": lessons,
+            "followups": list(dict.fromkeys(f for r in parsed for f in r["followups"])),
+            "turn_limit": next((s["turn_limit"] for s in sessions.values() if s.get("turn_limit")), None),
             # a work run ships lessons; any other run's go to one, on a fresh worktree of this checkout
             "next": (write_lessons(run_id, run_dir, lessons) if lessons and slot != "work" else land_hint)
             or (warnings[0] if warnings else None),

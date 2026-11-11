@@ -21,6 +21,7 @@ Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1
 - Unpushed `gbase:pause` commits on this branch (`wip:` subject, `Intent:` body) → `gbase:pickup` first, then pick the route for what's left.
 - No `<!-- gbase:verify:start -->` block in `CLAUDE.md`/`AGENTS.md` → say once that `/gbase:setup` would make the verify step reliable, then continue.
 - Behind the upstream → fast-forward before starting.
+- **More than one PR's worth** — the task holds two or more changes that could each ship and be reviewed on their own (separate features, a migration plus the feature that uses it, several unrelated screens) → split it before the first edit. Do only the first slice, the one the others depend on, through Ship. Report every other slice as its own `남은 작업: <task>` line at column 0, written so a fresh run can take it with no other context. Review depth doesn't change: each slice gets the full `go`. Work that only holds together as one change (one screen's design pass, a rename across its callers) is not split: do it whole and say why in one line. Don't ask about the split; it's reversible.
 
 ## 1. Pick one route and copy its steps
 

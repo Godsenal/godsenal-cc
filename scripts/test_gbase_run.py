@@ -25,7 +25,7 @@ FAKE_CLAUDE = textwrap.dedent('''\
     model = args[args.index("--model") + 1] if "--model" in args else "default"
     cfg = os.environ.get("CLAUDE_CONFIG_DIR", "")
     marker = lambda name: bool(cfg) and os.path.exists(os.path.join(cfg, name))
-    if "--max-turns" in args:  # gbase-run's account preflight: logged-out fails it, logged-out-run doesn't
+    if "--max-turns" in args and args[args.index("-p") + 1] == "ok":  # gbase-run's account preflight: logged-out fails it, logged-out-run doesn't
         if cfg:
             open(os.path.join(cfg, "preflights"), "a").write("x")
         bad = marker("logged-out")
@@ -89,6 +89,15 @@ FAKE_CLAUDE = textwrap.dedent('''\
             final = "| # | severity | file:line | finding | action |\\n|---|---|---|---|---|\\n| 1 | low | `a.py:1` | x | auto-fixed |\\n"
         print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.5}))
         sys.exit(0)
+    if model == "capped":  # the turn cap ended the session mid-work; the wrap-up session reports what's left
+        if "--resume" in args:
+            open(os.path.join(run_dir, "wrapup-args"), "w").write(json.dumps(args))
+            print(json.dumps({"type": "result", "result": "절반 했습니다\\n남은 작업: B 화면 붙이기\\n남은 작업: C 마이그레이션\\n"
+                                                           "결정 필요: 이어서 할지 → 멈춤", "total_cost_usd": 0.1}))
+            sys.exit(0)
+        open("change.txt", "w").write("x")
+        print(json.dumps({"type": "result", "subtype": "error_max_turns", "is_error": True, "total_cost_usd": 2.0}))
+        sys.exit(1)
     if model == "twoturns":  # a later turn (a background task finishing) with no report lines
         print(json.dumps({"type": "result", "result": "기다리던 작업이 끝났습니다. 할 일은 없습니다.", "total_cost_usd": 0.02}))
 ''')
@@ -483,6 +492,23 @@ class GbaseRunTest(unittest.TestCase):
         (self.repo / "change.txt").unlink()
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--ship-owner", "agent", "--model", "lessons")
         self.assertNotIn("resumed", json.loads(Path(out[-1]).read_text())["sessions"]["lessons"])
+
+    def test_a_run_that_reaches_the_turn_cap_wraps_up_and_reports_what_is_left(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "capped", "--max-turns", "7")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["turn_limit"], result["status"]), (7, "done"))
+        self.assertEqual(result["followups"], ["B 화면 붙이기", "C 마이그레이션"])
+        self.assertIn("이어서 할지", [d["question"] for d in result["decisions"]])
+        self.assertIsNone(result["pr_url"])
+        session = result["sessions"]["capped"]
+        self.assertEqual((session["cost_usd"], session.get("resumed")), (2.1, None))  # wrapped up, not resumed to ship
+        args = json.loads((Path(result["run_dir"]) / "wrapup-args").read_text())
+        self.assertIn("turn limit (7)", args[args.index("-p") + 1])
+        self.assertEqual(args[args.index("--max-turns") + 1], str(gbase_run.WRAPUP_TURNS))
+        # an uncapped run passes the default cap and reports no limit
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--model", "haiku")
+        self.assertIsNone(json.loads(Path(out[-1]).read_text())["turn_limit"])
 
     def test_a_worktree_whose_pr_ended_starts_over(self):
         g = lambda *a: subprocess.run(["git", "-C", str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()
