@@ -22,6 +22,7 @@ The final assistant message carries these lines at column 0; grep for the prefix
 - `ship: skip — <reason>` — a run whose caller put shipping out of scope ("do not push"); it carries no `결정 필요:` line about it ([headless.md](headless.md#결정-필요-lines)).
 - `pr: <url>` — `branch-pr` after `gh pr create`, carried up by `go`: the PR an agent-owned run opened.
 - `settle: …` — `monitor --until-settled` ([below](#settle)).
+- `남은 작업: <task>` — `gbase:work` when the task was more than one PR's worth: a slice it left for a later run, one line each, complete enough to be that run's task. The caller starts them as new `work` runs, in order when one depends on another.
 - `mockup: <index.html>`, `mockup url: <url> | none — <reason>`, `mockup shots: <dir>` — `gbase:mockup`.
 - `교훈: <target skill> — <date "user's words">: <rule>` — gshorts' `content-common` feedback intake: a lesson for the harness. A content run never edits the harness source (`plugins/…` of any checkout) itself; a `work` run ships the lines, reviewed, as a PR ([Runner](#runner) prints the command).
 

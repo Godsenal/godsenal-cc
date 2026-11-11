@@ -96,6 +96,9 @@ CONTRACTS = [
     ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
     ("conflict resolution unreviewed", [skill("monitor")]),
     ("--exclusive", [RUNNER_DOC, RUNNER]),
+    # work's size gate reports the slices it left; the runner reads them into followups, and asks a capped run for them
+    ("남은 작업:", [skill("work"), ORCHESTRATOR, RUNNER, RUNNER_DOC]),
+    ("--max-turns", [RUNNER_DOC, RUNNER]),
     # bots start background runs with this one line, not a long nohup claude -p a permission classifier blocks
     ("gbase-run start", [RUNNER_DOC, RUNNER, FACTORY, "README.md"]),
     # settle's one rebase exception, so it stays one rule and not an open door
