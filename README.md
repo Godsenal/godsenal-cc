@@ -313,7 +313,7 @@ After installation, the following are available:
 /gbase:bug-fix                 # Fix a bug at its root cause — reproduce, narrow, verify on the same surface (skill, model-invocable)
 /gbase:reproduce <bug|request> # Turn a bug or request into a check that fails now — command, failing output, expected (skill, model-invocable)
 /gbase:mockup <request>        # Clickable single-file HTML mockup + screenshots, outside the repo (skill, explicit only)
-/gbase:design-taste            # The user's UI/UX taste rules, auto-loaded on screen work (skill, model-invocable)
+/gbase:design-taste            # The user's UI/UX taste rules, auto-loaded on screen work, and loaded by `work` before a screen edit (skill, model-invocable)
 /gbase:how                     # How does X work — explained with real files (skill, model-invocable)
 /gbase:why                     # Why is X this way — cited from git, PRs, and connected sources (skill, model-invocable)
 /gbase:pause                   # Stop cleanly with a wip commit whose body is the resume note (skill, explicit only)
