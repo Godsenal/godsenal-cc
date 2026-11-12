@@ -6,7 +6,7 @@ Read this when a change splits into two or more independent code units. A single
 
 - One `subagent_type: "gbase:worker"` per unit, all in one message, with `run_in_background: true` and `isolation: "worktree"`.
 - Brief each with the unit, its check, and file pointers, not pasted context.
-- A unit that touches what a user sees: tell the worker in its brief to run `Skill(skill: "gbase:design-taste")` before its first edit. A worker doesn't inherit the skills this session loaded.
+- A unit that touches what a user sees: tell the worker in its brief to run `Skill(skill: "gbase:design-taste")` before its first edit, unless the task came with a design to match (then give the worker that design). Name the stack skills the unit needs the same way. A worker doesn't inherit the skills this session loaded.
 - Workers see only committed `HEAD`, not your uncommitted edits: paste any shared shape they depend on into each brief, and keep units off files you've changed.
 
 ## Take the changes back
