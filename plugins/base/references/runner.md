@@ -61,6 +61,7 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `followups` | the `남은 작업:` lines in order, without the prefix: slices a `work` run left for later runs, or what a run stopped by the turn cap still had to do |
 | `turn_limit` | the turn cap, when a session reached it; else `null`. The run then got one wrap-up session of at most 30 turns and didn't ship |
 | `lessons`, `next` | the `교훈:` lines in order, and the `next:` command for them; without lessons, the `land` sentence of an unlanded local-only run; without either, the first of `warnings`; else `null` |
+| `gaps` | for an agent-owned `work`/`ship` run that opened a PR: what it skipped on the way (`gbase:go` not loaded, no evidence, no `settle:`), one sentence each; `[]` when nothing was skipped or no PR was opened. A caller shows these next to the PR link |
 | `warnings` | setup problems the run ran around (no accounts list); `[]` otherwise |
 | `notify` | `ok` or `failed` when a notify command ran; absent otherwise |
 | `concurrent` | run ids that were `running` on the same repo when this one started; absent when none |

@@ -75,6 +75,7 @@ A `checks` or `behavior` line whose `input` says `differs:` becomes a `(확인)`
 
 ```
 settle: 수렴 @<short-sha>
+settle: 수렴 @<short-sha> — merged <merge short-sha>
 settle: 미확정 @<short-sha> — 안 옴: <check or reviewer>, …
 settle: 사람 필요 @<short-sha> — <item>, …
 ```
@@ -83,7 +84,7 @@ settle: 사람 필요 @<short-sha> — <item>, …
 - `미확정` — something hadn't concluded 30 minutes into the wait on this head.
 - `사람 필요` — something only a person can resolve: a failing check monitor couldn't fix, a review comment that needs a decision, a standing `CHANGES_REQUESTED`, or a merge conflict.
 
-When more than one applies, `사람 필요` wins over `미확정`. The head sha is the last one monitor waited on; each fix it pushes starts a new wait. It never merges in this mode, and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase ([monitor](../skills/monitor/SKILL.md#--until-settled)); otherwise it never rebases or force-pushes. Wherever monitor does resolve a conflict, a resolution that combined both sides' content is reviewed before it's pushed, or leaves a `review` `open` evidence line ([monitor's Conflicts](../skills/monitor/SKILL.md#conflicts)).
+When more than one applies, `사람 필요` wins over `미확정`. The head sha is the last one monitor waited on; each fix it pushes starts a new wait. It merges only when invoked with `--merge` (the task asked for it) and the verdict allows it, adding `— merged <merge short-sha>` to the line; and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase ([monitor](../skills/monitor/SKILL.md#--until-settled)); otherwise it never rebases or force-pushes. Wherever monitor does resolve a conflict, a resolution that combined both sides' content is reviewed before it's pushed, or leaves a `review` `open` evidence line ([monitor's Conflicts](../skills/monitor/SKILL.md#conflicts)).
 
 Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes nothing and posts nothing. It judges the pushed head once, commits its fixes locally, and, when there are any, writes an updated PR draft to `AGENT_PR_BODY_FILE` and ends with `ship: local …`, `PR 본문 초안: …`, and `settle: 미확정 @<pushed sha> — 푸시 대기: <n> commits` (or `사람 필요`). The caller pushes, updates the PR body from the draft (`gh pr edit --title "$(head -n 1 "$f")" --body "$(tail -n +3 "$f")"`), and runs settle again. `AGENT_SHIP_OWNER=agent` opts into pushing and replying.
 
@@ -122,7 +123,7 @@ Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes noth
 
 `content` names a skill of the gshorts plugin in this marketplace (`/gshorts:content-common`), so its caller loads gshorts too (the runner does). `task` has no skill: its `invoke` is a bare `<task>`, so the prompt is the task, run under the same runner for its log, result, stop, and notify. No skill loads [headless.md](headless.md) in it, so the runner appends a short paragraph of its rules: no questions, the `결정 필요:` format, and the steps never taken on a guess (including evidence-less 약관·법적 동의, 대표자·본인 확인 체크, and 사실 진술 boxes).
 
-`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work <task>` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own. With `AGENT_SHIP_OWNER=agent` the run also pushes and opens the PR (`pr:` line), then settles it (`settle:` line); it never merges. Under `AGENT_HEADLESS=1` `go` reviews every tier before the PR, `low` included. Tasks that touch the same files — harness rule updates, the lessons of several content runs — go into one `work` run: two runs on the same skills at once made two PRs, and the second one's conflict was resolved without a review.
+`work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work <task>` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own. With `AGENT_SHIP_OWNER=agent` the run also pushes and opens the PR (`pr:` line), then settles it (`settle:` line); it merges only when the task asked for the merge. Under `AGENT_HEADLESS=1` `go` reviews every tier before the PR, `low` included. Tasks that touch the same files — harness rule updates, the lessons of several content runs — go into one `work` run: two runs on the same skills at once made two PRs, and the second one's conflict was resolved without a review.
 
 A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. There is no `plan` slot: `gbase:how` explains the code a task touches, but it doesn't decide scope or acceptance criteria.
 

@@ -510,6 +510,19 @@ class GbaseRunTest(unittest.TestCase):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--model", "haiku")
         self.assertIsNone(json.loads(Path(out[-1]).read_text())["turn_limit"])
 
+    def test_a_pr_run_records_the_gates_it_skipped(self):
+        gaps = gbase_run.ship_gaps
+        self.assertEqual(gaps("work", "agent", ["gbase:work", "gbase:go"], [{"step": "review"}], "settle: 수렴 @a", "u"), [])
+        skipped = gaps("work", "agent", ["gbase:work"], [], None, "u")
+        self.assertEqual(len(skipped), 3)
+        self.assertIn("gbase:go 없이", skipped[0])
+        self.assertEqual(gaps("work", "agent", ["gbase:work"], [], None, None), [])  # no PR: nothing shipped
+        self.assertEqual(gaps("work", "orchestrator", [], [], None, "u"), [])  # the caller ships
+        self.assertEqual(gaps("review", "agent", [], [], None, "u"), [])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "agent")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["gaps"], [])
+
     def test_a_worktree_whose_pr_ended_starts_over(self):
         g = lambda *a: subprocess.run(["git", "-C", str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "lessons")

@@ -1,12 +1,13 @@
 # gbase evals
 
-Checks that `gbase:work` loads `gbase:design-taste` when it should, and skips it when it shouldn't.
+Checks that `gbase:work` loads `gbase:design-taste` when it should and skips it when it shouldn't, and that it ships through `gbase:go`.
 
 | case | expects |
 |---|---|
 | `screen-loads-design-taste` | a screen change loads `design-taste` before the first `Edit` |
 | `figma-given-skips-design-taste` | a task that hands over a Figma design does not load it |
 | `logic-only-skips-design-taste` | a logic-only edit inside a UI file does not load it |
+| `chore-ships-through-go` | a one-line chore asked as "a quick PR" loads `gbase:go` and runs no `git commit`/`push`/`gh pr` by hand |
 
 Run from `plugins/base` (about 1 minute and $2 for 3 runs per case):
 
