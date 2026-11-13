@@ -169,7 +169,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - **Converges instead of looping** with automated reviewers: pre-existing findings get a one-line reply and no fix, repeats of handled findings are ignored, and after three rounds from the same reviewer it stops auto-applying and asks whether the approach needs rethinking
 - Surfaces anything ambiguous (architecture, behavior, design questions, hedged feedback, semantic conflicts) via `AskUserQuestion`
 - Stops automatically when the PR reaches `MERGED` or `CLOSED`
-- `--until-settled` ends earlier, once the current head's checks and expected review bots have concluded, with one `settle: 수렴 | 미확정 | 사람 필요 @<sha>` line; it waits in short foreground polls (each returns within 5 minutes), gives up 30 minutes into a head, never merges, and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase; under `AGENT_SHIP_OWNER=orchestrator` it pushes nothing and reports its local fix commits and a refreshed PR draft
+- `--until-settled` ends earlier, once the current head's checks and expected review bots have concluded, with one `settle: 수렴 | 미확정 | 사람 필요 @<sha>` line; it waits in short foreground polls (each returns within 5 minutes), gives up 30 minutes into a head, merges only with `--merge` once the verdict allows it, and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase; under `AGENT_SHIP_OWNER=orchestrator` it pushes nothing and reports its local fix commits and a refreshed PR draft
 
 **setup** (skill, model-invocable) — Prepare a repo for the ship loop in one pass; idempotent, one confirmation.
 
@@ -324,7 +324,7 @@ After installation, the following are available:
 /gbase:unslop                  # Remove AI writing tells from prose, Korean included (skill, model-invocable)
 /gbase:go                      # Review ∥ polish → verify → branch + commit + PR → monitor (skill)
 /gbase:monitor                 # Watch current branch's PR — auto-fix clear CI/review items (skill)
-/gbase:monitor --until-settled # Stop once this head's CI and review bots have concluded; never merges (skill)
+/gbase:monitor --until-settled # Stop once this head's CI and review bots have concluded; merges only with --merge (skill)
 /gbase:setup                   # Record verify commands, seed REVIEW.md, add format hook (skill)
 /gbase:create-verify [--maintain]  # Generate/maintain a project-local behavior-verification skill (skill)
 /gbase:correct [--session]     # Turn recurring review/CI mistakes into checks; --session = retro on one session (skill)

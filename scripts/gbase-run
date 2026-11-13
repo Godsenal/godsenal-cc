@@ -709,6 +709,10 @@ def unshipped(slot, owner, texts, cwd, base):
     pattern, line = (SHIP, "ship:") if owner == "orchestrator" else (PR_URL, "pr:")
     if slot not in SHIPPING_SLOTS or pattern.search("\n".join(texts)):
         return None
+    # a branch whose PR already merged has nowhere to ship to: runs that merged by hand were resumed for the
+    # report file they left untracked in the worktree
+    if owner == "agent" and gh(cwd, "pr", "view", "--json", "state", "-q", ".state") == "MERGED":
+        return None
     if git(cwd, "status", "--porcelain"):
         return line
     # commits no remote has: ones already in an open PR (the shared lessons branch) aren't unshipped work; with
@@ -717,6 +721,20 @@ def unshipped(slot, owner, texts, cwd, base):
     unpushed = base and (git(cwd, "rev-list", "--count", "HEAD", "--not", "--remotes") if remote
                          else git(cwd, "rev-list", "--count", f"{base}..HEAD"))
     return line if unpushed not in (None, "", "0") else None
+
+
+def ship_gaps(slot, owner, skills, evidence, settle, pr_url):
+    """What a run that opened a PR skipped on the way: the gates are the skills' to keep, this is the record."""
+    if slot not in SHIPPING_SLOTS or owner != "agent" or not pr_url:
+        return []
+    gaps = []
+    if "gbase:go" not in skills:
+        gaps.append("gbase:go 없이 PR이 열림(손으로 커밋·push): 리뷰·검증 게이트를 거치지 않음")
+    if not evidence:
+        gaps.append("증거 없음(evidence.jsonl 비어 있음): 리뷰·검사 결과가 기록되지 않음")
+    if not settle:
+        gaps.append("settle 없음: CI·리뷰 봇 결과를 기다리지 않았거나 `settle:` 줄이 없음")
+    return gaps
 
 
 def write_lessons(run_id, run_dir, lessons):
@@ -1020,6 +1038,9 @@ def cmd_run(argv):
             or (warnings[0] if warnings else None),
             "warnings": warnings,
             "sessions": sessions,
+        })
+        result.update({
+            "gaps": ship_gaps(slot, a.ship_owner, skills, result["evidence"], result["settle"], pr_url),
         })
         if (run_dir / "stop-reason").exists():
             result["stop_reason"] = (run_dir / "stop-reason").read_text(encoding="utf-8").strip()
