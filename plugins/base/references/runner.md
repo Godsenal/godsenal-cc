@@ -58,6 +58,7 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `decisions` | every `결정 필요:` line, in order, as `{text, question, applied, recommend, options, human, incomplete}` ([format](headless.md#결정-필요-lines)): `text` is the raw line (before v1.28.0 the list held only these strings); a part the line lacks is `null`, except `options`, which is `[]` when the line lists none. `incomplete` is `true` when there's no `추천` and the question only points at the report (`위 2건을 확인해 주세요`): pass `final.md` along with it |
 | `ship`, `settle` | the last `ship:` / `settle:` line of any result message in the session (a session can end more than one turn), or `null` |
 | `pr_url` | the URL from the last `pr:` line (`--ship-owner agent`); without one, for `settle` and for an agent-owned `work`/`ship` run, the current branch's open PR from `gh pr view` (a session that opened a PR can end with only its `settle:` line); else `null` |
+| `plan_file` | the `plan:` line's path, from a `plan` run; else `null`. Its slices are in `followups` |
 | `followups` | the `남은 작업:` lines in order, without the prefix: slices a `work` run left for later runs, or what a run stopped by the turn cap still had to do |
 | `budget_limit` | the cost cap in USD, when a session reached it; else `null`. Handled like `turn_limit` |
 | `turn_limit` | the turn cap, when a session reached it; else `null`. The run then got one wrap-up session of at most 30 turns and didn't ship |

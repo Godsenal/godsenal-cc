@@ -22,7 +22,8 @@ The final assistant message carries these lines at column 0; grep for the prefix
 - `ship: skip — <reason>` — a run whose caller put shipping out of scope ("do not push"); it carries no `결정 필요:` line about it ([headless.md](headless.md#결정-필요-lines)).
 - `pr: <url>` — `branch-pr` after `gh pr create`, carried up by `go`: the PR an agent-owned run opened.
 - `settle: …` — `monitor --until-settled` ([below](#settle)).
-- `남은 작업: <task>` — `gbase:work` when the task was more than one PR's worth: a slice it left for a later run, one line each, complete enough to be that run's task. The caller starts them as new `work` runs, in order when one depends on another.
+- `plan: <absolute path>` — `gbase:plan`: the plan file. Its slices follow as `남은 작업:` lines.
+- `남은 작업: <task>` — `gbase:plan` for each slice of a plan, and `gbase:work` when the task was more than one PR's worth: a slice it left for a later run, one line each, complete enough to be that run's task. The caller starts them as new `work` runs, in order when one depends on another.
 - `mockup: <index.html>`, `mockup url: <url> | none — <reason>`, `mockup shots: <dir>` — `gbase:mockup`.
 - `교훈: <target skill> — <date "user's words">: <rule>` — gshorts' `content-common` feedback intake: a lesson for the harness. A content run never edits the harness source (`plugins/…` of any checkout) itself; a `work` run ships the lines, reviewed, as a PR ([Runner](#runner) prints the command).
 
@@ -125,7 +126,7 @@ Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes noth
 
 `work` is the dev run's entry: an orchestrator that opens a task with `/gbase:work <task>` gets the whole route, ending in `go`, so it lists no review, polish or checks steps of its own. With `AGENT_SHIP_OWNER=agent` the run also pushes and opens the PR (`pr:` line), then settles it (`settle:` line); it merges only when the task asked for the merge. Under `AGENT_HEADLESS=1` `go` reviews every tier before the PR, `low` included. Tasks that touch the same files — harness rule updates, the lessons of several content runs — go into one `work` run: two runs on the same skills at once made two PRs, and the second one's conflict was resolved without a review.
 
-A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. There is no `plan` slot: `gbase:how` explains the code a task touches, but it doesn't decide scope or acceptance criteria.
+A slot the manifest doesn't list isn't supplied; an orchestrator ignores slots it doesn't know. The `plan` slot decides scope and acceptance checks before any code: it ends in a plan file and slices, and the caller starts each slice as a `work` run.
 
 ## Runner
 

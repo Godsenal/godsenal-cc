@@ -87,6 +87,8 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Each rule cites the user's words in [`references/sources.md`](plugins/base/skills/design-taste/references/sources.md) with external references; new design feedback is reported as a `교훈: design-taste — …` line for a `work` run to ship. `mockup` and gapp's `design` load it first
 - Triggers from its description alone, with no hook. When many skills are installed, Claude Code lists rarely used skills by name only, so on an account where it has never run it can be skipped until it is invoked once (by name, `mockup`, or `design`); after that its description stays listed
 
+**plan** (skill, model-invocable) — Turn an idea or a vague request into a plan a work run can build without guessing. Checks the premise (what exists, what if nothing is built, the smaller version), settles the decisions only you can make in rounds with a recommended answer each, looks facts up itself, and ends with PR-sized slices that each carry a check. Read-only: one plan file under `~/.gbase/plans/`, no code. Headless (`plan` slot) it applies its recommendations and reports them as `결정 필요:` lines. Interview modeled on Matt Pocock's `grilling`, decision classes on gstack's `autoplan`.
+
 **how** (skill, model-invocable) — Explain how a part of the codebase works, with real files and functions. Ported from pstack's `how`.
 
 - Narrow questions are answered directly; a subsystem-wide one fans out 2–4 read-only explorers (Sonnet) on separate angles, then one explainer reconciles them
@@ -314,6 +316,7 @@ After installation, the following are available:
 /gbase:reproduce <bug|request> # Turn a bug or request into a check that fails now — command, failing output, expected (skill, model-invocable)
 /gbase:mockup <request>        # Clickable single-file HTML mockup + screenshots, outside the repo (skill, explicit only)
 /gbase:design-taste            # The user's UI/UX taste rules, auto-loaded on screen work, and loaded by `work` before a screen edit (skill, model-invocable)
+/gbase:plan <idea>             # Idea → decisions → PR-sized slices with checks; no code (skill, model-invocable)
 /gbase:how                     # How does X work — explained with real files (skill, model-invocable)
 /gbase:why                     # Why is X this way — cited from git, PRs, and connected sources (skill, model-invocable)
 /gbase:pause                   # Stop cleanly with a wip commit whose body is the resume note (skill, explicit only)
