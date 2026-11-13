@@ -7,7 +7,7 @@ Skill behavior lives in the skills, not here.
 
   gbase-run --repo <path> --slot <slot> [--task "..." | --task-file <path>] [--worktree <name>]
             [--base <ref>] [--model opus|sonnet] [--ship-owner orchestrator|agent] [--answers <file>] [--exclusive]
-            [--account <name>] [--notify-cmd "<cmd>"] [--max-turns <n>]
+            [--account <name>] [--notify-cmd "<cmd>"] [--max-turns <n>] [--max-budget-usd <usd>]
   gbase-run --dir <folder> --slot task|content [--task "..." | --task-file <path>] [--model opus|sonnet] [--answers <file>]
             [--account <name>] [--notify-cmd "<cmd>"]
   gbase-run start <the same arguments>   # detached: prints the run id and result.json path, then returns
@@ -460,14 +460,18 @@ def review_md(findings, models):
 # work runs took 264 turns. 0 turns the cap off.
 MAX_TURNS = 300
 WRAPUP_TURNS = 30
+# the same kind of guard in dollars (the API-equivalent cost claude reports): of 151 work runs with a cost, one went
+# over this ($714) and it was a task that should have been split. 0 turns the cap off.
+MAX_BUDGET_USD = 300
+WRAPUP_BUDGET_USD = 10
 # one more short session for a run the cap ended mid-work, so it leaves a report a next run can start from
-WRAPUP_PROMPT = ("This run reached its turn limit ({limit}) before finishing. Start no new work and don't ship. Leave the "
+WRAPUP_PROMPT = ("This run reached its {limit} before finishing. Start no new work and don't ship. Leave the "
                  "worktree as it is, and report in Korean: what is done and how it was checked, what is half-done and in "
                  "which files, and each piece still to do as its own `남은 작업: <task>` line at column 0, written so a fresh "
                  "run can take it with no other context. End with one `결정 필요:` line asking whether to continue.")
 
 
-def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max_turns=0):
+def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max_turns=0, max_budget=0):
     cmd = [claude_bin(), "-p", prompt, "--output-format", "stream-json", "--verbose",
            *(("--resume", resume) if resume else ()),
            *(arg for d in PLUGIN_DIRS for arg in ("--plugin-dir", str(d))),
@@ -477,6 +481,8 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
         cmd += ["--model", model]
     if max_turns:
         cmd += ["--max-turns", str(max_turns)]
+    if max_budget:
+        cmd += ["--max-budget-usd", str(max_budget)]
     info = {"log_path": str(log_path), "results": [], "session_id": None, "model": model, "cost_usd": None,
             "tool_uses": 0, "is_error": False, "errors": [], "skills": []}
     with open(log_path, "a" if resume or append else "w", encoding="utf-8") as log:
@@ -513,8 +519,8 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
                 info["results"].append(event.get("result") or "")
                 info["cost_usd"] = event.get("total_cost_usd")
                 info["is_error"] = info["is_error"] or bool(event.get("is_error"))
-                if event.get("subtype") == "error_max_turns":
-                    info["capped"] = True
+                if event.get("subtype") in ("error_max_turns", "error_max_budget_usd"):
+                    info["capped"] = "budget" if event["subtype"] == "error_max_budget_usd" else "turns"
                 info["errors"] += [str(event[k]) for k in ("api_error", "error") if event.get(k)]
         info["exit_code"] = proc.wait()
     return info
@@ -774,6 +780,9 @@ def cmd_run(argv):
     p.add_argument("--max-turns", type=int, default=int(os.environ.get("GBASE_MAX_TURNS") or MAX_TURNS),
                    help=f"turn cap for each session; a run that reaches it gets one short wrap-up session and reports "
                         f"`turn_limit` (default $GBASE_MAX_TURNS, else {MAX_TURNS}; 0 = no cap)")
+    p.add_argument("--max-budget-usd", type=float, default=float(os.environ.get("GBASE_MAX_BUDGET_USD") or MAX_BUDGET_USD),
+                   help=f"cost cap in USD for each session, handled like --max-turns and reported as `budget_limit` "
+                        f"(default $GBASE_MAX_BUDGET_USD, else {MAX_BUDGET_USD}; 0 = no cap)")
     a = p.parse_args(argv)
     pick = resolve_account(a.account) if a.account else None
     detached = os.environ.pop("GBASE_DETACHED", None) == "1"  # set by `gbase-run start`; popped so claude doesn't inherit it
@@ -925,7 +934,7 @@ def cmd_run(argv):
             while account:
                 try:
                     s = run_claude(prompt, cwd, account_env(env, account[1]), m, log, append=tries > 0,
-                                   max_turns=a.max_turns)
+                                   max_turns=a.max_turns, max_budget=a.max_budget_usd)
                 except OSError as e:  # claude binary missing or not executable
                     sessions[m or "default"] = {"log_path": str(log), "results": [], "exit_code": 127, "error": str(e)}
                     return
@@ -939,10 +948,10 @@ def cmd_run(argv):
             if not account:
                 return
 
-            def again(text, turns):  # one more session on the same conversation; its report joins the first one's
+            def again(text, turns, budget):  # one more session on the same conversation; its report joins the first one's
                 try:
                     more = run_claude(text, cwd, account_env(env, account[1]), m, log, resume=s["session_id"],
-                                      max_turns=turns)
+                                      max_turns=turns, max_budget=budget)
                 except OSError as e:  # the first session's report stays
                     s["resume_error"] = str(e)
                     return False
@@ -951,16 +960,20 @@ def cmd_run(argv):
                          cost_usd=sum(costs) if costs else None)
                 return True
 
-            if s.pop("capped", False):  # the cap ended it mid-work: no shipping resume, only the wrap-up report
-                s["turn_limit"] = a.max_turns
+            capped = s.pop("capped", None)
+            if capped:  # a cap ended it mid-work: no shipping resume, only the wrap-up report
+                if capped == "budget":
+                    s["budget_limit"], limit = a.max_budget_usd, f"budget limit (${a.max_budget_usd:g})"
+                else:
+                    s["turn_limit"], limit = a.max_turns, f"turn limit ({a.max_turns})"
                 if s["session_id"] and not STOPPING.is_set():
-                    again(WRAPUP_PROMPT.format(limit=a.max_turns), WRAPUP_TURNS)
+                    again(WRAPUP_PROMPT.format(limit=limit), WRAPUP_TURNS, WRAPUP_BUDGET_USD)
                 return
             line = s["exit_code"] == 0 and s["session_id"] and not STOPPING.is_set() and unshipped(
                 slot, a.ship_owner, s["results"], cwd, base)
             if not line:
                 return
-            if again(RESUME_PROMPT.format(line=line), a.max_turns):
+            if again(RESUME_PROMPT.format(line=line), a.max_turns, a.max_budget_usd):
                 s["resumed"] = True
 
         threads = [threading.Thread(target=one, args=(m,)) for m in models] if cwd and not STOPPING.is_set() else []
@@ -1033,6 +1046,7 @@ def cmd_run(argv):
             "lessons": lessons,
             "followups": list(dict.fromkeys(f for r in parsed for f in r["followups"])),
             "turn_limit": next((s["turn_limit"] for s in sessions.values() if s.get("turn_limit")), None),
+            "budget_limit": next((s["budget_limit"] for s in sessions.values() if s.get("budget_limit")), None),
             # a work run ships lessons; any other run's go to one, on a fresh worktree of this checkout
             "next": (write_lessons(run_id, run_dir, lessons) if lessons and slot != "work" else land_hint)
             or (warnings[0] if warnings else None),
