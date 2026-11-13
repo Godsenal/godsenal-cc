@@ -96,7 +96,8 @@ FAKE_CLAUDE = textwrap.dedent('''\
                                                            "결정 필요: 이어서 할지 → 멈춤", "total_cost_usd": 0.1}))
             sys.exit(0)
         open("change.txt", "w").write("x")
-        print(json.dumps({"type": "result", "subtype": "error_max_turns", "is_error": True, "total_cost_usd": 2.0}))
+        print(json.dumps({"type": "result", "subtype": os.environ.get("FAKE_CAP", "error_max_turns"), "is_error": True,
+                          "total_cost_usd": 2.0}))
         sys.exit(1)
     if model == "twoturns":  # a later turn (a background task finishing) with no report lines
         print(json.dumps({"type": "result", "result": "기다리던 작업이 끝났습니다. 할 일은 없습니다.", "total_cost_usd": 0.02}))
@@ -506,6 +507,17 @@ class GbaseRunTest(unittest.TestCase):
         args = json.loads((Path(result["run_dir"]) / "wrapup-args").read_text())
         self.assertIn("turn limit (7)", args[args.index("-p") + 1])
         self.assertEqual(args[args.index("--max-turns") + 1], str(gbase_run.WRAPUP_TURNS))
+        # the cost cap ends a run the same way
+        self.env["FAKE_CAP"] = "error_max_budget_usd"
+        (self.repo / "change.txt").unlink()
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "capped", "--max-budget-usd", "40")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["budget_limit"], result["turn_limit"], len(result["followups"])), (40, None, 2))
+        args = json.loads((Path(result["run_dir"]) / "wrapup-args").read_text())
+        self.assertIn("budget limit ($40)", args[args.index("-p") + 1])
+        self.assertEqual(args[args.index("--max-budget-usd") + 1], str(gbase_run.WRAPUP_BUDGET_USD))
+        (self.repo / "change.txt").unlink()
         # an uncapped run passes the default cap and reports no limit
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--model", "haiku")
         self.assertIsNone(json.loads(Path(out[-1]).read_text())["turn_limit"])
