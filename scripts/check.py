@@ -101,6 +101,10 @@ CONTRACTS = [
     # work's size gate reports the slices it left; the runner reads them into followups, and asks a capped run for them
     ("남은 작업:", [skill("work"), ORCHESTRATOR, RUNNER, RUNNER_DOC]),
     ("--max-turns", [RUNNER_DOC, RUNNER]),
+    # plan reports its file and slices; the runner reads them into plan_file and followups
+    ("`plan: <absolute path>`", [skill("plan"), ORCHESTRATOR]),
+    ("plan_file", [RUNNER_DOC, RUNNER]),
+    ("`gbase:plan`", [SESSION_HOOK, skill("work")]),
     ("--max-budget-usd", [RUNNER_DOC, RUNNER]),
     # bots start background runs with this one line, not a long nohup claude -p a permission classifier blocks
     ("gbase-run start", [RUNNER_DOC, RUNNER, FACTORY, "README.md"]),

@@ -73,6 +73,7 @@ PR_BODY = re.compile(r"^PR 본문 초안: (.+)$", re.M)
 SETTLE = re.compile(r"^settle: .*$", re.M)
 PR_URL = re.compile(r"^pr: <?(https?://[^\s<>`]+)", re.M)  # go/branch-pr's `pr: <url>` line
 MOCKUP = re.compile(r"^mockup( url| shots)?: (.+)$", re.M)
+PLAN = re.compile(r"^plan: (.+)$", re.M)  # gbase:plan's plan file
 FOLLOWUP = re.compile(r"^남은 작업: (.+)$", re.M)  # work's size gate: a slice of the task left for a later run
 LESSON = re.compile(r"^교훈: .*$", re.M)  # content-common's feedback intake: a lesson for a work run to ship
 POLL = 5  # seconds between checks while --exclusive waits for another run on the same repo
@@ -397,6 +398,7 @@ def report(text):
         "mockup": mockup(text),
         "lessons": LESSON.findall(text),
         "followups": [f.strip() for f in FOLLOWUP.findall(text)],
+        "plan_file": (PLAN.findall(text) or [None])[-1],
     }
 
 
@@ -1045,6 +1047,7 @@ def cmd_run(argv):
             "evidence": read_jsonl(run_dir / "evidence.jsonl"),
             "lessons": lessons,
             "followups": list(dict.fromkeys(f for r in parsed for f in r["followups"])),
+            "plan_file": next((r["plan_file"].strip() for r in parsed if r["plan_file"]), None),
             "turn_limit": next((s["turn_limit"] for s in sessions.values() if s.get("turn_limit")), None),
             "budget_limit": next((s["budget_limit"] for s in sessions.values() if s.get("budget_limit")), None),
             # a work run ships lessons; any other run's go to one, on a fresh worktree of this checkout

@@ -32,6 +32,8 @@ Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1
 
 Put the route's steps into the todo list verbatim, before task-specific items. A step you skip stays in the list as `skip: <reason>`. If none fits, say so and plan the steps yourself under the principles below.
 
+**Plan** — an idea, a feature whose product choices are open, or "기획해 줘": `gbase:plan`. It ends in a plan file and slices, not code; each slice then comes back here as its own task.
+
 **Investigation** — a read-only question (how does X work, why is Y, should we do A or B).
 1. `gbase:how`; add `gbase:why` for motivation or history.
 2. Answer with the evidence, or a recommendation with a tradeoffs table. No code, no PR — if it turns into a change, re-route.

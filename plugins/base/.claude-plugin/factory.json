@@ -61,6 +61,12 @@
       "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD", "AGENT_SHIP_OWNER", "AGENT_PR_BODY_FILE", "AGENT_EVIDENCE_FILE"],
       "notes": "Needs gh auth and an open PR for the current branch. Fixes clear CI failures and review comments, then ends once the current head's checks and automated reviewers have concluded, with one `settle: 수렴|미확정|사람 필요 @<sha>` line. With AGENT_SHIP_OWNER=orchestrator its fixes stay local commits, nothing is posted, and after any fix it reports `ship: local …` and `PR 본문 초안:` with a refreshed draft; agent pushes and replies. Never merges; rebases (pushing with --force-with-lease) only when the invocation explicitly asks to rebase (--task \"rebase onto main\"), and never force-pushes otherwise. gbase-run fills pr_url from the branch's PR."
     },
+    "plan": {
+      "invoke": "/gbase:plan <idea>",
+      "model": "opus",
+      "env": ["AGENT_HEADLESS", "AGENT_ASK_CMD"],
+      "notes": "Read-only: turns an idea or a vague request into a plan file and PR-sized slices. Checks the premise, decides what the repo settles, applies its recommendation on product choices and reports each as a `결정 필요:` line (AGENT_ASK_CMD can answer them), and never changes the user's stated direction on its own. Ends with `plan: <path>` and one `남은 작업: <task>` line per slice, which the runner reads into result.json `plan_file` and `followups`; the caller starts the slices as work runs in order. Writes no code and opens no PR."
+    },
     "learn": {
       "invoke": "/gbase:correct",
       "model": "opus",

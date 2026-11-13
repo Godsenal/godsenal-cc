@@ -74,6 +74,7 @@ FAKE_CLAUDE = textwrap.dedent('''\
         "agent": "PR을 열었습니다\\npr: <https://github.com/o/r/pull/9>.\\nsettle: 수렴 @abc1234\\n"
                  if os.environ["AGENT_SHIP_OWNER"] == "agent" else "no ship owner\\n",
         # go → monitor ran long and the last message kept only the settle line
+        "plan": "계획을 썼습니다\\nplan: /p/app-onboarding.md\\n남은 작업: 1. 스키마와 첫 화면\\n남은 작업: 2. 알림 설정\\n결정 필요: 알림 기본값 → 켬 (추천: 켬; 다른 선택지: 끔)\\n",
         "settled": "PR #64를 정리했습니다\\nsettle: 사람 필요 @7b0a03f\\n",
     }
     final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
@@ -521,6 +522,14 @@ class GbaseRunTest(unittest.TestCase):
         # an uncapped run passes the default cap and reports no limit
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--model", "haiku")
         self.assertIsNone(json.loads(Path(out[-1]).read_text())["turn_limit"])
+
+    def test_plan_slot_reports_the_plan_file_and_its_slices(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "plan", "--task", "온보딩", "--model", "plan")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["status"], result["plan_file"]), ("done", "/p/app-onboarding.md"))
+        self.assertEqual(result["followups"], ["1. 스키마와 첫 화면", "2. 알림 설정"])
+        self.assertEqual(result["decisions"][0]["question"], "알림 기본값")
+        self.assertIn("/gbase:plan 온보딩", Path(result["prompt_path"]).read_text())
 
     def test_a_pr_run_records_the_gates_it_skipped(self):
         gaps = gbase_run.ship_gaps
