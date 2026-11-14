@@ -48,7 +48,11 @@ Classify each frontier decision, then act:
 | taste | reasonable people would differ: a product choice, a tradeoff, a default | ask, with your recommendation | apply the recommendation, add a `결정 필요:` line |
 | direction change | you recommend something other than what was asked | ask, alone, before anything else | keep the user's direction, add a `결정 필요:` line with your case |
 
+Relayed (below) counts as "with a person": the questions go back to the caller instead of to `AskUserQuestion`.
+
 Asking: one `AskUserQuestion` call per round carries the whole frontier of taste decisions (up to its limit; the rest wait a round). Put your recommended option first, say in its description what it costs and what the other option would cost, and word it so accepting every first option is a complete answer. This user answers in a word; never ask for prose, and never ask the same thing twice. A round's answers move the frontier: recompute it and ask the next round. Three rounds is normal; more than five means the request is several plans, so split it and plan the first.
+
+**Relay.** When you were started by an agent that talks to the user for you (its brief says to return the questions), you can't ask and must not decide for the user. Do steps 1 and 2 and the mechanical decisions, then stop and return the round: each taste decision as a question with your recommended option first, what it costs, and the alternatives; a direction change alone, before anything else. Write no plan file yet. When the answers come back, recompute the frontier: return the next round, or finish with steps 4 and 5.
 
 Stop when the frontier is empty: nothing left silently assumed. An assumption you couldn't check and didn't ask about is written as `가정:` with what would falsify it.
 
