@@ -124,7 +124,8 @@ class GbaseRunTest(unittest.TestCase):
         fake.chmod(0o755)
         self.env = {**os.environ, "GBASE_CLAUDE": str(fake), "GBASE_HOME": str(self.tmp / "home"),
                     "GITHUB_TOKEN": "stale", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
-                    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+                    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+                    "DOTFILES": str(self.tmp / "dot")}  # no dotfiles accounts unless a test writes them
         for k in ("GBASE_ASK_CMD", "GBASE_ACCOUNTS", "CLAUDE_CONFIG_DIR"):
             self.env.pop(k, None)
 
@@ -739,6 +740,41 @@ class GbaseRunTest(unittest.TestCase):
         r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--account", "c5")
         self.assertEqual((r.returncode, json.loads(Path(out[-1]).read_text())["account"]), (0, "default"), r.stderr)
         self.assertIn("--account c5 ignored: no accounts list", r.stderr)
+
+    def test_without_a_list_the_dotfiles_switched_on_accounts_are_used(self):
+        a, b = self.tmp / "acct" / "a", self.tmp / "acct" / "b"
+        a.mkdir(parents=True)
+        b.mkdir()
+        (b / "logged-out-run").touch()
+        dot = self.tmp / "dot" / "claude"
+        dot.mkdir(parents=True)
+        (self.tmp / "h" / ".claude").mkdir(parents=True)  # ~/.claude, which a CI machine doesn't have
+        self.env["HOME"] = str(self.tmp / "h")
+        (dot / "accounts.conf").write_text(f"# header\n1  ~/.claude  회사\n2  {self.tmp / 'acct' / 'off'}  꺼짐\n"
+                                           f"5  {b}  vixen\n3  {a}  새계정\n")
+        (dot / "enabled").write_text("5 1 3\n")
+        self.env["GBASE_PREFLIGHT_TTL"] = "0"
+        r, _ = self.run_cli("doctor")
+        report = json.loads(r.stdout)
+        self.assertEqual(report["accounts_source"], str(dot / "accounts.conf"))
+        # number order, as the launcher; ~/.claude keeps the name `default` with its cN as an alias; 2 is off
+        self.assertEqual([(x["name"], x["config_dir"], x["aliases"]) for x in report["accounts"]],
+                         [("default", "~/.claude", ["c1"]), ("c3", str(a), []), ("c5", str(b), [])])
+        # --account takes the launcher's name; c5 can't log in, so the run moves on and records it
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--account", "c5")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["account"], [f["account"] for f in result["failures"]], result["warnings"]),
+                         ("default", ["c5"], []))
+        def names():
+            return [x["name"] for x in json.loads(self.run_cli("doctor")[0].stdout)["accounts"]]
+        # an accounts file still wins
+        accounts_file = Path(self.env["GBASE_HOME"]) / "accounts"
+        accounts_file.write_text(f"a:{a}\n")
+        self.assertEqual(names(), ["a"])
+        # no enabled file: every account is on, except one whose config dir this machine doesn't have (2)
+        accounts_file.unlink()
+        (dot / "enabled").unlink()
+        self.assertEqual(names(), ["default", "c3", "c5"])
 
     def test_notify_runs_once_per_run_and_its_failure_keeps_the_status(self):
         calls = self.tmp / "notified"
