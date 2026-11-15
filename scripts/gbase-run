@@ -29,8 +29,10 @@ GBASE_PLUGIN_DIR (default: plugins/base of this checkout; factory.json is read f
 (os.pathsep-separated plugin dirs loaded besides it and the plugin a slot's invoke names, from plugins/*),
 GBASE_PERMISSION_MODE (default bypassPermissions), GBASE_ASK_CMD (AGENT_ASK_CMD for the child; default
 records questions only), GBASE_ACCOUNTS (`name:config-dir,...`, else $GBASE_HOME/accounts with one `name:config-dir`
-per line: the accounts tried in order on a usage limit or a failed login; names sharing a config dir are one account,
-the first name canonical), GBASE_PREFLIGHT_TTL (seconds an account check is cached, default 300), GBASE_NOTIFY_CMD
+per line, else the accounts switched on in the dotfiles registry ${DOTFILES:-~/.config/dot}/claude/accounts.conf and
+its `enabled` file, as `cN` with ~/.claude named `default`: the accounts tried in order on a usage limit or a failed
+login; names sharing a config dir are one account, the first name canonical), GBASE_PREFLIGHT_TTL (seconds an account
+check is cached, default 300), GBASE_NOTIFY_CMD
 (the --notify-cmd default: run once when a run ends, as `<cmd> <run-id> <status> <exit-code> <result.json path>`).
 """
 import argparse
@@ -63,6 +65,10 @@ STOP_GRACE = 10  # seconds between SIGTERM and SIGKILL for a claude process grou
 HOME = Path(os.environ.get("GBASE_HOME") or "~/.gbase").expanduser().resolve()
 RUNS = HOME / "runs"
 ACCOUNTS_FILE = HOME / "accounts"
+# the dotfiles' Claude account registry (`cadd` writes it, `dot claude enable` switches accounts on per machine): the
+# accounts list when neither GBASE_ACCOUNTS nor the accounts file is set
+DOT_ACCOUNTS = Path(os.environ.get("DOTFILES") or "~/.config/dot").expanduser() / "claude" / "accounts.conf"
+NO_ACCOUNTS = f"{ACCOUNTS_FILE}, GBASE_ACCOUNTS, or {DOT_ACCOUNTS}"
 SEVERITY = ["critical", "high", "medium", "low"]
 PROCS = []  # running claude children, terminated when the runner is stopped
 
@@ -103,11 +109,49 @@ PREFLIGHT_TTL = int(os.environ.get("GBASE_PREFLIGHT_TTL") or 300)
 DEFAULT_CONFIG_DIR = Path("~/.claude").expanduser()
 
 
+def dotfiles_accounts():
+    """`name:config-dir` entries for the accounts switched on in the dotfiles registry, or None without one. Lines are
+    `<number> <config dir> <label>`; `claude/enabled` beside it lists the numbers on for this machine (all when it is
+    missing or empty, as the zsh launcher reads it). Each is `c<number>`, the launcher's command; ~/.claude is
+    `default` first, with its `cN` an alias. A config dir this machine doesn't have is left out: with no `enabled`
+    file every registered account is on, most of them never set up here. A registry that can't be read is none."""
+    try:
+        text = DOT_ACCOUNTS.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+    try:
+        enabled = set((DOT_ACCOUNTS.parent / "enabled").read_text(encoding="utf-8").split())
+    except (OSError, UnicodeError):
+        enabled = set()
+    fields = (line.split() for line in text.splitlines())
+    rows = sorted((int(f[0]), f[1]) for f in fields
+                  if len(f) >= 2 and re.fullmatch(r"[0-9]+", f[0]) and (not enabled or f[0] in enabled))
+    default_key, entries = config_key(DEFAULT_CONFIG_DIR), []
+    for n, path in rows:
+        if not Path(path).expanduser().is_dir():
+            continue
+        if config_key(path) == default_key:
+            entries.append(f"default:{path}")
+        entries.append(f"c{n}:{path}")
+    return entries or None
+
+
+def accounts_entries():
+    """(source, `name:config-dir` entries) of the accounts list: GBASE_ACCOUNTS, else $GBASE_HOME/accounts, else the
+    dotfiles' switched-on accounts; (None, []) when there is none."""
+    if os.environ.get("GBASE_ACCOUNTS") is not None:
+        source, raw = "GBASE_ACCOUNTS", os.environ["GBASE_ACCOUNTS"]
+    elif ACCOUNTS_FILE.is_file():
+        source, raw = str(ACCOUNTS_FILE), ACCOUNTS_FILE.read_text(encoding="utf-8")
+    else:
+        dot = dotfiles_accounts()
+        return (str(DOT_ACCOUNTS), dot) if dot else (None, [])
+    return source, [e.strip() for e in re.split(r"[,\n]", raw) if e.strip() and not e.strip().startswith("#")]
+
+
 def accounts_source():
     """Where the accounts list comes from, or None when there is none."""
-    if os.environ.get("GBASE_ACCOUNTS") is not None:
-        return "GBASE_ACCOUNTS"
-    return str(ACCOUNTS_FILE) if ACCOUNTS_FILE.is_file() else None
+    return accounts_entries()[0]
 
 
 def config_key(path):
@@ -115,15 +159,11 @@ def config_key(path):
 
 
 def load_accounts(aliases=None):
-    """[(name, config dir)] from GBASE_ACCOUNTS or $GBASE_HOME/accounts, or None when neither is set: the run then
-    uses claude's own environment as the one account `default`, unchecked. Names that share a config dir (`c5` and
+    """[(name, config dir)] from accounts_entries(), or None when there is no list: the run then uses claude's own
+    environment as the one account `default`, unchecked. Names that share a config dir (`c5` and
     `vixen` both on ~/.claude-5) are one login: the first is kept, and `aliases` (a dict) gets alias → that name."""
-    raw = os.environ.get("GBASE_ACCOUNTS")
-    if raw is None and ACCOUNTS_FILE.is_file():
-        raw = ACCOUNTS_FILE.read_text(encoding="utf-8")
-    entries = [e.strip() for e in re.split(r"[,\n]", raw or "") if e.strip() and not e.strip().startswith("#")]
     accounts, by_dir = [], {}
-    for entry in entries:
+    for entry in accounts_entries()[1]:
         name, _, path = entry.partition(":")
         name, path = name.strip(), path.strip() or None
         first = by_dir.setdefault(config_key(path), name)
@@ -142,14 +182,14 @@ def resolve_account(name):
     aliases = {}
     configured = load_accounts(aliases)
     if configured is None:
-        print(f"gbase-run: --account {name} ignored: no accounts list ({ACCOUNTS_FILE} or GBASE_ACCOUNTS)",
+        print(f"gbase-run: --account {name} ignored: no accounts list ({NO_ACCOUNTS})",
               file=sys.stderr)
         return None
     names = [n for n, _ in configured]
     canonical = aliases.get(name, name)
     if canonical not in names:
         sys.exit(f"gbase-run: --account {name} is not in the accounts list ({', '.join(names + sorted(aliases))}; "
-                 f"{accounts_source() or f'none: set GBASE_ACCOUNTS or {ACCOUNTS_FILE}'})")
+                 f"{accounts_source() or f'none: {NO_ACCOUNTS}'})")
     return canonical
 
 
@@ -1022,7 +1062,7 @@ def cmd_run(argv):
                      if landed and not landed["contains_head"] and head_sha else None)
         # 1.41.0's account switching never ran on the Mac mini: no accounts file, and nothing said so (2026-11-04)
         warnings = [] if accounts.checked else [
-            f"계정 목록 없음({ACCOUNTS_FILE} 또는 GBASE_ACCOUNTS): 계정 전환·preflight 없이 default로 실행함. "
+            f"계정 목록 없음({NO_ACCOUNTS}): 계정 전환·preflight 없이 default로 실행함. "
             "`gbase-run doctor`로 확인"]
         result.update({
             "status": status,
@@ -1406,7 +1446,8 @@ def cmd_doctor(argv):
     configured = load_accounts(aliases)
     accounts = []
     if configured is None:
-        problems.append(f"계정 목록 없음: {ACCOUNTS_FILE}에 `name:config-dir`를 한 줄씩 적거나 GBASE_ACCOUNTS를 설정")
+        problems.append(f"계정 목록 없음: {ACCOUNTS_FILE}에 `name:config-dir`를 한 줄씩 적거나 GBASE_ACCOUNTS를 설정, "
+                        f"또는 dotfiles {DOT_ACCOUNTS}에서 계정을 켬(`cadd`, `dot claude enable`)")
     if configured and not (Path(claude_bin()).is_file() or shutil.which(claude_bin())):
         # preflight treats a check that couldn't run as passing, so every account would read ok
         problems.append(f"claude 실행 파일 없음: {claude_bin()} (GBASE_CLAUDE)")
