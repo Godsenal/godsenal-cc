@@ -228,6 +228,44 @@ def prestart_failure(info):
     return (kind, fail_detail(text)) if kind else None
 
 
+def midrun_limit(info):
+    """The usage-limit line a session that already did work (a tool call) ended on, else None."""
+    text = info.get("end_error") or ""
+    if not info.get("tool_uses") or fail_kind(text) != "usage_limit":
+        return None
+    return fail_detail(text)
+
+
+def config_dir(path):
+    """An account's config dir as claude uses it: ~/.claude when the list gives none."""
+    return Path(path).expanduser() if path else DEFAULT_CONFIG_DIR
+
+
+def copy_session(session_id, src, dst):
+    """Copy a session's transcript (`projects/<cwd key>/<id>.jsonl`, and its `<id>/` folder of subagent transcripts)
+    from config dir src to dst, as the dotfiles' `c` launcher does on a limit, so `--resume <id>` finds it under the
+    other account: claude looks a session up only in its own config dir ("No conversation found with session ID").
+    False when src has no transcript for it."""
+    src, dst = config_dir(src), config_dir(dst)
+    found = sorted(src.glob(f"projects/*/{session_id}.jsonl"), key=lambda f: f.stat().st_mtime)
+    if not session_id or not found:
+        return False
+    if config_key(src) == config_key(dst):
+        return True
+    transcript = found[-1]
+    target = dst / "projects" / transcript.parent.name
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(transcript, target / transcript.name)
+        sub = transcript.parent / session_id
+        if sub.is_dir():
+            shutil.copytree(sub, target / session_id, dirs_exist_ok=True)
+    except OSError as e:
+        print(f"gbase-run: copying session {session_id} to {dst} failed: {e}", file=sys.stderr)
+        return False
+    return True
+
+
 def read_json(path, default=None):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -515,6 +553,18 @@ WRAPUP_PROMPT = ("This run reached its {limit} before finishing. Start no new wo
                  "run can take it with no other context. End with one `결정 필요:` line asking whether to continue.")
 
 
+# a session that hit a usage limit after doing work goes on under the next account: the same conversation resumed,
+# or, when it can't be (no transcript to carry over), a new session told to pick up from the worktree
+CONTINUE_PROMPT = ("The last turn stopped at a usage limit on another Claude account; this is the same session on the "
+                   "next account. Background tasks and shells the earlier turn started are no longer running. Check "
+                   "`git status` and the worktree, then go on with the task from where it stopped, without redoing "
+                   "steps that already finished.")
+CONTINUE_FRESH_PROMPT = ("A previous session on this worktree stopped at a usage limit before finishing, and its "
+                         "conversation couldn't be carried over. Look at `git status`, `git log` and the worktree to see "
+                         "what it already did, then continue the original task below from there; don't redo finished "
+                         "steps or throw its changes away.\n\nOriginal task prompt:\n\n{prompt}")
+
+
 def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max_turns=0, max_budget=0):
     cmd = [claude_bin(), "-p", prompt, "--output-format", "stream-json", "--verbose",
            *(("--resume", resume) if resume else ()),
@@ -528,7 +578,7 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
     if max_budget:
         cmd += ["--max-budget-usd", str(max_budget)]
     info = {"log_path": str(log_path), "results": [], "session_id": None, "model": model, "cost_usd": None,
-            "tool_uses": 0, "is_error": False, "errors": [], "skills": []}
+            "tool_uses": 0, "turns": 0, "is_error": False, "errors": [], "skills": [], "end_error": None}
     with open(log_path, "a" if resume or append else "w", encoding="utf-8") as log:
         # its own process group, so stopping the run also ends the subagents and shells claude started
         proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -561,13 +611,39 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
                 # a session can end more than one turn (a background task finishing re-invokes it);
                 # keep them all, or a report line from an earlier turn is lost
                 info["results"].append(event.get("result") or "")
-                info["cost_usd"] = event.get("total_cost_usd")
+                if event.get("total_cost_usd") is not None:  # a turn that ended on an API error may carry none
+                    info["cost_usd"] = event["total_cost_usd"]
                 info["is_error"] = info["is_error"] or bool(event.get("is_error"))
+                info["turns"] += event.get("num_turns") or 0
+                # what the last turn ended on: a later turn (a background task finishing) can hit a usage limit
+                # after the first one ended fine (runs 20261116-070329-work-e7bca2 and -070417-work-d959d4)
+                info["end_error"] = "\n".join([str(event.get("result") or "")] + [
+                    str(event[k]) for k in ("api_error", "error") if event.get(k)]) if event.get("is_error") else None
                 if event.get("subtype") in ("error_max_turns", "error_max_budget_usd"):
                     info["capped"] = "budget" if event["subtype"] == "error_max_budget_usd" else "turns"
                 info["errors"] += [str(event[k]) for k in ("api_error", "error") if event.get(k)]
         info["exit_code"] = proc.wait()
     return info
+
+
+def leg(info, account, how):
+    """One account's part of a session: how it started (`start`, or `resume`/`fresh` after a usage limit)."""
+    return {"account": account[0], "how": how, "session_id": info.get("session_id"), "cost_usd": info.get("cost_usd"),
+            "tool_uses": info.get("tool_uses"), "turns": info.get("turns"), "exit_code": info.get("exit_code"),
+            "stopped": None}
+
+
+def merge_session(s, more):
+    """Fold the session that went on under the next account into the first one: its report joins the first one's,
+    costs, turns and tool calls add up, and its exit code, session and cap stand for the whole."""
+    costs = [c for c in (s.get("cost_usd"), more.get("cost_usd")) if c is not None]
+    s.update(results=s["results"] + more["results"], errors=s.get("errors", []) + more.get("errors", []),
+             skills=s.get("skills", []) + more.get("skills", []), cost_usd=sum(costs) if costs else None,
+             tool_uses=s.get("tool_uses", 0) + more.get("tool_uses", 0), turns=s.get("turns", 0) + more.get("turns", 0),
+             exit_code=more.get("exit_code"), session_id=more.get("session_id") or s.get("session_id"),
+             end_error=more.get("end_error"))
+    if more.get("capped"):
+        s["capped"] = more["capped"]
 
 
 def final_text(results):
@@ -939,7 +1015,7 @@ def cmd_run(argv):
 
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):  # HUP: the terminal closed; claude is in its own group
         signal.signal(sig, stop)
-    sessions, created = {}, False
+    sessions, created, handoffs = {}, False, []
     accounts = Accounts(env, task, prefer=prev.get("account"), pick=pick)
     try:
         key = repo and repo_key(repo)
@@ -999,6 +1075,41 @@ def cmd_run(argv):
                 account = accounts.current()
             if not account:
                 return
+            s["accounts"], last = [leg(s, account, "start")], s
+            # a usage limit after the session did work: the same session goes on under the next account. Each
+            # account is tried once per run (a failed one leaves the queue), and the caps count the whole run.
+            while not STOPPING.is_set():
+                hit = midrun_limit(last) or (last is not s and prestart_failure(last))
+                if not hit:
+                    break
+                kind, detail = hit if isinstance(hit, tuple) else ("usage_limit", hit)
+                s["accounts"][-1]["stopped"] = kind
+                accounts.fail(account, kind, detail)
+                nxt = accounts.current()
+                turns = a.max_turns - s["turns"] if a.max_turns else 0
+                budget = a.max_budget_usd - (s["cost_usd"] or 0) if a.max_budget_usd else 0
+                if not nxt or (a.max_turns and turns < 1) or (a.max_budget_usd and budget <= 0):
+                    s["usage_limited"] = True
+                    break
+                env_next = account_env(env, nxt[1])
+                how = "resume" if copy_session(s["session_id"], account[1], nxt[1]) else "fresh"
+                try:
+                    more = run_claude(CONTINUE_PROMPT, cwd, env_next, m, log, resume=s["session_id"],
+                                      max_turns=turns, max_budget=budget) if how == "resume" else None
+                    if more is None or (not more["tool_uses"] and more["exit_code"] and not prestart_failure(more)):
+                        how = "fresh"  # the resume didn't take ("No conversation found"): start over on the worktree
+                        more = run_claude(CONTINUE_FRESH_PROMPT.format(prompt=prompt), cwd, env_next, m, log,
+                                          append=True, max_turns=turns, max_budget=budget)
+                except OSError as e:
+                    s["resume_error"] = str(e)
+                    break
+                print(f"gbase-run: {account[0]} stopped on {kind} after {s['tool_uses']} tool calls; "
+                      f"continuing on {nxt[0]} ({how})", file=sys.stderr)
+                handoffs.append({"model": m, "from": account[0], "to": nxt[0], "how": how, "detail": detail})
+                account, last = nxt, more
+                merge_session(s, more)
+                s["account"] = account[0]
+                s["accounts"].append(leg(more, account, how))
 
             def again(text, turns, budget):  # one more session on the same conversation; its report joins the first one's
                 try:
@@ -1036,10 +1147,12 @@ def cmd_run(argv):
     finally:
         sessions = {k: sessions[k] for k in (m or "default" for m in models) if k in sessions}  # manifest order
         idle = [s for s in sessions.values() if prestart_failure(s)]
+        # sessions no account could take on: each one it reached was logged out or at its limit
+        stuck = [s for s in sessions.values() if prestart_failure(s) or s.get("usage_limited")]
         skills = list(dict.fromkeys([*re.findall(r"^/([\w-]+:[\w-]+)", prompt),
                                      *(k for s in sessions.values() for k in s.get("skills", []))]))
         for s in sessions.values():
-            for k in ("errors", "skills", "is_error", "capped"):
+            for k in ("errors", "skills", "is_error", "capped", "end_error", "usage_limited"):
                 s.pop(k, None)
         results = {m: s.pop("results") for m, s in sessions.items()}
         finals = {m: final_text(texts) for m, texts in results.items()}
@@ -1066,8 +1179,9 @@ def cmd_run(argv):
         if repo and cwd and base and a.ship_owner == "orchestrator" and git(repo, "remote", "get-url", "origin") is None:
             landed = {"ref": base, "contains_head": git(cwd, "merge-base", "--is-ancestor", "HEAD", base) is not None}
         branch = repo and cwd and git(cwd, "rev-parse", "--abbrev-ref", "HEAD")
-        # what ended the run when no session got past a login or usage-limit error
-        failure = accounts.failures[-1] if status == "failed" and accounts.failures and len(idle) == len(sessions) else None
+        # what ended the run when no session got past a login or usage-limit error, or every account it went on to
+        # hit its limit too
+        failure = accounts.failures[-1] if status == "failed" and accounts.failures and len(stuck) == len(sessions) else None
         land_hint = (f"커밋 {head_sha[:7]}는 {branch}에만 있음. {base}에 넣으려면 `gbase-run land {run_id}`"
                      if landed and not landed["contains_head"] and head_sha else None)
         # 1.41.0's account switching never ran on the Mac mini: no accounts file, and nothing said so (2026-11-04)
@@ -1085,6 +1199,7 @@ def cmd_run(argv):
             "landed": landed,
             "account": next((s["account"] for s in sessions.values() if s.get("account")), None),
             "failures": accounts.failures,
+            "handoffs": handoffs,
             "failure": failure,
             "skills": skills,
             "decisions": decisions,
@@ -1115,7 +1230,7 @@ def cmd_run(argv):
         if not result.get("stopped_by") and exit_code in child_signal:  # claude itself was signaled, not by stop
             result["stopped_by"] = f"child {child_signal[exit_code]}"
         # a worktree made for a run that never got to work goes at once; failed runs' worktrees piled up to 99 GB
-        if result["failure"] and created and cwd and not git(cwd, "status", "--porcelain") and (
+        if result["failure"] and len(idle) == len(sessions) and created and cwd and not git(cwd, "status", "--porcelain") and (
                 not base or git(cwd, "rev-list", "--count", f"{base}..HEAD") == "0"):
             result["worktree_removed"] = remove_worktree(repo, cwd, branch)
         result["provenance"] = provenance(result)
