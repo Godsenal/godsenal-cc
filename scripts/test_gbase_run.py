@@ -614,7 +614,8 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(branch(out), "feature/l")
         self.assertNotEqual(g("branch", "--list", "gbase/l-pr5"), "")
         # after a second prefix change, the PR check still looks at the branch the worktree was made with
-        g("-C", str(Path(json.loads(Path(out[-1]).read_text())["cwd"])), "commit", "-q", "--allow-empty", "-m", "x")
+        g("-C", str(Path(json.loads(Path(out[-1]).read_text())["cwd"])), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
+          "--allow-empty", "-m", "x")
         (bin_dir / "gh").write_text("#!/bin/sh\necho '[{\"number\": 6, \"state\": \"MERGED\", \"headRefOid\": \"%s\"}]'\n"
                                     % g("rev-parse", "feature/l"))
         g("config", "gbase.branchPrefix", "team/")
