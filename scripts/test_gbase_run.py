@@ -126,7 +126,7 @@ class GbaseRunTest(unittest.TestCase):
                     "GITHUB_TOKEN": "stale", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
                     "DOTFILES": str(self.tmp / "dot")}  # no dotfiles accounts unless a test writes them
-        for k in ("GBASE_ASK_CMD", "GBASE_ACCOUNTS", "CLAUDE_CONFIG_DIR"):
+        for k in ("GBASE_ASK_CMD", "GBASE_ACCOUNTS", "CLAUDE_CONFIG_DIR", "GBASE_NOTIFY_CMD"):
             self.env.pop(k, None)
 
     def seed_answers(self, answers):
@@ -642,6 +642,49 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual((r.returncode != 0, out), (True, []))
         self.assertIn("needs a --repo", r.stderr)
 
+    def test_start_checks_the_notify_command_before_the_run(self):
+        folder = self.tmp / "job"
+        folder.mkdir()
+        runs = Path(self.env["GBASE_HOME"]) / "runs"
+        # a notify command whose first word doesn't exist: start fails at once, with no run and no key printed
+        self.env["GBASE_NOTIFY_CMD"] = "~/bin/no-such-notify-run --key=SECRETKEY"
+        r, out = self.run_cli("start", "--dir", str(folder), "--slot", "task", "--task", "T")
+        self.assertEqual((r.returncode != 0, out), (True, []))
+        self.assertIn(f"notify command not found: {Path.home()}/bin/no-such-notify-run", r.stderr)
+        self.assertNotIn("SECRETKEY", r.stderr + r.stdout)
+        self.assertFalse(runs.exists() and any(runs.iterdir()))
+        # a foreground run with a worktree: no worktree made either
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w1", "--notify-cmd", "/nonexistent/x")
+        self.assertEqual((r.returncode != 0, out), (True, []))
+        self.assertIn("notify command not found: /nonexistent/x", r.stderr)
+        self.assertFalse(runs.exists() and any(runs.iterdir()))
+        self.assertEqual(len(gbase_run.worktrees(self.repo)), 1)
+        # an executable, by path ($VARS expanded) or on PATH: the run goes on, with no warning
+        script = self.tmp / "notify.sh"
+        script.write_text("#!/bin/sh\nexit 0\n")
+        script.chmod(0o755)
+        self.env["NOTIFY_DIR"] = str(self.tmp)
+        for cmd in ("$NOTIFY_DIR/notify.sh agent routine", "WAIT=1 true"):
+            self.env["GBASE_NOTIFY_CMD"] = cmd
+            r, (run_id, path) = self.run_cli("start", "--dir", str(folder), "--slot", "task", "--task", "T")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertNotIn("nothing will be woken", r.stderr)
+            self.wait_done(run_id)
+            self.assertEqual(json.loads(Path(path).read_text())["notify"], "ok")
+        # no notify command: a warning, and the run still starts
+        del self.env["GBASE_NOTIFY_CMD"]
+        r, (run_id, _) = self.run_cli("start", "--dir", str(folder), "--slot", "task", "--task", "T")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("nothing will be woken when this run ends", r.stderr)
+        self.wait_done(run_id)
+
+    def wait_done(self, run_id):
+        """Until the detached runner printed its last line (result.json's path), after the notify command."""
+        log = Path(self.env["GBASE_HOME"]) / "runs" / run_id / "runner.log"
+        deadline = time.time() + 30
+        while not (log.exists() and log.read_text().rstrip().endswith("result.json")) and time.time() < deadline:
+            time.sleep(0.2)
+
     def accounts(self, **markers):
         """GBASE_ACCOUNTS of config dirs a, b, … ; markers name files the fake claude reacts to (logged-out fails
         the preflight too, logged-out-run and limited-run only the real session)."""
@@ -804,6 +847,20 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(len(calls.read_text().splitlines()), 2)  # --notify-cmd replaced GBASE_NOTIFY_CMD
 
     def test_doctor_reports_accounts_gc_and_worktrees(self):
+        r, _ = self.run_cli("doctor")
+        report = json.loads(r.stdout)
+        self.assertIsNone(report["notify_cmd_runnable"])
+        self.assertFalse(any("GBASE_NOTIFY_CMD" in p for p in report["problems"]))
+        self.env["GBASE_NOTIFY_CMD"] = "/nonexistent/x --key=SECRETKEY"
+        r, _ = self.run_cli("doctor")
+        report = json.loads(r.stdout)
+        self.assertEqual((report["notify_cmd"], report["notify_cmd_runnable"]), (True, False))
+        self.assertTrue(any("GBASE_NOTIFY_CMD 실행 파일 없음: /nonexistent/x" in p for p in report["problems"]))
+        self.assertNotIn("SECRETKEY", r.stdout + r.stderr)
+        self.env["GBASE_NOTIFY_CMD"] = "true --key=SECRETKEY"
+        report = json.loads(self.run_cli("doctor")[0].stdout)
+        self.assertEqual(report["notify_cmd_runnable"], True)
+        del self.env["GBASE_NOTIFY_CMD"]
         r, _ = self.run_cli("doctor")
         report = json.loads(r.stdout)
         self.assertEqual((r.returncode, report["accounts_source"], report["gc_last"]), (1, None, None))

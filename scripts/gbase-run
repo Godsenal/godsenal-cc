@@ -33,7 +33,9 @@ per line, else the accounts switched on in the dotfiles registry ${DOTFILES:-~/.
 its `enabled` file, as `cN` with ~/.claude named `default`: the accounts tried in order on a usage limit or a failed
 login; names sharing a config dir are one account, the first name canonical), GBASE_PREFLIGHT_TTL (seconds an account
 check is cached, default 300), GBASE_NOTIFY_CMD
-(the --notify-cmd default: run once when a run ends, as `<cmd> <run-id> <status> <exit-code> <result.json path>`).
+(the --notify-cmd default: run once when a run ends, as `<cmd> <run-id> <status> <exit-code> <result.json path>`;
+a run whose notify command's first word is not an executable file or on PATH fails before it starts, and `start` with
+no notify command warns that nothing will be woken).
 """
 import argparse
 import fcntl
@@ -828,6 +830,14 @@ def cmd_run(argv):
     a = p.parse_args(argv)
     pick = resolve_account(a.account) if a.account else None
     detached = os.environ.pop("GBASE_DETACHED", None) == "1"  # set by `gbase-run start`; popped so claude doesn't inherit it
+    if a.notify_cmd:  # a notify command that can't run fails only at the end, after the run's hours of work
+        word, runnable = notify_target(a.notify_cmd)
+        if not runnable:
+            sys.exit(f"gbase-run: notify command not found: {word or '(empty)'} — fix --notify-cmd or GBASE_NOTIFY_CMD "
+                     f"(on an OpenBot machine: $HOME/OpenBot/Shared/gbase-notify.sh <agentId> <routineId>)")
+    elif detached:
+        print("gbase-run: no notify command (--notify-cmd or GBASE_NOTIFY_CMD): nothing will be woken when this run "
+              "ends; poll `gbase-run status <run-id>`", file=sys.stderr)
 
     answers, prev = None, {}
     if a.answers:
@@ -1121,6 +1131,21 @@ def cmd_run(argv):
             print(f"next: {result['next']}")
         print(result_path)
     return 0 if result["status"] == "done" else 1
+
+
+def notify_target(cmd):
+    """The notify command's first word, `~` and `$VARS` expanded (leading `NAME=value` words skipped), and whether
+    it is an executable file or found on PATH. The command is not run; only this word may be printed, since the
+    rest of the line may hold a webhook key."""
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return None, False
+    words = [w for w in words if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", w)] if words else []
+    if not words:
+        return None, False
+    word = os.path.expanduser(os.path.expandvars(words[0]))
+    return word, bool(shutil.which(word))
 
 
 def notify(cmd, result, result_path):
@@ -1466,13 +1491,19 @@ def cmd_doctor(argv):
                         "사람이 본 뒤)")
     elif time.time() - datetime.strptime(gc["at"], "%Y-%m-%dT%H:%M:%S%z").timestamp() > 2 * 86400:
         problems.append(f"마지막 gc가 {gc['at']}: 매일 도는 gc가 멈췄는지 확인")
+    notify_cmd, notify_ok = os.environ.get("GBASE_NOTIFY_CMD"), None
+    if notify_cmd:
+        word, notify_ok = notify_target(notify_cmd)
+        if not notify_ok:
+            problems.append(f"GBASE_NOTIFY_CMD 실행 파일 없음: {word or '(빈 명령)'} — 런이 끝나도 아무도 깨우지 못함")
     root = HOME / "worktrees"
     dirs = [d for d in root.iterdir() if d.is_dir()] if root.is_dir() else []
     print(json.dumps({
         "home": str(HOME),
         "accounts_source": accounts_source(),
         "accounts": accounts,
-        "notify_cmd": bool(os.environ.get("GBASE_NOTIFY_CMD")),  # set or not; the command itself may hold a key
+        "notify_cmd": bool(notify_cmd),  # set or not; the command itself may hold a key
+        "notify_cmd_runnable": notify_ok,  # its first word resolves; null when there is none
         "gc_last": gc,
         "gc_dry_run_last": read_json(HOME / "gc-dry-run.json"),
         "worktrees": {"path": str(root), "count": len(dirs), "size_kb": dir_kb(root) if dirs else 0},
