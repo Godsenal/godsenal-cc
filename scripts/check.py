@@ -33,6 +33,7 @@ HARNESS = "plugins/base/references/harness.md"
 SESSION_HOOK = "plugins/base/hooks/session-start.md"
 FACTORY = "plugins/base/.claude-plugin/factory.json"
 RUNNER = "scripts/gbase-run"
+CONVENTIONS = "plugins/base/references/conventions.md"
 RUNNER_DOC = "plugins/base/references/runner.md"  # the runner's usage and result.json, split out of orchestrator.md
 CONTRACTS = [
     ("⚠️ requires ordered rollout", [skill("compat-check"), BRANCH_PR]),
@@ -65,6 +66,9 @@ CONTRACTS = [
     # agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url
     ("`pr: <url>`", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
     ("pr_url", [RUNNER_DOC, RUNNER]),
+    # conventions.md holds the one setting > convention > default order; the runner reads its branch prefix key
+    ("gbase.branchprefix", [CONVENTIONS, RUNNER_DOC, RUNNER]),
+    ("references/conventions.md", [BRANCH_PR, skill("monitor")]),
     ("settle: 수렴", [skill("monitor"), ORCHESTRATOR]),
     ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
     # headless forbids wakeups in prose; the runner enforces it by denying the tools

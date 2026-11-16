@@ -155,7 +155,8 @@ class GbaseRunTest(unittest.TestCase):
         self.env = {**os.environ, "GBASE_CLAUDE": str(fake), "GBASE_HOME": str(self.tmp / "home"),
                     "GITHUB_TOKEN": "stale", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
-                    "DOTFILES": str(self.tmp / "dot")}  # no dotfiles accounts unless a test writes them
+                    "DOTFILES": str(self.tmp / "dot"),  # no dotfiles accounts unless a test writes them
+                    "GIT_CONFIG_GLOBAL": str(self.tmp / "no-gitconfig")}  # the developer's gbase.branchPrefix stays out
         for k in ("GBASE_ASK_CMD", "GBASE_ACCOUNTS", "CLAUDE_CONFIG_DIR", "GBASE_NOTIFY_CMD"):
             self.env.pop(k, None)
 
@@ -462,6 +463,27 @@ class GbaseRunTest(unittest.TestCase):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "x")
         self.assertEqual(json.loads(Path(out[-1]).read_text())["cwd"], str((self.tmp / "old-x").resolve()))
 
+    def test_worktree_branch_prefix_comes_from_git_config(self):
+        # set for a folder of repos (a company's) through the global config's includeIf, not in the repo
+        glob = self.tmp / "gitconfig"
+        glob.write_text(f'[includeIf "gitdir:{self.tmp.resolve()}/"]\n\tpath = {self.tmp / "work.gitconfig"}\n')
+        (self.tmp / "work.gitconfig").write_text("[gbase]\n\tbranchPrefix = feature/\n")
+        self.env["GIT_CONFIG_GLOBAL"] = str(glob)
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "y")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["branch"], "feature/y")
+        # a gbase/<name> worktree made before the prefix was set is still the one --worktree reuses
+        subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-q", "-b", "gbase/x", str(self.tmp / "old-x")], check=True)
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "x")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["cwd"], result["branch"]), (str((self.tmp / "old-x").resolve()), "gbase/x"))
+        # outside that folder, or with the key unset, the default stays
+        self.env["GIT_CONFIG_GLOBAL"] = str(self.tmp / "no-gitconfig")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "z")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["branch"], "gbase/z")
+        subprocess.run(["git", "-C", str(self.repo), "config", "gbase.branchPrefix", "bad prefix/"], check=True)
+        r, _ = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "w")
+        self.assertIn("not a valid branch name", r.stderr)
+
     def seed_running(self, run_id, pid):
         run = Path(self.env["GBASE_HOME"]) / "runs" / run_id
         run.mkdir(parents=True)
@@ -574,6 +596,32 @@ class GbaseRunTest(unittest.TestCase):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
                               "--model", "agent")
         self.assertEqual(json.loads(Path(out[-1]).read_text())["gaps"], [])
+
+    def test_a_prefix_set_later_takes_over_once_the_old_branch_pr_ends(self):
+        g = lambda *a: subprocess.run(["git", "-C", str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()
+        branch = lambda out: json.loads(Path(out[-1]).read_text())["branch"]
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "l")
+        g("config", "gbase.branchPrefix", "feature/")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "l")
+        self.assertEqual(branch(out), "gbase/l")  # the worktree at this name's path goes on with its branch
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "gh").write_text("#!/bin/sh\necho '[{\"number\": 5, \"state\": \"MERGED\", \"headRefOid\": \"%s\"}]'\n"
+                                    % g("rev-parse", "gbase/l"))
+        (bin_dir / "gh").chmod(0o755)
+        self.env["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "l")
+        self.assertEqual(branch(out), "feature/l")
+        self.assertNotEqual(g("branch", "--list", "gbase/l-pr5"), "")
+        # after a second prefix change, the PR check still looks at the branch the worktree was made with
+        g("-C", str(Path(json.loads(Path(out[-1]).read_text())["cwd"])), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
+          "--allow-empty", "-m", "x")
+        (bin_dir / "gh").write_text("#!/bin/sh\necho '[{\"number\": 6, \"state\": \"MERGED\", \"headRefOid\": \"%s\"}]'\n"
+                                    % g("rev-parse", "feature/l"))
+        g("config", "gbase.branchPrefix", "team/")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--worktree", "l")
+        self.assertEqual(branch(out), "team/l")
+        self.assertNotEqual(g("branch", "--list", "feature/l-pr6"), "")
 
     def test_a_worktree_whose_pr_ended_starts_over(self):
         g = lambda *a: subprocess.run(["git", "-C", str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()

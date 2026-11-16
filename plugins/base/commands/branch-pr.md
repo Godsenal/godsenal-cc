@@ -91,7 +91,15 @@ git branch --show-current
 
 # View recent commits for context
 git log --oneline -5
+
+# The repo's rules for branch names, commits, and the PR (conventions.md)
+git config --get gbase.conventions
+git ls-files | grep -iE '(^|/)contributing\.md$|pull_request_template|commitlint|^\.husky/'
 ```
+
+Read every file those last two commands print before Step 3; [conventions.md](../references/conventions.md) gives
+their order. Use `git ls-files`, not a globbed `ls`: under zsh an unmatched glob fails the whole line, and one run
+missed the repo's PR template that way and wrote its body in gbase's format.
 
 Analyze changed files and compile the following:
 - List of changed files
@@ -127,6 +135,7 @@ Not `git stash`: the stash list is shared by every worktree of the repo, so with
 ### Step 3: Decide Branch Name
 
 Pick a branch name from the change analysis — no confirmation needed. Report it in one line, then continue.
+The repo's own branch rule comes first ([conventions.md](../references/conventions.md)); without one, by change type:
 
 - `feat/feature-name` - New feature
 - `fix/bug-name` - Bug fix
@@ -153,7 +162,7 @@ needed. Report each group as you commit it.
 
 For each group, provide:
 - List of included files
-- Suggested commit message (conventional commits format)
+- Suggested commit message: the repo's format ([conventions.md](../references/conventions.md)), conventional commits when it has none
 
 Example:
 ```
@@ -218,10 +227,13 @@ the change, not the author:
 - `low` — docs, copy, tests, or an additive change behind a flag, and nothing above
 - `medium` — everything else
 
-If the repo has its own PR template (`.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/`,
-or `docs/pull_request_template.md`), fill that template's sections instead of the one below, and add whichever of
-`Review focus` (with its risk line and folded list) and `Evidence` it lacks: `Review focus` right under its first
-section, `Evidence` wherever it fits.
+**The repo's PR template, when it has one, is the body.** Fill that template's sections in its order instead of
+`Why`, `Change outline`, and `Notes` below, and add whichever of `Review focus` (with its risk line and folded list)
+and `Evidence` it lacks: `Review focus` right under its first section, `Evidence` wherever it fits. The format below
+is for a repo with no template. Write the title, the body, and the body's own phrases (`사람이 볼 곳`, `위험도`) in the language the settings or the
+merged PRs use; Korean is only the default.
+
+The PR title, ticket reference, labels, reviewers, and draft state follow [conventions.md](../references/conventions.md).
 
 Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
 `gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
@@ -325,7 +337,7 @@ captures: the `verify-*` artifacts (`artifacts/verify/<feature>/`, gitignored) o
 screenshot of a UI change, take one of the after state now if the app is already running; otherwise make
 it a `(확인)` item. A GIF needs `ffmpeg` to convert a recording (`xcrun simctl io booted recordVideo`,
 Playwright video); without it, use two or three stills.
-`gh` can't attach images to a PR body, so upload them to the `gbase-assets` branch with the contents API —
+`gh` can't attach images to a PR body, so, unless a setting says where images go ([conventions.md](../references/conventions.md)), upload them to the `gbase-assets` branch with the contents API —
 never commit them to the PR branch, and touch nothing in the working tree:
 
 ```bash
@@ -355,7 +367,7 @@ On any error:
 2. Print current state (`git status`)
 3. Provide recovery instructions:
    - "To restore from backup: `git restore --source=refs/gbase/backup/<ts> --worktree -- .` (the ref stays, so it can be used again)"
-   - "To delete the branch: `git checkout main && git branch -D <branch-name>`"
+   - "To delete the branch: `git checkout <default-branch> && git branch -D <branch-name>`"
 
 ## Usage Example
 
