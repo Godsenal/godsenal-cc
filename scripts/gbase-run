@@ -36,6 +36,8 @@ check is cached, default 300), GBASE_NOTIFY_CMD
 (the --notify-cmd default: run once when a run ends, as `<cmd> <run-id> <status> <exit-code> <result.json path>`;
 a run whose notify command's first word is not an executable file or on PATH fails before it starts, and `start` with
 no notify command warns that nothing will be woken).
+
+Git config: gbase.branchPrefix (default gbase/): a --worktree run's branch is <prefix><name> (references/conventions.md).
 """
 import argparse
 import fcntl
@@ -711,8 +713,24 @@ def repo_key(repo):
     return re.sub(r"(\.git)?/*$", "", url).lower()
 
 
+def worktree_branch(repo, name):
+    """<gbase.branchPrefix><name>, else gbase/<name> (references/conventions.md). The branch already checked out at
+    this name's worktree path, or a local gbase/<name> made before the prefix was set, keeps its name until its PR ends."""
+    at = dict(worktrees(repo)[1:]).get(worktree_path(repo, name))
+    if at:  # made under an earlier prefix: the run goes on with that work, not beside it
+        return at
+    prefix, legacy = git(repo, "config", "--get", "gbase.branchPrefix"), f"gbase/{name}"
+    if not prefix or prefix == "gbase/":
+        return legacy
+    branch = f"{prefix}{name}"
+    if git(repo, "check-ref-format", "--branch", branch) is None:
+        sys.exit(f"gbase-run: {branch} (gbase.branchPrefix + --worktree) is not a valid branch name")
+    has = lambda b: git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{b}") is not None
+    return legacy if not has(branch) and has(legacy) else branch
+
+
 def ensure_worktree(repo, name, base):
-    branch = f"gbase/{name}"
+    branch = worktree_branch(repo, name)
     # reuse the linked worktree that already has this branch; the main checkout is never one
     listed = checked_out_at(repo, branch, linked_only=True)
     if listed and not listed.exists():
@@ -723,7 +741,7 @@ def ensure_worktree(repo, name, base):
         if listed and git(repo, "worktree", "move", str(listed), f"{listed}-pr{pr}") is None:
             sys.exit(f"gbase-run: {branch}'s PR #{pr} has ended, and its worktree {listed} couldn't be moved aside")
         git(repo, "branch", "-m", branch, f"{branch}-pr{pr}")
-        listed = None
+        listed, branch = None, worktree_branch(repo, name)  # the name starts over under the current prefix
     if listed:
         return listed, False
     # the path hash keeps two repos with the same basename from sharing a worktree; repo is the main checkout,
