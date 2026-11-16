@@ -39,6 +39,36 @@ FAKE_CLAUDE = textwrap.dedent('''\
                           "result": "You've hit your 5-hour limit · resets 1:50pm" if limited else "Not logged in · Please run /login"}))
         sys.exit(1)
     assert args[args.index("--plugin-dir") + 1].endswith("plugins/base")
+    if model == "midrun":  # works for a while, then (on an account marked limited-midrun) hits the weekly limit
+        import glob
+        run_dir = os.path.dirname(os.environ["AGENT_EVIDENCE_FILE"])
+        resume = args[args.index("--resume") + 1] if "--resume" in args else None
+        with open(os.path.join(run_dir, "legs.jsonl"), "a") as f:
+            f.write(json.dumps({"cfg": os.path.basename(cfg), "resume": resume, "prompt": args[args.index("-p") + 1],
+                                "max_turns": args[args.index("--max-turns") + 1] if "--max-turns" in args else None,
+                                "budget": args[args.index("--max-budget-usd") + 1] if "--max-budget-usd" in args else None})
+                    + "\\n")
+        if resume and not glob.glob(os.path.join(cfg, "projects", "*", resume + ".jsonl")):
+            print("No conversation found with session ID: " + resume)  # claude finds a session in its own config dir only
+            sys.exit(1)
+        sid = resume or "s-mid-" + os.path.basename(cfg)
+        print(json.dumps({"type": "system", "subtype": "init", "session_id": sid, "model": "claude-midrun"}))
+        if not resume and not marker("no-transcript"):
+            os.makedirs(os.path.join(cfg, "projects", "-fake-cwd", sid), exist_ok=True)
+            open(os.path.join(cfg, "projects", "-fake-cwd", sid + ".jsonl"), "w").write('{"type":"user"}\\n')
+            open(os.path.join(cfg, "projects", "-fake-cwd", sid, "agent-1.jsonl"), "w").write("{}\\n")
+        print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}}))
+        open("work-" + os.path.basename(cfg) + ".txt", "w").write("x")
+        print(json.dumps({"type": "result", "result": "백그라운드 작업을 기다립니다", "num_turns": 4, "total_cost_usd": 1.0}))
+        if marker("limited-midrun"):  # a later turn (a background task finishing) hits the limit
+            print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}}))
+            print(json.dumps({"type": "result", "is_error": True, "terminal_reason": "api_error", "api_error": "usage_limit_reached",
+                              "result": "You've hit your weekly limit · resets Nov 21 at 9am (Asia/Seoul)", "num_turns": 2,
+                              "total_cost_usd": 1.5}))
+            sys.exit(1)
+        print(json.dumps({"type": "result", "result": "끝냈습니다\\nship: local gbase/w @abc1234 — 1 commits, not pushed\\n"
+                          "settle: 수렴 @abc1234\\n", "num_turns": 3, "total_cost_usd": 1.5}))
+        sys.exit(0)
     assert "ScheduleWakeup" in args[args.index("--disallowedTools") + 1]
     assert "GITHUB_TOKEN" not in os.environ and "GBASE_NOTIFY_CMD" not in os.environ
     run_dir = os.path.dirname(os.environ["AGENT_EVIDENCE_FILE"])
@@ -730,6 +760,75 @@ class GbaseRunTest(unittest.TestCase):
         self.assertIn("5-hour limit", result["failure"]["detail"])
         self.assertFalse(Path(result["cwd"]).exists())
         self.assertEqual(self.g("branch", "--list", "gbase/w3"), "")
+
+    def midrun(self, *extra):
+        calls = self.tmp / "notified"
+        script = self.tmp / "notify.sh"
+        script.write_text(f'#!/bin/sh\necho "$@" >> {calls}\n')
+        script.chmod(0o755)
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--model", "midrun", "--worktree", "mid",
+                              "--notify-cmd", str(script), *extra)
+        result = json.loads(Path(out[-1]).read_text())
+        legs = [json.loads(line) for line in (Path(result["run_dir"]) / "legs.jsonl").read_text().splitlines()]
+        runs = list((Path(self.env["GBASE_HOME"]) / "runs").glob("*/result.json"))
+        notified = calls.read_text().splitlines()
+        calls.unlink()
+        return r, result, legs, runs, notified
+
+    def test_a_usage_limit_mid_run_resumes_the_session_on_the_next_account(self):
+        # runs e7bca2 and d959d4: the default account hit its weekly limit after 89 and 44 tool calls, and the run
+        # failed while c5 was free
+        self.accounts(a=["limited-midrun"], b=[])
+        r, result, legs, runs, notified = self.midrun("--max-turns", "50", "--max-budget-usd", "20")
+        self.assertEqual((result["status"], result["exit_code"], result["account"], result["failure"]), ("done", 0, "b", None), r.stderr)
+        self.assertEqual([(f["kind"], f["account"], f["stage"]) for f in result["failures"]], [("usage_limit", "a", "run")])
+        self.assertIn("weekly limit", result["failures"][0]["detail"])
+        self.assertEqual([(h["from"], h["to"], h["how"]) for h in result["handoffs"]], [("a", "b", "resume")])
+        s = result["sessions"]["midrun"]
+        self.assertEqual([(x["account"], x["how"], x["stopped"]) for x in s["accounts"]],
+                         [("a", "start", "usage_limit"), ("b", "resume", None)])
+        self.assertEqual((s["cost_usd"], s["tool_uses"], s["session_id"], s["account"]), (3.0, 3, "s-mid-a", "b"))
+        # the same session, carried over to b's config dir with its subagent transcripts; the caps count the run
+        self.assertEqual([(x["cfg"], x["resume"]) for x in legs], [("a", None), ("b", "s-mid-a")])
+        self.assertIn("usage limit on another Claude account", legs[1]["prompt"])
+        self.assertEqual((legs[1]["max_turns"], legs[1]["budget"]), ("44", "18.5"))
+        self.assertTrue((self.tmp / "acct" / "b" / "projects" / "-fake-cwd" / "s-mid-a" / "agent-1.jsonl").exists())
+        # the report of the leg that finished is the run's; one result.json, one notification
+        self.assertEqual(result["settle"], "settle: 수렴 @abc1234")
+        self.assertTrue(result["ship"].startswith("ship: local gbase/w"))
+        self.assertIn("끝냈습니다", Path(s["final_path"]).read_text())
+        self.assertEqual((len(runs), len(notified)), (1, 1))
+        self.assertEqual(notified[0].split()[:3], [result["run_id"], "done", "0"])
+        self.assertIn("continuing on b (resume)", r.stderr)
+
+    def test_a_session_that_cant_be_carried_over_starts_fresh_on_the_worktree(self):
+        self.accounts(a=["limited-midrun", "no-transcript"], b=[])
+        _, result, legs, _, _ = self.midrun("--task", "T-77")
+        self.assertEqual((result["status"], result["account"]), ("done", "b"))
+        self.assertEqual([(h["how"]) for h in result["handoffs"]], ["fresh"])
+        self.assertEqual([(x["cfg"], x["resume"]) for x in legs], [("a", None), ("b", None)])
+        self.assertIn("stopped at a usage limit", legs[1]["prompt"])
+        self.assertIn("T-77", legs[1]["prompt"])  # the original prompt goes along
+        self.assertEqual(result["sessions"]["midrun"]["session_id"], "s-mid-b")
+
+    def test_every_account_at_its_limit_mid_run_fails_with_each_listed(self):
+        self.accounts(a=["limited-midrun"], b=["limited-midrun"], c=["limited-midrun"])
+        _, result, legs, runs, notified = self.midrun()
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual([(f["kind"], f["account"]) for f in result["failures"]],
+                         [("usage_limit", "a"), ("usage_limit", "b"), ("usage_limit", "c")])
+        self.assertEqual((result["failure"]["account"], result["failure"]["kind"]), ("c", "usage_limit"))
+        # one pass: no account is tried twice
+        self.assertEqual([(x["cfg"], x["resume"]) for x in legs], [("a", None), ("b", "s-mid-a"), ("c", "s-mid-a")])
+        self.assertEqual([x["stopped"] for x in result["sessions"]["midrun"]["accounts"]], ["usage_limit"] * 3)
+        self.assertNotIn("worktree_removed", result)  # its work stays in the worktree
+        self.assertTrue((Path(result["cwd"]) / "work-c.txt").exists())
+        self.assertEqual((len(runs), len(notified), notified[0].split()[1]), (1, 1, "failed"))
+        # without an accounts list the one account is all there is: failed, the limit recorded
+        self.env.pop("GBASE_ACCOUNTS")
+        self.env["CLAUDE_CONFIG_DIR"] = str(self.tmp / "acct" / "a")
+        _, result, legs, _, _ = self.midrun("--worktree", "mid2")
+        self.assertEqual((result["status"], len(legs), result["failure"]["account"]), ("failed", 1, "default"))
 
     def test_an_account_that_auth_failed_on_the_task_goes_last_and_answers_keep_the_account(self):
         self.accounts(a=["logged-out-run"], b=[])

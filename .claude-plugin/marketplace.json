@@ -10,7 +10,7 @@
     {
       "name": "gbase",
       "description": "Core productivity tools — base plugins",
-      "version": "1.49.0",
+      "version": "1.50.0",
       "author": {
         "name": "godsenal"
       },
