@@ -192,7 +192,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 **correct** (skill, model-invocable) — Turn mistakes agents keep repeating into checks. Adapted from pstack's `/correct` and Matt Pocock's `retro`.
 
 - Mines recent commits, reverts, PR review comments, and past session transcripts (which hold pre-PR `review` reports that never reach GitHub); a class counts once it has happened twice
-- Fixes each class at the highest level that works — architecture → types → lint/CI check whose error names the fix → test → `REVIEW.md` text last — after one multi-select confirmation
+- Fixes each class at the highest level that works — architecture → types → lint/CI check whose error names the fix → test → a journey in the verify skill that the agent drives on the real app → `REVIEW.md` text last — after one multi-select confirmation
 - Proves each new check fails on a real past instance, then passes on current code
 - Judgment-call rules go to `REVIEW.md` (read by the reviewer, who has a diff and room), not `CLAUDE.md` (loaded into every session — pointers only); an existing-but-unwired check gets wired, not rebuilt
 - Keeps an `## Enforced rules` table in `REVIEW.md` pairing each rule with what enforces it

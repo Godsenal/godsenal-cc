@@ -85,6 +85,7 @@ Add `--merge` only when the user asked for merging (this session) or the project
 - **Verify in small units.** In multi-step work, check each unit before starting the next; a break caught where it happened is cheap.
 - **Smallest change that solves it.** Delete before adding; no speculative guards, options, or abstractions.
 - **Fix root causes.** Fix the first place the system went wrong, not where it surfaced; a guard is a fix only when the state it handles is legitimate.
+- **A correction becomes a check, not another line.** When the task corrects a mistake an agent made (the user says it happened again, or hands over `교훈:` lines), fix it, then give it the cheapest catch that holds: code that makes it impossible, else a lint, type, or test, else a journey in the repo's verify skill, and a written rule (a skill line, `REVIEW.md`) only for a judgment call none of those can check. Name the level and why a higher one didn't fit. `gbase:correct` does this for a whole class; across 453 runs it never ran, so a correction handled here otherwise ends as text.
 - **Model the domain.** Stateful or heavily branching logic gets a structure — a state machine, typed model, or table — instead of the same conditionals repeated across files.
 - **Test behavior, not implementation.** A test should fail when the behavior breaks and keep passing when only internals change.
 - **Explain the number.** Before trusting a measurement, name what limited it and rule out that it measured something else (errors, cached or skipped work, noise).

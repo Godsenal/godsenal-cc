@@ -1,12 +1,12 @@
 ---
 name: correct
-description: "Finds the mistakes agents keep repeating in this repo and makes each one impossible: architecture first, then types, then a lint/CI check whose error names the fix, then a test, with REVIEW.md text last. Proves each check fails on a real past mistake. With --session it runs as a retrospective on one coding session instead — where the agent searched too long, lacked information, or made a checkable mistake. Use when the same correction keeps coming back, after a session that was harder than it should have been (\"retro\", \"회고\"), or on /gbase:correct."
+description: "Finds the mistakes agents keep repeating in this repo and makes each one impossible: architecture first, then types, then a lint/CI check whose error names the fix, then a test, then a verify-skill journey the agent drives on the real app, with REVIEW.md text last. Proves each check fails on a real past mistake. With --session it runs as a retrospective on one coding session instead — where the agent searched too long, lacked information, or made a checkable mistake. Use when the same correction keeps coming back, after a session that was harder than it should have been (\"retro\", \"회고\"), or on /gbase:correct."
 allowed-tools: Bash Read Write Edit Glob Grep AskUserQuestion Agent
 ---
 
 # /gbase:correct
 
-The operator keeps correcting agents in this repo for the same mistakes. Change the repo so the next agent can't make them. Ported from pstack's `/correct`; `--session` is from Matt Pocock's `retro` (both MIT).
+The operator keeps correcting agents in this repo for the same mistakes. Change the repo so the next agent can't make them. Ported from pstack's `/correct`; `--session` is from Matt Pocock's `retro` (both MIT). The drive-the-app rung is from the Agent Correction Tree in Lauren Tan's talk "All Code Is Slop (Except Mine)".
 
 Assume every contributor is an agent that sees only the files it opened, copies the nearest example, and takes the shortest path that compiles. Design the repo so a change that looks right from one file is right for the whole repo.
 
@@ -43,13 +43,14 @@ Every candidate must point at a specific moment in the session. Discard any you 
 1. **Eliminate it with architecture.** Give each piece of state one owner and each task one supported way. Hide internals so the wrong import fails. Replace hand-synced lists with one source of truth. Delete old ways and dead code an agent would copy.
 2. **Enforce it with types so the bad state can't be written.** If bad code still compiles, add a lint or CI check whose error names the file, type, or function to use instead. If the pattern is already common, fail only when a change adds more.
 3. **Test the behavior.** Fix or delete any test that still passes when the behavior it checks breaks, or that fails when only the internals change.
-4. **Write text last, only for judgment calls — in `REVIEW.md`.** `gbase:review` reads it with only a diff in hand; the implementing agent is under the most context pressure and is the wrong place for standards. `CLAUDE.md` loads into every session, so it keeps navigation pointers and the verify block; propose moving other steering out of it.
+4. **Let the agent catch it by driving the app.** A mistake that shows only on the running app (a layout, the keyboard over an input, a flow that breaks across screens) has no lint, and a `REVIEW.md` reviewer holds only the diff. Add the journey, or a `Gotchas` line, to the feature's file in the repo's verify skill (`.claude/skills/verify-*/features/`); `gbase:go` drives it whenever a change touches that feature and keeps the screenshot. No verify skill → run `gbase:create-verify` first, or report the class as waiting on one.
+5. **Write text last, only for judgment calls — in `REVIEW.md`.** `gbase:review` reads it with only a diff in hand; the implementing agent is under the most context pressure and is the wrong place for standards. `CLAUDE.md` loads into every session, so it keeps navigation pointers and the verify block; propose moving other steering out of it.
 
 Show the classes as `class | evidence | level | why not higher` and confirm with `AskUserQuestion` (multiSelect) which to fix now — this changes how every future change here is judged. *headless:* fix every class whose check you can prove on a past instance; the rest become `결정 필요:` lines.
 
 ## Fix and prove
 
-Fix the chosen classes, one commit each. Prove each new check fails on a real past mistake (re-apply the old hunk in a scratch `git worktree`), then passes on current code. Run the same command locally and in CI. Exceptions go on the offending line with a reason.
+Fix the chosen classes, one commit each. Prove each new check fails on a real past mistake (re-apply the old hunk in a scratch `git worktree`; a journey is driven there too), then passes on current code. Run the same command locally and in CI. Exceptions go on the offending line with a reason.
 
 ## Keep the rule table
 
