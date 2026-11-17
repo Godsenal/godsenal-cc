@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
 MAX_SKILL_LINES = 500
 MAX_DESCRIPTION = 1536
+MAX_LANG_BLOCK = 560  # the full rule is references/output-language.md; a skill body keeps a line or two
 LANG_BLOCK = "## 출력 언어"
 
 # Cross-skill contracts: each token must appear (case-insensitive) in every listed file.
@@ -27,7 +28,15 @@ def shorts(name):
     return f"plugins/shorts/skills/{name}/SKILL.md"
 
 
-BRANCH_PR = "plugins/base/commands/branch-pr.md"
+BRANCH_PR = skill("branch-pr")
+# the parts of branch-pr and monitor that only some runs read; a token lives where that branch is written
+PR_BODY = "plugins/base/skills/branch-pr/references/pr-body.md"
+LOCAL_MODE = "plugins/base/skills/branch-pr/references/local-mode.md"
+SHIP_PREP = "plugins/base/skills/branch-pr/scripts/ship-prep"
+SETTLE = "plugins/base/skills/monitor/references/settle.md"
+MERGE = "plugins/base/skills/monitor/references/merge.md"
+CONFLICTS = "plugins/base/skills/monitor/references/conflicts.md"
+PR_STATUS = "plugins/base/skills/monitor/scripts/pr-status"
 ORCHESTRATOR = "plugins/base/references/orchestrator.md"
 HEADLESS = "plugins/base/references/headless.md"
 HARNESS = "plugins/base/references/harness.md"
@@ -56,24 +65,59 @@ CONTRACTS = [
     ("verification:", [skill("go"), BRANCH_PR]),
     ("risk:", [skill("go"), BRANCH_PR]),
     ("deferred:", [skill("go"), BRANCH_PR]),
-    ("## review focus", [skill("go"), BRANCH_PR, ORCHESTRATOR]),
+    ("## review focus", [skill("go"), BRANCH_PR, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
     ("intent:", [skill("pause"), skill("pickup"), skill("go"), BRANCH_PR]),
     ("git reset --soft", [BRANCH_PR]),
+    # ship-prep does the reset; its marker is the same wip: + Intent: pair pause writes
+    ('"wip:"', [SHIP_PREP]),
+    ("refs/gbase/backup/", [BRANCH_PR, SHIP_PREP, RUNNER]),
     (".claude/skills/verify-", [skill("create-verify"), skill("go")]),
     (".claude/skills/verify/", [skill("create-verify"), skill("go"), skill("setup")]),
     ("ship-owner: orchestrator", [skill("go"), BRANCH_PR]),
     ("pr-body-file:", [skill("go"), BRANCH_PR]),
-    ("ship: local", [BRANCH_PR, ORCHESTRATOR, skill("monitor")]),
+    ("ship: local", [LOCAL_MODE, ORCHESTRATOR, SETTLE]),
     ("ship: skip —", [HEADLESS, ORCHESTRATOR]),  # a shipping step the caller put out of scope, not a decision
-    ("pr 본문 초안:", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, skill("monitor")]),
-    ("--until-settled", [skill("monitor"), skill("go"), ORCHESTRATOR]),
+    ("pr 본문 초안:", [skill("go"), LOCAL_MODE, ORCHESTRATOR, RUNNER, SETTLE]),
+    ("--until-settled", [skill("monitor"), SETTLE, skill("go"), ORCHESTRATOR]),
     # agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url
     ("`pr: <url>`", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
+    ('print(f"pr: {', [SHIP_PREP]),  # the script prints the line the skill promises
     ("pr_url", [RUNNER_DOC, RUNNER]),
     # conventions.md holds the one setting > convention > default order; the runner reads its branch prefix key
     ("gbase.branchprefix", [CONVENTIONS, RUNNER_DOC, RUNNER]),
-    ("references/conventions.md", [BRANCH_PR, skill("monitor")]),
-    ("settle: 수렴", [skill("monitor"), ORCHESTRATOR]),
+    ("references/conventions.md", [BRANCH_PR, MERGE]),
+    ("settle: 수렴", [SETTLE, PR_STATUS, ORCHESTRATOR]),
+    ("settle: 미확정", [SETTLE, PR_STATUS, ORCHESTRATOR]),
+    ("settle: 사람 필요", [SETTLE, PR_STATUS, ORCHESTRATOR]),
+    # monitor and branch-pr act on their scripts' output lines: a line a skill or reference names is one the script prints
+    ('"conflict — ', [PR_STATUS]), ("| `conflict` |", [skill("monitor")]),
+    ('"comments — ', [PR_STATUS]), ("| `comments` |", [skill("monitor")]),
+    ('"ci — ', [PR_STATUS]), ("| `ci` |", [skill("monitor")]),
+    ('"notes — ', [PR_STATUS]), ("| `notes` |", [skill("monitor")]),
+    ('"settled — ', [PR_STATUS]), ("| `settled` |", [skill("monitor")]),
+    ('"limit — ', [PR_STATUS]), ("`next: limit`", [SETTLE]),
+    ('"give up — ', [PR_STATUS]), ("`give up`", [skill("monitor"), SETTLE]),
+    ('"unstarted — ', [PR_STATUS]), ("`unstarted`", [skill("monitor")]),
+    ("merge: gate passed", [PR_STATUS, MERGE]),
+    ("merge: not now", [PR_STATUS, MERGE]),
+    ("merge: retarget stacked pr first", [PR_STATUS, MERGE]),
+    ("--handled", [PR_STATUS, SETTLE]),
+    ('"ask: ', [SHIP_PREP]), ("`ask:` lines", [BRANCH_PR]),
+    ("branch plan:", [SHIP_PREP, BRANCH_PR]),
+    ("--partial", [SHIP_PREP, BRANCH_PR]),
+    ("--remote", [SHIP_PREP, BRANCH_PR]),
+    ("ship-prep start --local", [LOCAL_MODE]), ("ship-prep check", [LOCAL_MODE]), ("ship-prep assets", [PR_BODY, LOCAL_MODE]),
+    ("scripts/pr-status", [skill("monitor")]),
+    ("references/settle.md", [skill("monitor")]),
+    ("references/merge.md", [skill("monitor")]),
+    ("references/comments.md", [skill("monitor"), PR_STATUS]),
+    ("references/conflicts.md", [skill("monitor"), PR_STATUS]),
+    ("verified-locally", [skill("go"), SETTLE, MERGE, PR_STATUS]),
+    ("scripts/ship-prep", [BRANCH_PR]),
+    ("references/pr-body.md", [BRANCH_PR]),
+    ("references/local-mode.md", [BRANCH_PR]),
+    ("compat: run", [BRANCH_PR, SHIP_PREP]),
+    ("compat: skip", [BRANCH_PR, SHIP_PREP]),
     ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
     # headless forbids wakeups in prose; the runner enforces it by denying the tools
     ("schedulewakeup,croncreate", [HEADLESS, RUNNER_DOC, RUNNER]),
@@ -84,9 +128,9 @@ CONTRACTS = [
     ("다른 선택지", [HEADLESS, RUNNER]),
     ("사람이 할 일", [HEADLESS, RUNNER]),
     # settle keeps fixes local and pushes only when the agent owns shipping
-    ("agent_ship_owner=orchestrator", [skill("go"), skill("monitor"), skill("review"), ORCHESTRATOR]),
-    ("푸시 대기:", [skill("monitor"), ORCHESTRATOR]),
-    ("agent_evidence_file", [skill("go"), skill("reproduce"), skill("monitor"), ORCHESTRATOR]),
+    ("agent_ship_owner=orchestrator", [skill("go"), skill("monitor"), SETTLE, skill("review"), ORCHESTRATOR]),
+    ("푸시 대기:", [SETTLE, ORCHESTRATOR]),
+    ("agent_evidence_file", [skill("go"), skill("reproduce"), SETTLE, ORCHESTRATOR]),
     ("gbase:reproduce", [skill("bug-fix"), skill("reproduce")]),
     # the session hook routes to work and names the agent types work dispatches
     ("`gbase:work`", [SESSION_HOOK]),
@@ -102,9 +146,9 @@ CONTRACTS = [
                             "plugins/base/skills/work/references/workers.md", "plugins/base/agents/worker.md"]),
     # evidence records what a check ran on; a `differs:` input becomes a Review focus item
     ("`input`", [ORCHESTRATOR, skill("go"), skill("reproduce")]),
-    ("differs:", [ORCHESTRATOR, skill("go"), skill("reproduce"), BRANCH_PR]),
+    ("differs:", [ORCHESTRATOR, skill("go"), skill("reproduce"), BRANCH_PR, PR_BODY]),
     ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
-    ("conflict resolution unreviewed", [skill("monitor")]),
+    ("conflict resolution unreviewed", [CONFLICTS]),
     ("--exclusive", [RUNNER_DOC, RUNNER]),
     # work's size gate reports the slices it left; the runner reads them into followups, and asks a capped run for them
     ("남은 작업:", [skill("work"), ORCHESTRATOR, RUNNER, RUNNER_DOC]),
@@ -117,7 +161,7 @@ CONTRACTS = [
     # bots start background runs with this one line, not a long nohup claude -p a permission classifier blocks
     ("gbase-run start", [RUNNER_DOC, RUNNER, FACTORY, "README.md"]),
     # settle's one rebase exception, so it stays one rule and not an open door
-    ("explicitly asks to rebase", [skill("monitor"), ORCHESTRATOR, FACTORY, "README.md"]),
+    ("explicitly asks to rebase", [SETTLE, ORCHESTRATOR, FACTORY, "README.md"]),
     # the runner reads mockup's report lines into result.json
     ("mockup url:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
     ("mockup shots:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
@@ -236,7 +280,12 @@ def check_skills(pdir):
             fail(skill, f"{lines} lines (keep under {MAX_SKILL_LINES}; move reference material out)")
         if LANG_BLOCK not in text:
             fail(skill, f"missing `{LANG_BLOCK}` block")
+        block = re.search(rf"^{LANG_BLOCK}\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+        if pdir.name == "base" and block and len(block.group(1).strip()) > MAX_LANG_BLOCK:
+            fail(skill, f"`{LANG_BLOCK}` block is too long (keep under {MAX_LANG_BLOCK}; the full rule is references/output-language.md)")
         check_links(skill, text)
+        for ref in sorted(skill.parent.glob("references/*.md")):
+            check_links(ref, ref.read_text(encoding="utf-8"))
     for cmd in sorted(pdir.glob("commands/*.md")):
         text = cmd.read_text(encoding="utf-8")
         if LANG_BLOCK not in text:
@@ -288,7 +337,7 @@ def check_hooks(pdir):
 
 
 def check_links(path, text):
-    for ref in re.findall(r"\]\(((?:\.\./)+[^)#\s]+|(?:references|scripts)/[^)#\s]+)", text):
+    for ref in re.findall(r"\]\(((?:\.\./)+[^)#\s]+|(?:references|scripts)/[^)#\s]+|[a-z0-9-]+\.md)", text):
         if not (path.parent / ref).exists():
             fail(path, f"links missing file {ref}")
 
@@ -372,11 +421,23 @@ def check_contracts():
                 fail(f, f"contract token {token!r} missing — update both sides: {', '.join(files)}")
 
 
+def load_script(rel):
+    """A script of this repo as a module (their names have dashes, so they can't be imported)."""
+    spec = importlib.util.spec_from_file_location(Path(rel).stem.replace("-", "_"), ROOT / rel)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_read_budget():
+    """A PR route's main session doesn't load more instruction text than scripts/read-budget.json allows."""
+    for problem in load_script("scripts/read-budget.py").problems():
+        fail("scripts/read-budget.json", problem)
+
+
 def check_pstack():
     """Followed pstack items are what pstack-sync wrote, and no upstream change to a merged skill is left unmerged."""
-    spec = importlib.util.spec_from_file_location("pstack_sync", ROOT / PSTACK_SYNC)
-    sync = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(sync)
+    sync = load_script(PSTACK_SYNC)
     try:
         for problem in sync.verify(ROOT):
             path, _, msg = problem.partition(": ")
@@ -411,6 +472,7 @@ def main():
     versions = check_plugins()
     check_contracts()
     check_pstack()
+    check_read_budget()
     if base:
         check_version_bumps(base, versions)
     if errors:

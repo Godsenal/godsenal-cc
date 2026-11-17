@@ -41,7 +41,9 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 **branch-pr** — Automate branch creation, intelligent commit grouping, and PR generation from current changes. **Runs fully autonomously** — invoking it is the go-ahead to branch, commit, push, and open the PR without step-by-step confirmation.
 
-- Analyzes current git changes
+- Packaged as a Skill (`plugins/base/skills/branch-pr/SKILL.md`). Its mechanical steps are one tested script, `scripts/ship-prep`: it unwraps pause commits, backs up the tree, reports the branch plan and convention files, checks the PR draft (required sections, one alert box, no local image paths), pushes, opens the PR, and prints the `pr:` line
+- The body keeps a short PR skeleton; the full Review focus rules, the form table, and screenshot handling live in `references/pr-body.md`, read only for a `medium`/`high` change, a deferred finding, an unreached surface, or a visible change
+- `compat-check` is skipped when only docs (by extension: `.md`, `.mdx`, `.rst`), tests, and images changed; any code or config file, and any always-high path, still gets it
 - Decides the branch name and commit grouping itself (by layer, feature, or change type) — no "confirm?" prompts
 - Runs the PR title and body through `gbase:unslop`
 - Pushes and opens a PR whose body is a reviewer briefing — **Why** (one sentence), **Review focus** (right under it: a GitHub `[!IMPORTANT]` box with the count of what a person must judge and up to five items, each a bold question plus where and why — product/design calls, evidence or high-risk lines no check can judge, and medium+ review findings the diff introduced; a `[!NOTE]` box says plainly when there are none. Below it one line of risk tier · one-way/two-way door · how to undo, and low or pre-existing review findings folded into `<details>`), **Change outline** (a diff sketch of the shape that changed, not a changelog; long parts folded into `<details>`), **Evidence** (before → after, plus the checks already run), rollout order when compat-check flags one, and optional **Notes**. Combines humanlayer `visual-pr`, Matt Pocock's `pr`, Anthropic's code-review write-up, and gbase's own risk/rollout. Each view and evidence pair uses the form that shows that kind of change best — before/after screenshots for UI, a GIF for interaction, a mermaid sequence diagram for cross-component flow, a pseudocode diff plus fail→pass test for logic, a JSON diff for contracts, one number for performance. A UI change ships with its screenshots in the body (a local path doesn't count); they come from the run's `verify-*` or `behavior:` captures and are uploaded to a separate `gbase-assets` branch (never the PR branch). Fills the repo's own PR template instead when one exists
@@ -163,7 +165,8 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 - Packaged as a Skill (`plugins/base/skills/monitor/SKILL.md`)
 - Model-invocable — triggers via `/gbase:monitor`, as the tail of `/gbase:go`, or when Claude judges you want a PR watched until merge (auto-triggering only starts the watch loop; ambiguous items still gate through `AskUserQuestion`)
-- Resolves the PR via `gh`, sweeps current CI + reviews, then starts a persistent `Monitor` polling every 30s
+- The PR's state comes from one tested script, `scripts/pr-status`: it classifies checks (a job the account couldn't start is not a diff failure), open review comments (with whether the author may be auto-applied), and automated reviewers, decides when a head has settled, judges the merge gate, and prints `next:` lines in the order to handle them. The skill body holds the loop; comment handling, conflicts, `--until-settled`, and `--draft`/`--merge` are `references/` files read only when that branch comes up
+- Sweeps current CI + reviews with it, then starts a persistent `Monitor` on `pr-status watch` (one line per state change)
 - Runs one **adversarial self-review** of the PR (`gbase:review`) right after the watch starts — inside the CI wait the PR already pays, so it costs the ship path nothing; findings are skeptic-verified, clear survivors are auto-fixed in their own commits, the rest come back as a severity-ordered report; nothing is posted to GitHub. This is for PRs `go` didn't ship (opened by an earlier session, a teammate, or by hand) — `go` reviews *before* the PR opens and passes `--no-review`. With `--draft`, flips the draft PR to ready once CI is green
 - Auto-fixes clear CI failures (lint, format, type, unused imports) and applies clearly-required review comments (suggested diff blocks, typos, dead code)
 - Resolves safe merge conflicts (lockfile regeneration, pure-addition merges, whitespace-only) via rebase + `--force-with-lease`; aborts and surfaces anything semantic
@@ -333,7 +336,7 @@ After installation, the following are available:
 
 ```
 /gbase:find-skills             # Discover skills for your project (command)
-/gbase:branch-pr               # Autonomous branch + commit + PR from current changes (command)
+/gbase:branch-pr               # Autonomous branch + commit + PR from current changes (skill)
 /gbase:compat-check [range]    # Flag backward-compat hazards + emit a deploy-order runbook (skill, model-invocable)
 /gbase:polish                  # Two-pass diff polish — deslop + structural (skill, model-invocable)
 /gbase:bug-fix                 # Fix a bug at its root cause — reproduce, narrow, verify on the same surface (skill, model-invocable)

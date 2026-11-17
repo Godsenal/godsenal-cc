@@ -15,7 +15,7 @@ scripts, or deploys. When it isn't sure a command is correct, it marks it `# ver
 
 ## 출력 언어
 
-사용자에게 보이는 텍스트는 전부 **한국어**로 쓴다 — 보고·요약·표의 설명 칸·질문과 옵션, 하위 에이전트가 돌려주는 글 중 사용자에게 그대로 노출되는 것까지. 코드·경로·명령어·스킬/툴 이름·상태 라벨(`high`, `PASS`, `✅`)은 그대로 두고, 커밋 메시지·브랜치 이름은 레포 관례(`git log`)를 따른다. PR 제목·본문은 기본 한국어(섹션 제목은 영어) — 레포가 분명히 다른 언어로 PR을 써 왔으면 그 언어. 사용자가 다른 언어로 요청하면 그 언어를 따른다.
+사용자에게 보이는 글은 **한국어**로 쓰고, 코드·명령·상태 라벨·커밋·브랜치는 레포 관례를 따른다. 세부: [output-language.md](../../references/output-language.md).
 
 ## Headless
 

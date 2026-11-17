@@ -1,0 +1,439 @@
+#!/usr/bin/env python3
+"""The mechanical steps of gbase:branch-pr. Each command prints `key: value` lines and ends with `next:` lines.
+
+  ship-prep start [--local]             unwrap pause commits, back up the tree, report branch/files/conventions/compat
+  ship-prep check <draft> [--local]     check a PR draft (line 1 title, line 2 empty, line 3 on the body)
+  ship-prep open <draft> [--draft] [--partial] [--remote <name>]
+                                        check, push the branch, open the PR, print `pr: <url>`
+                                        --partial: tracked files were left uncommitted on purpose (a secret, unrelated WIP)
+  ship-prep assets <file>...            upload images to the gbase-assets branch, print their embed lines
+
+Exit codes: 0 ok, 1 error, 2 a person has to decide (the `ask:` lines say what), 3 nothing to ship.
+"""
+import base64
+import fnmatch
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+# by extension only: `requirements.txt`, `docs/openapi.yaml`, and `src/app/docs/page.tsx` are code
+DOC_GLOBS = ("*.md", "*.mdx", "*.rst", "*.adoc", "LICENSE", "LICENSE.*", "CHANGELOG", "CHANGELOG.*", "NOTICE", ".gitignore")
+TEST_GLOBS = ("test_*", "*_test.*", "*.test.*", "*.spec.*", "*/__tests__/*", "__tests__/*", "tests/*", "*/tests/*",
+              "test/*", "*/test/*", "*/evals/*", "evals/*", "*/__snapshots__/*")
+ASSET_GLOBS = ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.svg", "*.ico", "*.mp4", "*.mov", "*.ttf", "*.otf", "*.woff*")
+# branch-pr's risk rule without a REVIEW.md: these paths are `high`
+HIGH_PATTERNS = (r"(^|/)auth", r"(^|/)(payments?|billing)(/|\.|$)", r"(^|/)migrations?/", r"\.sql$", r"^\.github/workflows/",
+                 r"(^|/)(app\.json|app\.config\.[a-z]+|eas\.json|Info\.plist)$", r"(^|/)(release|deploy)[^/]*\.(ya?ml|sh)$")
+SECRET_FILES = (".env", ".env.*", "*.pem", "*.p12", "*.pfx", "*.key", "*.keystore", "*.jks", "id_rsa*", "id_ed25519*",
+                "credentials.json", "service-account*.json", ".npmrc", ".netrc")
+SECRET_FILE_OK = (".env.example", ".env.sample", ".env.template", ".env.dist", "*.pub")
+SECRET_PATTERNS = (
+    ("private key", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    ("AWS access key", r"\bAKIA[0-9A-Z]{16}\b"),
+    ("GitHub token", r"\bgh[pousr]_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}\b"),
+    ("API key (sk-)", r"\bsk-[A-Za-z0-9_-]{24,}\b"),
+    ("Stripe key", r"\b[sr]k_(live|test)_[A-Za-z0-9]{16,}"),
+    ("JWT", r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\."),
+    ("Slack token", r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+    ("Google API key", r"\bAIza[0-9A-Za-z_-]{35}\b"),
+    # a name that says secret (also inside one: DB_PASSWORD, client_secret, STRIPE_SECRET_KEY) given a literal value:
+    # quoted and 12+ long, or unquoted, 20+ long, and holding a digit (so `token = getTokenFromEnvironment` is not one)
+    ("assigned secret", r"(?i)(api[_-]?key|secret|token|passwd|password|private[_-]?key|access[_-]?key)[A-Za-z0-9_]*[\"']?\s*[:=]\s*"
+                        r"([\"'][A-Za-z0-9_\-/+=.]{12,}[\"']|(?=[A-Za-z0-9_\-/+=.]*\d)[A-Za-z0-9_\-/+=]{20,}(\s|$))"),
+)
+CONVENTION_FILES = r"(^|/)contributing\.md$|pull_request_template|commitlint|^\.husky/"
+MAX_FOCUS_ITEMS = 5
+LEAD_LINES = 45  # body lines before ## Change outline: one screen
+
+
+class Stop(Exception):
+    def __init__(self, code, lines):
+        super().__init__(lines)
+        self.code, self.lines = code, lines if isinstance(lines, list) else [lines]
+
+
+def run(cmd, check=True, env=None, input=None):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, env=env, input=input)
+    except OSError as e:  # gh not installed: the callers treat it like any failed command
+        if check:
+            raise Stop(1, f"error: can't run {cmd[0]} — {e.strerror}")
+        return subprocess.CompletedProcess(cmd, 127, "", str(e))
+    if check and p.returncode:
+        raise Stop(1, [f"error: `{' '.join(cmd)}` exited {p.returncode}", p.stderr.strip() or p.stdout.strip()])
+    return p
+
+
+def git(*args, check=True, env=None):
+    return run(["git", *args], check=check, env=env).stdout.strip()
+
+
+def git_ok(*args):
+    return run(["git", *args], check=False).returncode == 0
+
+
+def matches(path, globs):
+    name = path.rsplit("/", 1)[-1]
+    return any(fnmatch.fnmatch(path, g) or fnmatch.fnmatch(name, g) for g in globs)
+
+
+def file_kind(path):
+    """doc / test / asset / code. Tests win over docs so a markdown fixture under tests/ counts as a test."""
+    if matches(path, TEST_GLOBS):
+        return "test"
+    if matches(path, ASSET_GLOBS):
+        return "asset"
+    if matches(path, DOC_GLOBS):
+        return "doc"
+    return "code"
+
+
+def compat_line(paths, base):
+    """compat-check reviews deploy order; a change made only of docs, tests, and images has none to review."""
+    kinds = sorted({file_kind(p) for p in paths})
+    if paths and "code" not in kinds and not high_paths(paths):
+        return f"compat: skip — only {'/'.join(kinds)} files changed"
+    return f"compat: run — gbase:compat-check on {base}...HEAD"
+
+
+def high_paths(paths):
+    return [p for p in paths if any(re.search(pat, p, re.I) for pat in HIGH_PATTERNS)]
+
+
+def risk_hint(paths):
+    high = high_paths(paths)
+    if high:
+        return f"risk hint: high — {', '.join(high[:3])} (REVIEW.md, when the repo has one, decides)"
+    if paths and all(file_kind(p) != "code" for p in paths):
+        return "risk hint: low — docs/tests/assets only"
+    return "risk hint: medium unless REVIEW.md marks a touched path always-high or the change is additive behind a flag"
+
+
+def secret_hits(paths, added_lines):
+    """[(where, kind)] — never the value."""
+    hits = []
+    for p in paths:
+        if matches(p, SECRET_FILES) and not matches(p, SECRET_FILE_OK):
+            hits.append((p, "secret-looking file"))
+    for where, line in added_lines:
+        for kind, pat in SECRET_PATTERNS:
+            if re.search(pat, line):
+                hits.append((where, kind))
+                break
+    return hits
+
+
+def default_base():
+    """(default branch name, the ref to diff against)."""
+    head = git("symbolic-ref", "--short", "refs/remotes/origin/HEAD", check=False)
+    candidates = ([head.split("/", 1)[1]] if "/" in head else []) + ["main", "master"]
+    for prefix in ("origin/", ""):
+        for name in candidates:
+            if git_ok("rev-parse", "--verify", "-q", prefix + name):
+                return name, prefix + name
+    return None, None
+
+
+def unwrap_pause():
+    """Soft-reset the unpushed gbase:pause commits at the tip (`wip:` subject and an `Intent:` body line); returns their bodies."""
+    n = 0
+    while True:
+        rev = f"HEAD~{n}"
+        if not git_ok("rev-parse", "--verify", "-q", f"{rev}^"):  # never reset past the root commit
+            break
+        subject = git("log", "-1", "--format=%s", rev)
+        body = git("log", "-1", "--format=%b", rev)
+        if not subject.startswith("wip:") or not re.search(r"^Intent:", body, re.M):
+            break
+        if git("branch", "-r", "--contains", rev):
+            break  # a pushed pause commit is never reset
+        n += 1
+    if not n:
+        return []
+    notes = [git("log", "-1", "--format=%B", f"HEAD~{i}") for i in range(n)]
+    git("reset", "--soft", f"HEAD~{n}")
+    return notes
+
+
+def status_paths():
+    out = run(["git", "status", "--porcelain=v1", "-z", "-uall"]).stdout
+    entries, parts, i = [], out.split("\0"), 0
+    while i < len(parts):
+        e = parts[i]
+        i += 1
+        if not e:
+            continue
+        code, path = e[:2], e[3:]
+        if code[0] in "RC":
+            i += 1  # the rename's source path follows
+        entries.append((code, path))
+    return entries
+
+
+def backup():
+    """A commit of the whole tree (untracked included) under refs/gbase/backup/, from a copy of the index."""
+    ts = time.strftime("%Y%m%d-%H%M%S") + f"-{os.getpid()}"
+    fd, idx = tempfile.mkstemp()
+    os.close(fd)
+    try:
+        Path(idx).write_bytes(Path(git("rev-parse", "--git-path", "index")).read_bytes())
+        env = {**os.environ, "GIT_INDEX_FILE": idx}
+        git("add", "-A", env=env)
+        tree = git("write-tree", env=env)
+    finally:
+        os.unlink(idx)
+    commit = git("commit-tree", tree, "-p", "HEAD", "-m", f"branch-pr-backup-{ts}")
+    ref = f"refs/gbase/backup/{ts}"
+    git("update-ref", ref, commit)
+    stat = git("diff", "--stat", "HEAD", ref).splitlines()
+    return ref, stat[-1].strip() if stat else "no changes"
+
+
+def added_lines(entries, since="HEAD"):
+    """(where, text) for every line the working tree adds on top of `since`, untracked files included."""
+    lines, current = [], "?"
+    for raw in run(["git", "diff", since, "--unified=0", "--no-color"], check=False).stdout.splitlines():
+        if raw.startswith("+++ b/"):
+            current = raw[6:]
+        elif raw.startswith("+") and not raw.startswith("+++"):
+            lines.append((current, raw[1:]))
+    for code, path in entries:
+        if code == "??":
+            p = Path(path)
+            try:
+                if p.is_file() and p.stat().st_size < 1_000_000:
+                    lines += [(f"{path}:{n}", text) for n, text in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)]
+            except (OSError, UnicodeDecodeError):
+                pass
+    return lines
+
+
+def cmd_start(args):
+    local = "--local" in args
+    out, ask = [], []
+    if not git_ok("rev-parse", "--verify", "-q", "HEAD"):
+        raise Stop(1, "error: no commits yet — make the first commit by hand")
+    notes = unwrap_pause()
+    for note in notes:
+        out += ["pause note (use it for the PR's Why):"] + [f"  {l}" for l in note.splitlines() if l.strip()]
+    default, base = default_base()
+    branch = git("branch", "--show-current") or "(detached)"
+    entries = status_paths()
+    ahead = int(git("rev-list", "--count", f"{base}..HEAD")) if base else 0
+    committed = [p for p in git("diff", "--name-only", f"{base}...HEAD").split("\n") if p] if base and ahead else []
+    paths = sorted({p for _, p in entries} | set(committed))
+    if not entries and not ahead:
+        raise Stop(3, "nothing to ship: clean tree and no commits ahead of the base")
+
+    out.append(f"branch: {branch} (default {default or 'unknown'}; base {base or 'unknown'}; {ahead} commits ahead)")
+    if entries:
+        ref, stat = backup()
+        out.append(f"backup: {ref} — {stat}")
+        out.append(f"  restore: git restore --source={ref} --worktree -- .   remove: git update-ref -d {ref}")
+        out.append(f"changed: {len(entries)} files in the tree" + (f", {len(committed)} already committed" if committed else ""))
+        out += [f"  {code} {path}" for code, path in entries[:60]]
+        if len(entries) > 60:
+            out.append(f"  … {len(entries) - 60} more (git status)")
+    else:
+        out.append(f"changed: tree clean — {ahead} commits ahead already hold the change; no commit step")
+
+    # unpushed commits ship too: scan what they added, not only the tree
+    hits = secret_hits(sorted({p for _, p in entries} | set(committed)), added_lines(entries, f"{base}" if committed else "HEAD"))
+    for where, kind in hits[:20]:
+        ask.append(f"ask: secret? {where} — {kind}. Never commit it; leave it out and say so.")
+
+    remotes = git("remote").split()
+    open_pr = None
+    if not local and remotes:
+        view = run(["gh", "pr", "view", "--json", "number,url,state"], check=False)
+        if view.returncode == 0 and json.loads(view.stdout).get("state") == "OPEN":
+            open_pr = json.loads(view.stdout)
+    if branch == "(detached)":
+        ask.append("ask: detached HEAD — which branch should carry this change?")
+    elif branch == default:
+        out.append("branch plan: on the default branch — create one, named by the repo's rule (conventions.md)")
+    elif open_pr:
+        out.append(f"branch plan: commit here; pushing updates the open PR {open_pr['url']}")
+    elif ahead and entries and not local:
+        ask.append(f"ask: {branch} already has {ahead} commits of its own and no open PR — new branch off {default}, or keep committing here?")
+    else:
+        out.append("branch plan: commit on this branch")
+    if not local and branch not in (default, "(detached)") and not open_pr \
+            and git_ok("rev-parse", "--verify", "-q", f"origin/{branch}") and not git_ok("merge-base", "--is-ancestor", f"origin/{branch}", "HEAD"):
+        ask.append(f"ask: origin/{branch} already exists with commits this branch doesn't have, and has no open PR — another name, or build on it?")
+    if not local:
+        if not remotes:
+            ask.append("ask: no remote — where should the branch be pushed?")
+        elif "origin" not in remotes:
+            ask.append(f"ask: no `origin` among remotes ({', '.join(remotes)}) — which one? (then `open --remote <name>`)")
+
+    conv = git("config", "--get", "gbase.conventions", check=False)
+    files = [f for f in git("ls-files").split("\n") if re.search(CONVENTION_FILES, f, re.I)]
+    if conv or files:
+        out.append("conventions — read before naming the branch, commits, or PR: " + ", ".join(([conv] if conv else []) + files))
+    else:
+        out.append("conventions: none written down — follow recent history, then the gbase defaults (conventions.md)")
+    out.append(compat_line(paths, base or "<base>"))
+    out.append(risk_hint(paths))
+    out += ask
+    if ask:
+        out.append("next: settle every `ask:` line first (headless: headless.md), then commit")
+    elif entries:
+        out.append("next: group the files into commits, then write the PR draft")
+    else:
+        out.append("next: write the PR draft")
+    print("\n".join(out))
+    return 2 if ask else 0
+
+
+def read_draft(path):
+    try:
+        return Path(path).read_text(encoding="utf-8").split("\n")
+    except OSError as e:
+        raise Stop(1, f"error: can't read the draft — {e}")
+
+
+def draft_problems(lines, local=False):
+    """Mechanical rules of branch-pr's body. Returns (errors, warnings)."""
+    errors, warnings = [], []
+    if not lines or not lines[0].strip():
+        errors.append("line 1 must be the PR title")
+    if len(lines) < 3 or lines[1].strip():
+        errors.append("line 2 must be empty, the body starts on line 3")
+    body = "\n".join(lines[2:])
+    for heading in ("## Review focus", "## Evidence"):
+        if not re.search(rf"^{re.escape(heading)}\s*$", body, re.M):
+            errors.append(f"missing `{heading}` (a repo template gets it added too)")
+    alert = r"^> \[!(\w+)\]"
+    alerts = re.findall(alert, body, re.M)
+    if len(alerts) > 1:
+        errors.append(f"{len(alerts)} alert boxes — only Review focus has one")
+    focus = re.search(r"^## Review focus\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
+    if focus:
+        if not re.search(alert, focus.group(1), re.M):
+            errors.append("Review focus needs its `> [!IMPORTANT]` box, or `> [!NOTE]` when nothing needs a person")
+        items = re.findall(r"^> \d+\. ", focus.group(1), re.M)
+        if len(items) > MAX_FOCUS_ITEMS:
+            errors.append(f"{len(items)} Review focus items (at most {MAX_FOCUS_ITEMS}) — the PR should be split; say so as item 1")
+    if not local:
+        for target in re.findall(r"!\[[^\]]*\]\(([^)\s]+)", body):
+            if not re.match(r"https?://", target):
+                errors.append(f"image `{target}` is a local path a reviewer can't open — upload it (`ship-prep assets`)")
+    if re.search(r"<(exactly one sentence|the question|PR title|one numbered|before → after first|only what a reviewer)", body):
+        errors.append("a template placeholder is still in the body")
+    lead = body.split("## Change outline")[0].count("\n")
+    if lead > LEAD_LINES:
+        warnings.append(f"{lead} lines before Change outline — it should fit on one screen")
+    return errors, warnings
+
+
+def cmd_check(args):
+    local = "--local" in args
+    paths = [a for a in args if not a.startswith("--")]
+    if len(paths) != 1:
+        raise Stop(1, "usage: ship-prep check <draft> [--local]")
+    errors, warnings = draft_problems(read_draft(paths[0]), local)
+    out = [f"warn: {w}" for w in warnings] + [f"error: {e}" for e in errors]
+    print("\n".join(out + (["next: fix the draft and run check again"] if errors else ["draft: ok"])))
+    return 1 if errors else 0
+
+
+def cmd_open(args):
+    args = list(args)
+    remote = "origin"
+    if "--remote" in args:
+        i = args.index("--remote")
+        if i + 1 >= len(args):
+            raise Stop(1, "error: --remote needs a name")
+        remote = args[i + 1]
+        del args[i:i + 2]
+    draft = "--draft" in args
+    paths = [a for a in args if not a.startswith("--")]
+    if len(paths) != 1:
+        raise Stop(1, "usage: ship-prep open <draft> [--draft] [--partial] [--remote <name>]")
+    lines = read_draft(paths[0])
+    errors, _ = draft_problems(lines)
+    if errors:
+        raise Stop(1, [f"error: {e}" for e in errors] + ["next: fix the draft and run open again"])
+    entries = status_paths()
+    tracked = [path for code, path in entries if code != "??"]
+    if tracked and "--partial" not in args:
+        raise Stop(1, ["error: uncommitted changes to tracked files — the PR would ship without them: " + ", ".join(tracked[:10]),
+                       "next: commit what belongs in the PR; if they were left out on purpose (a secret, unrelated WIP), rerun with --partial"])
+    if tracked:
+        print("note: left out on purpose (--partial) — say so in the report: " + ", ".join(tracked[:10]))
+    if entries:  # untracked leftovers (caches, scratch files) don't block; deleting them to get past a gate would be worse
+        print("note: untracked files stay out of the PR — say so in the report: " + ", ".join(path for _, path in entries[:10]))
+    branch = git("branch", "--show-current")
+    default, _ = default_base()
+    if not branch or branch == default:
+        raise Stop(1, f"error: on {branch or 'a detached HEAD'} — a PR needs its own branch")
+    push = run(["git", "push", "-u", remote, "HEAD"], check=False)
+    if push.returncode:
+        raise Stop(1, ["error: push failed — not retried, nothing forced", push.stderr.strip(), "next: git status; say what blocked the push"])
+    print(f"pushed: {branch} @{git('rev-parse', '--short', 'HEAD')}")
+    view = run(["gh", "pr", "view", "--json", "url,state"], check=False)
+    existing = json.loads(view.stdout) if view.returncode == 0 else {}
+    if existing.get("state") == "OPEN":
+        print("note: the PR was already open — the push updated it; its body is unchanged (`gh pr edit --body-file` to change it)")
+        print(f"pr: {existing['url']}")
+        return 0
+    create = run(["gh", "pr", "create", "--title", lines[0].strip(), "--body-file", "-"] + (["--draft"] if draft else []),
+                 check=False, input="\n".join(lines[2:]))
+    if create.returncode:
+        raise Stop(1, ["error: gh pr create failed (the branch is pushed)", create.stderr.strip()])
+    url = next((l.strip() for l in reversed(create.stdout.splitlines()) if l.strip().startswith("http")), create.stdout.strip())
+    print(f"pr: {url}")
+    print("next: put the `pr:` line in the final report at column 0")
+    return 0
+
+
+def cmd_assets(args):
+    files = [a for a in args if not a.startswith("--")]
+    if not files:
+        raise Stop(1, "usage: ship-prep assets <file>...")
+    branch = git("branch", "--show-current")
+    missing = [f for f in files if not Path(f).expanduser().is_file()]
+    if missing or not branch:
+        raise Stop(1, f"error: no such file: {', '.join(missing)}" if missing else "error: detached HEAD — assets are filed under the branch name")
+    repo = run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).stdout.strip()
+    if run(["gh", "api", f"repos/{repo}/git/ref/heads/gbase-assets"], check=False).returncode:
+        root = git("rev-list", "--max-parents=0", "HEAD").split("\n")[-1]
+        run(["gh", "api", f"repos/{repo}/git/refs", "-f", "ref=refs/heads/gbase-assets", "-f", f"sha={root}"])
+    for f in files:
+        p = Path(f).expanduser()
+        dest = f"{branch}/{p.name}"
+        payload = {"branch": "gbase-assets", "message": f"assets: {dest}", "content": base64.b64encode(p.read_bytes()).decode()}
+        old = run(["gh", "api", f"repos/{repo}/contents/{dest}?ref=gbase-assets", "-q", ".sha"], check=False)
+        if old.returncode == 0 and old.stdout.strip():
+            payload["sha"] = old.stdout.strip()  # replacing an image of the same name
+        # body via stdin: a screenshot's base64 can exceed the argument-length limit
+        run(["gh", "api", "-X", "PUT", f"repos/{repo}/contents/{dest}", "--input", "-"], input=json.dumps(payload))
+        print(f"![{p.stem}](https://github.com/{repo}/raw/gbase-assets/{dest})")
+    return 0
+
+
+COMMANDS = {"start": cmd_start, "check": cmd_check, "open": cmd_open, "assets": cmd_assets}
+
+
+def main(argv):
+    if not argv or argv[0] not in COMMANDS:
+        print(__doc__.strip())
+        return 1
+    try:
+        # git prints paths from the repo root and scopes `ls-files` to the cwd: from a subdirectory both would go quietly wrong
+        args = [a if a.startswith("--") or i and argv[i] == "--remote" else os.path.abspath(os.path.expanduser(a)) for i, a in enumerate(argv[1:])]
+        os.chdir(git("rev-parse", "--show-toplevel"))
+        return COMMANDS[argv[0]](args)
+    except Stop as s:
+        print("\n".join(l for l in s.lines if l))
+        return s.code
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
