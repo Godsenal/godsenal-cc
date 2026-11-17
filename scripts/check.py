@@ -29,6 +29,13 @@ def shorts(name):
 
 
 BRANCH_PR = skill("branch-pr")
+# go's branches: the pre-PR review (medium/high), the rest of the verification gate, --draft/--merge, and orchestrator runs
+GO_REVIEW = "plugins/base/skills/go/references/review.md"
+GO_VERIFY = "plugins/base/skills/go/references/verify.md"
+GO_DRAFT_MERGE = "plugins/base/skills/go/references/draft-merge.md"
+GO_ORCH = "plugins/base/skills/go/references/orchestrated.md"
+WORK_PLAYBOOKS = "plugins/base/skills/work/references/playbooks.md"
+PLAYBOOK_DIR = "plugins/base/skills/poteto-mode/playbooks"
 # the parts of branch-pr and monitor that only some runs read; a token lives where that branch is written
 PR_BODY = "plugins/base/skills/branch-pr/references/pr-body.md"
 LOCAL_MODE = "plugins/base/skills/branch-pr/references/local-mode.md"
@@ -36,6 +43,7 @@ SHIP_PREP = "plugins/base/skills/branch-pr/scripts/ship-prep"
 SETTLE = "plugins/base/skills/monitor/references/settle.md"
 MERGE = "plugins/base/skills/monitor/references/merge.md"
 CONFLICTS = "plugins/base/skills/monitor/references/conflicts.md"
+COMMENTS = "plugins/base/skills/monitor/references/comments.md"
 PR_STATUS = "plugins/base/skills/monitor/scripts/pr-status"
 ORCHESTRATOR = "plugins/base/references/orchestrator.md"
 HEADLESS = "plugins/base/references/headless.md"
@@ -53,34 +61,48 @@ CONTRACTS = [
     # compat-check's output template itself, not just prose that mentions the tokens
     ("- `✅ no special deploy ordering needed`", [skill("compat-check")]),
     ("- `⚠️ requires ordered rollout`", [skill("compat-check")]),
-    ("start at stage 2", [skill("go"), skill("review")]),
-    ("defer, don't ask", [skill("go"), skill("review")]),
-    ("one skeptic for low/medium", [skill("go"), skill("review")]),
+    ("start at stage 2", [GO_REVIEW, skill("review")]),
+    ("defer, don't ask", [GO_REVIEW, skill("review"), skill("monitor")]),
+    ("one skeptic for low/medium", [skill("go"), GO_REVIEW, GO_ORCH, skill("review")]),
+    # polish, review, compat-check, and unslop run in subagents so their bodies stay out of the main session
+    ('skill(skill: "gbase:polish"', [skill("go")]),
+    (r'skill(skill: \"gbase:review\"', [GO_REVIEW]),  # review.md writes the call inside a quoted prompt, so the backslash is part of the token
+    ('skill(skill: "gbase:review"', [skill("monitor")]),
+    ('skill(skill: "gbase:compat-check"', [BRANCH_PR]),
+    ('skill(skill: "gbase:unslop"', [BRANCH_PR, skill("work")]),
+    ("awaiting confirm", [skill("go"), skill("polish"), COMMENTS, CONFLICTS]),  # every polish launch says what a subagent that can't ask does
+    ("printenv | grep '^agent_'", [skill("go"), GO_ORCH]),  # in go's Step 1 prose, runnable as written (a table cell needs the pipe escaped)
+    ("subagent that can't ask", [skill("compat-check")]),
+    # go's body names the reference each branch reads
+    ("references/review.md", [skill("go")]),
+    ("references/verify.md", [skill("go")]),
+    ("references/draft-merge.md", [skill("go")]),
+    ("references/orchestrated.md", [skill("go")]),
     # work hands go its surface verification so go doesn't run the behavior check twice
-    ("`behavior:`", [skill("work"), skill("go")]),
+    ("`behavior:`", [skill("work"), skill("go"), GO_VERIFY]),
     ("--no-review", [skill("go"), skill("monitor")]),
-    ("--draft", [skill("go"), skill("monitor")]),
-    ("--merge", [skill("work"), skill("go"), skill("monitor")]),
-    ("gbase:verify", [skill("setup"), skill("go")]),
+    ("--draft", [skill("go"), GO_DRAFT_MERGE, skill("monitor")]),
+    ("--merge", [skill("work"), skill("go"), GO_DRAFT_MERGE, GO_ORCH, skill("monitor")]),
+    ("gbase:verify", [skill("setup"), skill("go"), GO_VERIFY]),
     ("verification:", [skill("go"), BRANCH_PR]),
     ("risk:", [skill("go"), BRANCH_PR]),
     ("deferred:", [skill("go"), BRANCH_PR]),
-    ("## review focus", [skill("go"), BRANCH_PR, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
+    ("## review focus", [skill("go"), GO_DRAFT_MERGE, BRANCH_PR, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
     ("intent:", [skill("pause"), skill("pickup"), skill("go"), BRANCH_PR]),
     ("git reset --soft", [BRANCH_PR]),
     # ship-prep does the reset; its marker is the same wip: + Intent: pair pause writes
     ('"wip:"', [SHIP_PREP]),
     ("refs/gbase/backup/", [BRANCH_PR, SHIP_PREP, RUNNER]),
-    (".claude/skills/verify-", [skill("create-verify"), skill("go")]),
-    (".claude/skills/verify/", [skill("create-verify"), skill("go"), skill("setup")]),
-    ("ship-owner: orchestrator", [skill("go"), BRANCH_PR]),
-    ("pr-body-file:", [skill("go"), BRANCH_PR]),
+    (".claude/skills/verify-", [skill("create-verify"), GO_VERIFY]),
+    (".claude/skills/verify/", [skill("create-verify"), GO_VERIFY, skill("setup")]),
+    ("ship-owner: orchestrator", [GO_ORCH, BRANCH_PR]),
+    ("pr-body-file:", [GO_ORCH, BRANCH_PR]),
     ("ship: local", [LOCAL_MODE, ORCHESTRATOR, SETTLE]),
     ("ship: skip —", [HEADLESS, ORCHESTRATOR]),  # a shipping step the caller put out of scope, not a decision
-    ("pr 본문 초안:", [skill("go"), LOCAL_MODE, ORCHESTRATOR, RUNNER, SETTLE]),
-    ("--until-settled", [skill("monitor"), SETTLE, skill("go"), ORCHESTRATOR]),
+    ("pr 본문 초안:", [GO_ORCH, LOCAL_MODE, ORCHESTRATOR, RUNNER, SETTLE]),
+    ("--until-settled", [skill("monitor"), SETTLE, GO_ORCH, ORCHESTRATOR]),
     # agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url
-    ("`pr: <url>`", [skill("go"), BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
+    ("`pr: <url>`", [skill("go"), GO_ORCH, BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
     ('print(f"pr: {', [SHIP_PREP]),  # the script prints the line the skill promises
     ("pr_url", [RUNNER_DOC, RUNNER]),
     # conventions.md holds the one setting > convention > default order; the runner reads its branch prefix key
@@ -112,7 +134,7 @@ CONTRACTS = [
     ("references/merge.md", [skill("monitor")]),
     ("references/comments.md", [skill("monitor"), PR_STATUS]),
     ("references/conflicts.md", [skill("monitor"), PR_STATUS]),
-    ("verified-locally", [skill("go"), SETTLE, MERGE, PR_STATUS]),
+    ("verified-locally", [GO_DRAFT_MERGE, SETTLE, MERGE, PR_STATUS]),
     ("scripts/ship-prep", [BRANCH_PR]),
     ("references/pr-body.md", [BRANCH_PR]),
     ("references/local-mode.md", [BRANCH_PR]),
@@ -128,16 +150,25 @@ CONTRACTS = [
     ("다른 선택지", [HEADLESS, RUNNER]),
     ("사람이 할 일", [HEADLESS, RUNNER]),
     # settle keeps fixes local and pushes only when the agent owns shipping
-    ("agent_ship_owner=orchestrator", [skill("go"), skill("monitor"), SETTLE, skill("review"), ORCHESTRATOR]),
+    ("agent_ship_owner=orchestrator", [GO_ORCH, skill("monitor"), SETTLE, skill("review"), ORCHESTRATOR]),
     ("푸시 대기:", [SETTLE, ORCHESTRATOR]),
-    ("agent_evidence_file", [skill("go"), skill("reproduce"), SETTLE, ORCHESTRATOR]),
+    ("agent_evidence_file", [GO_ORCH, skill("reproduce"), SETTLE, ORCHESTRATOR]),
     ("gbase:reproduce", [skill("bug-fix"), skill("reproduce")]),
     # the session hook routes to work and names the agent types work dispatches
     ("`gbase:work`", [SESSION_HOOK]),
     ("gbase:scout", [skill("work"), SESSION_HOOK]),
     ("gbase:worker", [skill("work"), SESSION_HOOK]),
     ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
-    ("gbase:unslop", [BRANCH_PR, skill("work")]),
+    ("a diagnosis from a trace or profile", [skill("work"), SESSION_HOOK]),
+    ("spans several prs", [skill("work"), SESSION_HOOK]),
+    # work is poteto-mode inside gbase: it routes to pstack's playbooks and reads their Cursor names through playbooks.md
+    ("../poteto-mode/playbooks/", [skill("work")]),
+    ("references/playbooks.md", [skill("work")]),
+    ("pstack-adapter.md", [WORK_PLAYBOOKS]),
+    ("benchmark-checklist", [skill("work")]),
+    ("root cause before smallest", [skill("work")]),
+    ("references/correction.md", [skill("work")]),
+    ("used_by", [PSTACK_SYNC, PSTACK_DOC]),
     # content runs report lessons instead of editing the harness; the runner hands them to a work run
     ("교훈:", [shorts("content-common"), shorts("shorts-common"), skill("design-taste"), ORCHESTRATOR, RUNNER, FACTORY]),
     # mockup and gapp's design load the user's taste rules before drawing
@@ -145,8 +176,8 @@ CONTRACTS = [
     ("gbase:design-taste", [skill("mockup"), "plugins/app/skills/design/SKILL.md", skill("work"),
                             "plugins/base/skills/work/references/workers.md", "plugins/base/agents/worker.md"]),
     # evidence records what a check ran on; a `differs:` input becomes a Review focus item
-    ("`input`", [ORCHESTRATOR, skill("go"), skill("reproduce")]),
-    ("differs:", [ORCHESTRATOR, skill("go"), skill("reproduce"), BRANCH_PR, PR_BODY]),
+    ("`input`", [ORCHESTRATOR, GO_VERIFY, GO_ORCH, skill("reproduce")]),
+    ("differs:", [ORCHESTRATOR, GO_VERIFY, skill("reproduce"), BRANCH_PR, PR_BODY]),
     ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
     ("conflict resolution unreviewed", [CONFLICTS]),
     ("--exclusive", [RUNNER_DOC, RUNNER]),
@@ -178,7 +209,7 @@ CONTRACTS = [
     ("scripts_changed", [PSTACK_SYNC, PSTACK_DOC]),
     ("references/pstack-adapter.md", [PSTACK_SYNC, PSTACK_DOC]),
     # the adapter sends every shipping step of a pstack playbook through go, and questions through headless.md
-    ("gbase:go", [PSTACK_ADAPTER]),
+    ("gbase:go", [PSTACK_ADAPTER, WORK_PLAYBOOKS]),
     ("headless.md", [PSTACK_ADAPTER]),
     # gshorts format skills defer every-video rules to shorts-common; its feedback intake names the format skills
     ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
@@ -429,6 +460,19 @@ def load_script(rel):
     return module
 
 
+def check_playbooks():
+    """Every playbook work's route table names is one pstack-sync wrote: an upstream rename fails here, not in a run."""
+    text = (ROOT / skill("work")).read_text(encoding="utf-8")
+    section = re.search(r"^## 1\. Pick one route\n(.*?)(?=^## )", text, re.M | re.S)
+    rows = re.findall(r"^\|.*$", section.group(1), re.M) if section else []  # the table's rows, not the prose around it
+    names = re.findall(r"`([a-z0-9-]+\.md)`", "\n".join(rows))
+    if not names:
+        fail(skill("work"), "route table names no playbook (`<name>.md`)")
+    for name in names:
+        if not (ROOT / PLAYBOOK_DIR / name).is_file():
+            fail(skill("work"), f"route table names playbook {name}, which is not in {PLAYBOOK_DIR}/")
+
+
 def check_read_budget():
     """A PR route's main session doesn't load more instruction text than scripts/read-budget.json allows."""
     for problem in load_script("scripts/read-budget.py").problems():
@@ -472,6 +516,7 @@ def main():
     versions = check_plugins()
     check_contracts()
     check_pstack()
+    check_playbooks()
     check_read_budget()
     if base:
         check_version_bumps(base, versions)

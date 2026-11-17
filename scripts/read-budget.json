@@ -1,26 +1,24 @@
 {
   "unit": "characters of instruction text one PR run loads into its main session",
-  "note": "limit = the ceiling check.py enforces now; target = where the route has to end up. Lower a limit whenever a route shrinks; raising one needs a reason in the PR.",
+  "note": "limit = the ceiling check.py enforces now; target = where the route has to end up. Lower a limit whenever a route shrinks; raising one needs a reason in the PR. polish, review, compat-check, and unslop run in subagents (go, branch-pr, and monitor launch them), so their bodies are not in any route.",
   "routes": {
     "low": {
       "target": 25000,
-      "limit": 47600,
+      "limit": 25000,
       "reads": [
         "plugins/base/skills/work/SKILL.md",
         "plugins/base/skills/go/SKILL.md",
         "plugins/base/skills/branch-pr/SKILL.md",
-        "plugins/base/skills/monitor/SKILL.md",
-        "plugins/base/skills/polish/SKILL.md",
-        "plugins/base/skills/unslop/SKILL.md"
+        "plugins/base/skills/monitor/SKILL.md"
       ]
     },
     "medium": {
       "target": 40000,
-      "limit": 68400,
+      "limit": 40000,
       "extends": "low",
       "reads": [
-        "plugins/base/skills/review/SKILL.md",
-        "plugins/base/skills/compat-check/SKILL.md",
+        "plugins/base/skills/go/references/review.md",
+        "plugins/base/skills/go/references/verify.md",
         "plugins/base/skills/branch-pr/references/pr-body.md"
       ]
     },
@@ -34,11 +32,28 @@
   "extras": {
     "headless": {
       "note": "an unattended run settles the PR instead of watching it, and reviews low-risk changes before the PR",
-      "limit": 13700,
+      "limit": 12500,
       "reads": [
+        "plugins/base/skills/go/references/orchestrated.md",
+        "plugins/base/skills/go/references/review.md",
         "plugins/base/skills/monitor/references/settle.md",
-        "plugins/base/skills/monitor/references/merge.md",
-        "plugins/base/skills/review/SKILL.md"
+        "plugins/base/skills/monitor/references/merge.md"
+      ]
+    },
+    "merge": {
+      "note": "go --draft or --merge, or a finding review deferred",
+      "limit": null,
+      "reads": [
+        "plugins/base/skills/go/references/draft-merge.md",
+        "plugins/base/skills/monitor/references/merge.md"
+      ]
+    },
+    "playbook": {
+      "note": "a route that follows a pstack playbook reads work's playbooks.md and one playbook (831 to 4,466 characters; feature.md stands in)",
+      "limit": null,
+      "reads": [
+        "plugins/base/skills/work/references/playbooks.md",
+        "plugins/base/skills/poteto-mode/playbooks/feature.md"
       ]
     },
     "ui": {

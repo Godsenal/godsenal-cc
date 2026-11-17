@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -184,6 +185,46 @@ class SyncTest(unittest.TestCase):
         problems = sync.verify(self.root)
         self.assertEqual(len(problems), 1)
         self.assertIn("skills/alpha", problems[0])
+
+    def test_followed_item_a_gbase_file_depends_on_is_reported_as_custom_changed(self):
+        self.run_sync("--apply")
+        lock = self.lock()
+        lock["items"]["alpha"]["used_by"] = ["skills/how/SKILL.md"]
+        self.save_lock(lock)
+        self.assertEqual(sync.verify(self.root), [])
+        code, report = self.run_sync("--check")
+        self.assertEqual((code, report["changed"], report["custom_changed"]), (0, False, []))  # unchanged upstream: not reported
+        self.write_up({f"{TREE}/skills/alpha/scripts/run.sh": "#!/bin/sh\necho two\n",
+                       f"{TREE}/skills/beta/SKILL.md": skill("beta", "Changed, nobody depends on it.")})
+        code, report = self.run_sync("--check", sha="bbb222")
+        self.assertEqual((report["skills_changed"], report["custom_changed"]), (["alpha", "beta"], ["alpha"]))
+        code, report = self.run_sync("--apply", sha="bbb222")
+        self.assertEqual(report["dependents"], {"alpha": ["plugins/base/skills/how/SKILL.md"]})
+        self.assertEqual(self.lock()["items"]["alpha"]["used_by"], ["skills/how/SKILL.md"])  # --apply keeps the field
+        code, report = self.run_sync("--check", sha="bbb222")
+        self.assertEqual((report["changed"], report["custom_changed"]), (False, []))
+
+    def test_removed_followed_item_a_gbase_file_depends_on_is_reported(self):
+        self.run_sync("--apply")
+        lock = self.lock()
+        lock["items"]["beta"]["used_by"] = ["skills/how/SKILL.md"]
+        self.save_lock(lock)
+        shutil.rmtree(self.up / TREE / "skills" / "beta")
+        code, report = self.run_sync("--check", sha="bbb222")
+        self.assertEqual((report["removed_upstream"], report["custom_changed"]), (["beta"], ["beta"]))
+        code, report = self.run_sync("--apply", sha="bbb222")
+        self.assertIn("beta", report["removed"])
+        self.assertEqual(report["dependents"]["beta"], ["plugins/base/skills/how/SKILL.md"])
+        self.assertNotIn("beta", self.lock()["items"])
+
+    def test_verify_catches_a_used_by_path_that_is_gone(self):
+        self.run_sync("--apply")
+        lock = self.lock()
+        lock["items"]["alpha"]["used_by"] = ["skills/renamed/SKILL.md"]
+        self.save_lock(lock)
+        problems = sync.verify(self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("used_by skills/renamed/SKILL.md", problems[0])
 
     def test_unreachable_source_is_an_error_line_and_changes_nothing(self):
         before = self.snapshot()
