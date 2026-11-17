@@ -121,21 +121,22 @@ FAKE_CLAUDE = textwrap.dedent('''\
     print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-" + model, "model": model}))
     print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.01}))
     if model == "stops":  # the turn ended on a review table before go: the change sits uncommitted, no PR
+        if "--resume" in args and "reached its" in args[args.index("-p") + 1]:  # the wrap-up after a cap
+            print(json.dumps({"type": "result", "result": "go 도중 멈췄습니다\\n남은 작업: PR 열기", "num_turns": 2,
+                              "total_cost_usd": 0.1}))
+            sys.exit(0)
         if "--resume" in args and os.environ.get("FAKE_RESUME_CAP"):  # the resumed session reaches the cap too
-            if "reached its" in args[args.index("-p") + 1]:  # its wrap-up
-                print(json.dumps({"type": "result", "result": "go 도중 멈췄습니다\\n남은 작업: PR 열기", "num_turns": 2,
-                                  "total_cost_usd": 0.1}))
-                sys.exit(0)
             print(json.dumps({"type": "result", "subtype": os.environ["FAKE_RESUME_CAP"], "is_error": True, "num_turns": 9,
                               "total_cost_usd": 0.7}))
             sys.exit(1)
         if "--resume" in args:
             final = "pr: https://github.com/o/r/pull/12\\nsettle: 수렴 @abc1234\\n"
-            open(os.path.join(run_dir, "resume-prompt"), "w").write(args[args.index("-p") + 1])
+            open(os.path.join(run_dir, "resume-args"), "w").write(json.dumps(args))
         else:
             open("change.txt", "w").write("x")
             final = "| # | severity | file:line | finding | action |\\n|---|---|---|---|---|\\n| 1 | low | `a.py:1` | x | auto-fixed |\\n"
-        print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.5}))
+        print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.5,
+                          "num_turns": 0 if "--resume" in args else int(os.environ.get("FAKE_FIRST_TURNS", "0"))}))
         sys.exit(0)
     if model == "capped":  # the turn cap ended the session mid-work; the wrap-up session reports what's left
         if "--resume" in args:
@@ -564,7 +565,8 @@ class GbaseRunTest(unittest.TestCase):
         # the go that only the resumed session called gated this PR
         self.assertEqual(result["skills"], ["gbase:work", "gbase:bug-fix", "gbase:go"])
         self.assertFalse([g for g in result["gaps"] if "gbase:go 없이" in g])
-        self.assertIn("no `pr:` line", (Path(result["run_dir"]) / "resume-prompt").read_text())
+        args = json.loads((Path(result["run_dir"]) / "resume-args").read_text())
+        self.assertIn("no `pr:` line", args[args.index("-p") + 1])
         # nothing in the worktree: nothing to resume
         (self.repo / "change.txt").unlink()
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--ship-owner", "agent", "--model", "lessons")
@@ -585,6 +587,28 @@ class GbaseRunTest(unittest.TestCase):
             self.assertEqual((session["resumed"], session["tool_uses"], session["turns"]), (True, 17, 11))
             self.assertAlmostEqual(session["cost_usd"], 1.3)
             (self.repo / "change.txt").unlink()
+
+    def test_the_shipping_resume_gets_what_the_first_session_left_of_the_caps(self):
+        run = lambda *caps: json.loads(Path(self.run_cli(
+            "--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent", "--model", "stops",
+            *caps)[1][-1]).read_text())
+        self.env["FAKE_FIRST_TURNS"] = "12"  # the first session: 12 turns, $0.5
+        result = run("--max-turns", "50", "--max-budget-usd", "20")
+        args = json.loads((Path(result["run_dir"]) / "resume-args").read_text())
+        self.assertEqual((args[args.index("--max-turns") + 1], args[args.index("--max-budget-usd") + 1]), ("38", "19.5"))
+        self.assertEqual((result["sessions"]["stops"]["resumed"], result["turn_limit"], result["budget_limit"]),
+                         (True, None, None))
+        (self.repo / "change.txt").unlink()
+        result = run("--max-turns", "0", "--max-budget-usd", "0")  # no cap: none passed on
+        args = json.loads((Path(result["run_dir"]) / "resume-args").read_text())
+        self.assertFalse({"--max-turns", "--max-budget-usd"} & set(args))
+        # a first session that used a cap up without being cut off by it: no resume, the wrap-up session instead
+        for caps, field, limit in ((("--max-turns", "12"), "turn_limit", 12), (("--max-budget-usd", "0.5"), "budget_limit", 0.5)):
+            (self.repo / "change.txt").unlink()
+            result = run(*caps)
+            self.assertEqual((result[field], result["followups"], result["pr_url"]), (limit, ["PR 열기"], None), caps)
+            self.assertNotIn("resumed", result["sessions"]["stops"])
+            self.assertFalse((Path(result["run_dir"]) / "resume-args").exists())
 
     def test_a_resumed_or_wrap_up_session_keeps_its_errors_and_how_it_ended(self):
         s = {"results": ["a"], "cost_usd": 1.0, "tool_uses": 3, "turns": 4, "errors": ["e1"], "end_error": None}
