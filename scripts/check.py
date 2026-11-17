@@ -4,6 +4,7 @@
 Usage: python3 scripts/check.py [--base <git-ref>]
   --base  also check that every plugin with changed files bumped its version vs <git-ref>
 """
+import importlib.util
 import json
 import re
 import subprocess
@@ -34,6 +35,9 @@ SESSION_HOOK = "plugins/base/hooks/session-start.md"
 FACTORY = "plugins/base/.claude-plugin/factory.json"
 RUNNER = "scripts/gbase-run"
 CONVENTIONS = "plugins/base/references/conventions.md"
+PSTACK_SYNC = "scripts/pstack-sync.py"
+PSTACK_DOC = "plugins/base/references/pstack-sync.md"
+PSTACK_ADAPTER = "plugins/base/references/pstack-adapter.md"
 RUNNER_DOC = "plugins/base/references/runner.md"  # the runner's usage and result.json, split out of orchestrator.md
 CONTRACTS = [
     ("⚠️ requires ordered rollout", [skill("compat-check"), BRANCH_PR]),
@@ -123,6 +127,15 @@ CONTRACTS = [
     ("report only", [skill("review"), FACTORY]),
     # the runner merges review2 by parsing review's report table
     ("# | severity | file:line | finding | action", [skill("review"), RUNNER]),
+    # pstack sync: the daily routine parses --check's fields; every followed skill links the adapter the script names
+    ("skills_changed", [PSTACK_SYNC, PSTACK_DOC]),
+    ("custom_changed", [PSTACK_SYNC, PSTACK_DOC]),
+    ("new_upstream", [PSTACK_SYNC, PSTACK_DOC]),
+    ("scripts_changed", [PSTACK_SYNC, PSTACK_DOC]),
+    ("references/pstack-adapter.md", [PSTACK_SYNC, PSTACK_DOC]),
+    # the adapter sends every shipping step of a pstack playbook through go, and questions through headless.md
+    ("gbase:go", [PSTACK_ADAPTER]),
+    ("headless.md", [PSTACK_ADAPTER]),
     # gshorts format skills defer every-video rules to shorts-common; its feedback intake names the format skills
     ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
     ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
@@ -359,6 +372,19 @@ def check_contracts():
                 fail(f, f"contract token {token!r} missing — update both sides: {', '.join(files)}")
 
 
+def check_pstack():
+    """Followed pstack items are what pstack-sync wrote, and no upstream change to a merged skill is left unmerged."""
+    spec = importlib.util.spec_from_file_location("pstack_sync", ROOT / PSTACK_SYNC)
+    sync = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sync)
+    try:
+        for problem in sync.verify(ROOT):
+            path, _, msg = problem.partition(": ")
+            fail(path, msg)
+    except sync.SyncError as e:
+        fail(PSTACK_SYNC, str(e))
+
+
 def git(*args):
     return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True, check=True).stdout
 
@@ -384,6 +410,7 @@ def main():
     base = args[args.index("--base") + 1] if "--base" in args else None
     versions = check_plugins()
     check_contracts()
+    check_pstack()
     if base:
         check_version_bumps(base, versions)
     if errors:
