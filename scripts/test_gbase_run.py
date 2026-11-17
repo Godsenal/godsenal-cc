@@ -81,8 +81,13 @@ FAKE_CLAUDE = textwrap.dedent('''\
         print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-hang", "model": model}), flush=True)
         child.wait()
     open(os.path.join(run_dir, "ran-on"), "a").write(os.path.basename(cfg) + "\\n")
-    print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill",
-                                                                    "input": {"skill": "gbase:go"}}]}}))
+    skill = lambda name, parent=None: print(json.dumps({"type": "assistant", "parent_tool_use_id": parent, "message": {
+        "content": [{"type": "tool_use", "name": "Skill", "input": {"skill": name}}]}}))
+    skill("gbase:go", "toolu_agent0" if model == "subgo" else None)  # subgo: only a subagent called go
+    for name in ("gbase:polish", "code-review", "gbase:polish", "gbase:unslop"):  # the skills go runs in an Agent
+        skill(name, "toolu_agent1")
+    if "--resume" in args:  # what only the resumed session's subagent called
+        skill("gbase:compat-check", "toolu_agent2")
     if model == "commits":  # a session that commits c.txt in its checkout
         open("c.txt", "w").write(os.environ.get("FAKE_CONTENT", "run") + "\\n")
         subprocess.run(["git", "add", "c.txt"], check=True)
@@ -107,6 +112,7 @@ FAKE_CLAUDE = textwrap.dedent('''\
         "plan": "계획을 썼습니다\\nplan: /p/app-onboarding.md\\n남은 작업: 1. 스키마와 첫 화면\\n남은 작업: 2. 알림 설정\\n결정 필요: 알림 기본값 → 켬 (추천: 켬; 다른 선택지: 끔)\\n",
         "settled": "PR #64를 정리했습니다\\nsettle: 사람 필요 @7b0a03f\\n",
     }
+    finals["subgo"] = finals["agent"]
     final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
     print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-" + model, "model": model}))
@@ -542,6 +548,7 @@ class GbaseRunTest(unittest.TestCase):
         result = json.loads(Path(out[-1]).read_text())
         self.assertEqual((result["pr_url"], result["settle"]), ("https://github.com/o/r/pull/12", "settle: 수렴 @abc1234"))
         self.assertEqual((result["sessions"]["stops"]["resumed"], result["sessions"]["stops"]["cost_usd"]), (True, 1.0))
+        self.assertEqual(result["subagent_skills"], ["gbase:polish", "code-review", "gbase:unslop", "gbase:compat-check"])
         self.assertIn("no `pr:` line", (Path(result["run_dir"]) / "resume-prompt").read_text())
         # nothing in the worktree: nothing to resume
         (self.repo / "change.txt").unlink()
@@ -596,6 +603,28 @@ class GbaseRunTest(unittest.TestCase):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
                               "--model", "agent")
         self.assertEqual(json.loads(Path(out[-1]).read_text())["gaps"], [])
+
+    def test_skills_a_subagent_called_are_recorded_apart_from_the_sessions_own(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "agent")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["skills"], ["gbase:work", "gbase:go"])
+        self.assertEqual(result["subagent_skills"], ["gbase:polish", "code-review", "gbase:unslop"])  # once each, in order
+        self.assertNotIn("polish", result["provenance"])
+        self.assertTrue(all("skills" not in k for s in result["sessions"].values() for k in s))
+        # a go that only a subagent called didn't gate the session that opened the PR
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "subgo")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["skills"], result["subagent_skills"][0]), (["gbase:work"], "gbase:go"))
+        self.assertEqual(len(result["gaps"]), 1)
+        self.assertIn("gbase:go 없이", result["gaps"][0])
+
+    def test_subagent_skills_carry_over_a_handoff_to_the_next_account(self):
+        s = {"results": ["a"], "skills": ["gbase:go"], "subagent_skills": ["gbase:polish"]}
+        gbase_run.merge_session(s, {"results": ["b"], "skills": ["gbase:monitor"], "subagent_skills": ["gbase:review"]})
+        self.assertEqual((s["skills"], s["subagent_skills"]),
+                         (["gbase:go", "gbase:monitor"], ["gbase:polish", "gbase:review"]))
 
     def test_an_unreached_behavior_check_and_a_differing_input_are_recorded_as_unverified(self):
         evidence = [

@@ -580,7 +580,8 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
     if max_budget:
         cmd += ["--max-budget-usd", str(max_budget)]
     info = {"log_path": str(log_path), "results": [], "session_id": None, "model": model, "cost_usd": None,
-            "tool_uses": 0, "turns": 0, "is_error": False, "errors": [], "skills": [], "end_error": None}
+            "tool_uses": 0, "turns": 0, "is_error": False, "errors": [], "skills": [], "subagent_skills": [],
+            "end_error": None}
     with open(log_path, "a" if resume or append else "w", encoding="utf-8") as log:
         # its own process group, so stopping the run also ends the subagents and shells claude started
         proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -605,8 +606,9 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
                     if isinstance(block, dict) and block.get("type") == "tool_use":
                         info["tool_uses"] += 1
                         skill = (block.get("input") or {}).get("skill")
-                        if block.get("name") == "Skill" and skill and not event.get("parent_tool_use_id"):
-                            info["skills"].append(skill)
+                        if block.get("name") == "Skill" and skill:
+                            # go, branch-pr and monitor run polish, review, compat-check and unslop in an Agent
+                            info["subagent_skills" if event.get("parent_tool_use_id") else "skills"].append(skill)
             elif event.get("type") == "system" and event.get("subtype") == "init":
                 info["session_id"], info["model"] = event.get("session_id"), event.get("model")
             elif event.get("type") == "result":
@@ -640,7 +642,9 @@ def merge_session(s, more):
     costs, turns and tool calls add up, and its exit code, session and cap stand for the whole."""
     costs = [c for c in (s.get("cost_usd"), more.get("cost_usd")) if c is not None]
     s.update(results=s["results"] + more["results"], errors=s.get("errors", []) + more.get("errors", []),
-             skills=s.get("skills", []) + more.get("skills", []), cost_usd=sum(costs) if costs else None,
+             skills=s.get("skills", []) + more.get("skills", []),
+             subagent_skills=s.get("subagent_skills", []) + more.get("subagent_skills", []),
+             cost_usd=sum(costs) if costs else None,
              tool_uses=s.get("tool_uses", 0) + more.get("tool_uses", 0), turns=s.get("turns", 0) + more.get("turns", 0),
              exit_code=more.get("exit_code"), session_id=more.get("session_id") or s.get("session_id"),
              end_error=more.get("end_error"))
@@ -1156,6 +1160,7 @@ def cmd_run(argv):
                     return False
                 costs = [c for c in (s["cost_usd"], more["cost_usd"]) if c is not None]
                 s.update(results=s["results"] + more["results"], exit_code=more["exit_code"],
+                         subagent_skills=s.get("subagent_skills", []) + more.get("subagent_skills", []),
                          cost_usd=sum(costs) if costs else None)
                 return True
 
@@ -1187,8 +1192,9 @@ def cmd_run(argv):
         stuck = [s for s in sessions.values() if prestart_failure(s) or s.get("usage_limited")]
         skills = list(dict.fromkeys([*re.findall(r"^/([\w-]+:[\w-]+)", prompt),
                                      *(k for s in sessions.values() for k in s.get("skills", []))]))
+        subagent_skills = list(dict.fromkeys(k for s in sessions.values() for k in s.get("subagent_skills", [])))
         for s in sessions.values():
-            for k in ("errors", "skills", "is_error", "capped", "end_error", "usage_limited"):
+            for k in ("errors", "skills", "subagent_skills", "is_error", "capped", "end_error", "usage_limited"):
                 s.pop(k, None)
         results = {m: s.pop("results") for m, s in sessions.items()}
         finals = {m: final_text(texts) for m, texts in results.items()}
@@ -1238,6 +1244,7 @@ def cmd_run(argv):
             "handoffs": handoffs,
             "failure": failure,
             "skills": skills,
+            "subagent_skills": subagent_skills,
             "decisions": decisions,
             "questions": read_jsonl(run_dir / "questions.jsonl"),
             "ship": next((r["ship"] for r in parsed if r["ship"]), None),
