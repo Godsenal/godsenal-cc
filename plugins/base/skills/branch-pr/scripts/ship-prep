@@ -48,6 +48,9 @@ SECRET_PATTERNS = (
 )
 CONVENTION_FILES = r"(^|/)contributing\.md$|pull_request_template|commitlint|^\.husky/"
 MAX_FOCUS_ITEMS = 5
+# what a passing run did not show: a required behavior check that couldn't reach its surface, a check that ran on another kind of input
+UNVERIFIED = r"behavior: skip|differs:"
+CONFIRM_ITEM = r"^> \d+\. .*\((확인|verify)\)"  # a numbered Review focus item of the kind a person confirms
 LEAD_LINES = 45  # body lines before ## Change outline: one screen
 
 
@@ -298,6 +301,31 @@ def read_draft(path):
         raise Stop(1, f"error: can't read the draft — {e}")
 
 
+def unverified_lines(body):
+    """Lines a person has to confirm: the draft's Evidence lines, and the run's evidence file when the caller set one."""
+    section = re.search(r"^## Evidence\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
+    found = [l.strip() for l in (section.group(1) if section else "").splitlines() if re.search(UNVERIFIED, l)]
+    path = os.environ.get("AGENT_EVIDENCE_FILE")
+    try:
+        records = Path(path).read_text(encoding="utf-8").splitlines() if path else []
+    except OSError:
+        records = []
+    latest = {}  # the file is append-only: a later line for the same check (a rerun, a resumed session) replaces the earlier one
+    for raw in records:
+        try:
+            e = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(e, dict):
+            latest[(str(e.get("step")), str(e.get("command")))] = e  # str: a hand-written line may hold a list
+    for e in latest.values():
+        if e.get("step") == "behavior" and e.get("result") == "open":
+            found.append(f"evidence file: behavior open — {e.get('command')}")
+        if "differs:" in str(e.get("input") or ""):
+            found.append(f"evidence file: {e.get('command')} — {e.get('input')}")
+    return found
+
+
 def draft_problems(lines, local=False):
     """Mechanical rules of branch-pr's body. Returns (errors, warnings)."""
     errors, warnings = [], []
@@ -320,6 +348,12 @@ def draft_problems(lines, local=False):
         items = re.findall(r"^> \d+\. ", focus.group(1), re.M)
         if len(items) > MAX_FOCUS_ITEMS:
             errors.append(f"{len(items)} Review focus items (at most {MAX_FOCUS_ITEMS}) — the PR should be split; say so as item 1")
+    unverified = unverified_lines(body)
+    if unverified and not (focus and re.search(CONFIRM_ITEM, focus.group(1), re.M)):
+        errors.append(f"{len(unverified)} unverified line(s) (`behavior: skip`, `differs:`) but Review focus has no `(확인)` item — "
+                      "add an item that says, for each line, what a person checks and where: " + " / ".join(unverified[:3]))
+    if any(re.match(r"- \[x\]", l, re.I) and "behavior: skip" in l for l in unverified):
+        errors.append("a skipped behavior check is not a checked box — write it `- [ ] behavior: skip — <reason>`")
     if not local:
         for target in re.findall(r"!\[[^\]]*\]\(([^)\s]+)", body):
             if not re.match(r"https?://", target):

@@ -1,4 +1,5 @@
 """branch-pr's ship-prep against real throwaway git repos and a fake `gh` — no network."""
+import json
 import os
 import stat
 import subprocess
@@ -29,6 +30,8 @@ BODY = """제목 한 줄
 ## Evidence
 - [x] `make test` → pass
 """
+NOTE = "> [!NOTE]\n> **사람이 판단할 곳 없음.** 검사가 덮는다."  # BODY's Review focus, and the `(확인)` item that replaces it
+CONFIRM = "> [!IMPORTANT]\n> **사람이 볼 곳 1건**\n> 1. **실기기에서 확인** (확인)\n>    시뮬레이터 없음"
 
 
 class Repo(unittest.TestCase):
@@ -42,6 +45,7 @@ class Repo(unittest.TestCase):
         self.bin.mkdir()
         self.env = {**os.environ, **GIT_ENV, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}"}
         self.env.pop("GIT_INDEX_FILE", None)
+        self.env.pop("AGENT_EVIDENCE_FILE", None)  # a run that sets it would hand its own evidence to every draft here
         self.git("init", "-q", "--bare", "-b", "main", str(self.origin), cwd=self.tmp)
         self.git("clone", "-q", str(self.origin), str(self.repo), cwd=self.tmp)
         self.write("README.md", "# app\n")
@@ -333,6 +337,42 @@ class Check(Repo):
             code, out = self.problems(text)
             self.assertEqual(code, 1, want)
             self.assertIn(want, out)
+
+    def test_an_unverified_evidence_line_needs_a_confirm_item(self):
+        skip = BODY + "- [ ] behavior: skip — 로그인: 시뮬레이터 없음\n"
+        differs = BODY + "- [x] behavior: 업로드 → pass (input: 1024px 사본; differs: 실기기는 5712px 원본)\n"
+        for text in (skip, differs):
+            code, out = self.problems(text)
+            self.assertEqual(code, 1, text)
+            self.assertIn("Review focus has no `(확인)` item", out)
+            self.assertEqual(self.problems(text.replace(NOTE, CONFIRM))[0], 0, text)
+            # an item of another kind doesn't answer it, and local mode checks the same
+            self.assertEqual(self.problems(text.replace(NOTE, CONFIRM.replace("(확인)", "(결정)")))[0], 1)
+            self.assertEqual(self.problems(text, "--local")[0], 1)
+        self.assertEqual(self.problems(skip.replace(NOTE, CONFIRM.replace("(확인)", "(verify)")))[0], 0)  # a body written in English
+        self.assertEqual(self.problems(BODY.replace("한 문장.", "behavior: skip 을 다루는 변경."))[0], 0)  # outside Evidence it is prose
+
+    def test_a_skipped_behavior_check_is_not_a_checked_box(self):
+        text = BODY.replace(NOTE, CONFIRM) + "- [x] behavior: skip — 시뮬레이터 없음\n"
+        code, out = self.problems(text)
+        self.assertEqual(code, 1)
+        self.assertIn("not a checked box", out)
+
+    def test_the_evidence_file_counts_even_when_the_draft_dropped_the_line(self):
+        path = self.tmp / "evidence.jsonl"
+        self.env["AGENT_EVIDENCE_FILE"] = str(path)
+        cases = [({"step": "behavior", "result": "open", "command": "/verify login", "detail": "no simulator"}, 1),
+                 ({"step": "checks", "result": "pass", "command": "pytest", "detail": "ok", "input": "fixture a; differs: real files are larger"}, 1),
+                 ({"step": "behavior", "result": "skip", "command": "-", "detail": "low risk"}, 0),  # not required is not unverified
+                 ({"step": "behavior", "result": "pass", "command": "/verify login", "detail": "ok", "input": "simulator"}, 0)]
+        for record, want in cases:
+            path.write_text("not json\n[1]\n{\"step\": \"checks\", \"command\": [\"a\"]}\n" + json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+            self.assertEqual(self.problems(BODY)[0], want, record)
+        still_open, closed = cases[0][0], {**cases[0][0], "result": "pass", "detail": "ok on a device"}
+        path.write_text(json.dumps(still_open) + "\n" + json.dumps(closed) + "\n", encoding="utf-8")
+        self.assertEqual(self.problems(BODY)[0], 0)  # a later pass for the same check closes the open line
+        self.env["AGENT_EVIDENCE_FILE"] = str(self.tmp / "missing.jsonl")
+        self.assertEqual(self.problems(BODY)[0], 0)
 
     def test_local_draft_may_embed_local_screenshots(self):
         self.assertEqual(self.problems(BODY + "\n![after](/Users/me/shots/after.png)\n", "--local")[0], 0)
