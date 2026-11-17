@@ -637,20 +637,30 @@ def leg(info, account, how):
             "stopped": None}
 
 
-def merge_session(s, more):
+def merge_session(s, more, resumed):
     """Fold a later session on the same work (the next account's, the shipping resume, the wrap-up) into the first
     one: its report joins the first one's, costs, turns and tool calls add up, and its exit code, session and cap
-    stand for the whole."""
-    costs = [c for c in (s.get("cost_usd"), more.get("cost_usd")) if c is not None]
+    stand for the whole. Returns what `more` itself cost.
+
+    `resumed`: `more` ran with `claude --resume` on s's session. Its total_cost_usd then counts from the start of
+    that session, in another account's config dir too, while num_turns counts only its own turns (run
+    20261031-224815-work-822870 logged 4.48 and then 4.60, and adding them recorded 9.08). `cost_base` is what the
+    sessions before the current one cost: a fresh session after a usage limit counts from zero. The base moves
+    with the session, so a fresh one that ended with no cost still moves it: the next resume is of that session."""
+    before, own = s.get("cost_usd"), more.get("cost_usd")
+    if not resumed and (own is not None or more.get("session_id")):
+        s["cost_base"] = before or 0
+    total = before if own is None else own + s.get("cost_base", 0)
     s.update(results=s["results"] + more["results"], errors=s.get("errors", []) + more.get("errors", []),
              skills=s.get("skills", []) + more.get("skills", []),
              subagent_skills=s.get("subagent_skills", []) + more.get("subagent_skills", []),
-             cost_usd=sum(costs) if costs else None,
+             cost_usd=total,
              tool_uses=s.get("tool_uses", 0) + more.get("tool_uses", 0), turns=s.get("turns", 0) + more.get("turns", 0),
              exit_code=more.get("exit_code"), session_id=more.get("session_id") or s.get("session_id"),
              end_error=more.get("end_error"))
     if more.get("capped"):
         s["capped"] = more["capped"]
+    return None if own is None else total - (before or 0)
 
 
 def final_text(results):
@@ -1163,9 +1173,9 @@ def cmd_run(argv):
                       f"continuing on {nxt[0]} ({how})", file=sys.stderr)
                 handoffs.append({"model": m, "from": account[0], "to": nxt[0], "how": how, "detail": detail})
                 account, last = nxt, more
-                merge_session(s, more)
+                own = merge_session(s, more, how == "resume")
                 s["account"] = account[0]
-                s["accounts"].append(leg(more, account, how))
+                s["accounts"].append({**leg(more, account, how), "cost_usd": own})
 
             def again(text, turns, budget):  # one more session on the same conversation; its report joins the first one's
                 try:
@@ -1174,7 +1184,9 @@ def cmd_run(argv):
                 except OSError as e:  # the first session's report stays
                     s["resume_error"] = str(e)
                     return False
-                merge_session(s, more)
+                own = merge_session(s, more, True)
+                if own is not None:  # the account the session ended on ran it
+                    s["accounts"][-1]["cost_usd"] = (s["accounts"][-1]["cost_usd"] or 0) + own
                 return True
 
             def wrap_up():  # when a cap ended the last session mid-work: record the limit, get the wrap-up report
@@ -1217,7 +1229,8 @@ def cmd_run(argv):
         skills = list(dict.fromkeys([*invoked, *(k for s in sessions.values() for k in s.get("skills", []))]))
         subagent_skills = list(dict.fromkeys(k for s in sessions.values() for k in s.get("subagent_skills", [])))
         for s in sessions.values():
-            for k in ("errors", "skills", "subagent_skills", "is_error", "capped", "end_error", "usage_limited"):
+            for k in ("errors", "skills", "subagent_skills", "is_error", "capped", "end_error", "usage_limited",
+                      "cost_base"):
                 s.pop(k, None)
         results = {m: s.pop("results") for m, s in sessions.items()}
         finals = {m: final_text(texts) for m, texts in results.items()}
