@@ -939,10 +939,10 @@ def cmd_run(argv):
                    help="run once when the run ends: <cmd> <run-id> <status> <exit-code> <result.json> "
                         "(default $GBASE_NOTIFY_CMD)")
     p.add_argument("--max-turns", type=int, default=int(os.environ.get("GBASE_MAX_TURNS") or MAX_TURNS),
-                   help=f"turn cap for each session; a run that reaches it gets one short wrap-up session and reports "
-                        f"`turn_limit` (default $GBASE_MAX_TURNS, else {MAX_TURNS}; 0 = no cap)")
+                   help=f"turn cap for the run (a session after the first gets what is left); a run that reaches it "
+                        f"gets one short wrap-up session and reports `turn_limit` (default $GBASE_MAX_TURNS, else {MAX_TURNS}; 0 = no cap)")
     p.add_argument("--max-budget-usd", type=float, default=float(os.environ.get("GBASE_MAX_BUDGET_USD") or MAX_BUDGET_USD),
-                   help=f"cost cap in USD for each session, handled like --max-turns and reported as `budget_limit` "
+                   help=f"cost cap in USD for the run, handled like --max-turns and reported as `budget_limit` "
                         f"(default $GBASE_MAX_BUDGET_USD, else {MAX_BUDGET_USD}; 0 = no cap)")
     a = p.parse_args(argv)
     pick = resolve_account(a.account) if a.account else None
@@ -1117,8 +1117,15 @@ def cmd_run(argv):
             if not account:
                 return
             s["accounts"], last = [leg(s, account, "start")], s
+
+            def left():  # the caps count the whole run: what a later session on it gets, and the cap already used up
+                turns = a.max_turns - s["turns"] if a.max_turns else 0
+                budget = a.max_budget_usd - (s["cost_usd"] or 0) if a.max_budget_usd else 0
+                spent = "turns" if a.max_turns and turns < 1 else "budget" if a.max_budget_usd and budget <= 0 else None
+                return turns, budget, spent
+
             # a usage limit after the session did work: the same session goes on under the next account. Each
-            # account is tried once per run (a failed one leaves the queue), and the caps count the whole run.
+            # account is tried once per run (a failed one leaves the queue).
             while not STOPPING.is_set():
                 hit = midrun_limit(last) or (last is not s and prestart_failure(last))
                 if not hit:
@@ -1127,9 +1134,8 @@ def cmd_run(argv):
                 s["accounts"][-1]["stopped"] = kind
                 accounts.fail(account, kind, detail)
                 nxt = accounts.current()
-                turns = a.max_turns - s["turns"] if a.max_turns else 0
-                budget = a.max_budget_usd - (s["cost_usd"] or 0) if a.max_budget_usd else 0
-                if not nxt or (a.max_turns and turns < 1) or (a.max_budget_usd and budget <= 0):
+                turns, budget, spent = left()
+                if not nxt or spent:
                     s["usage_limited"] = True
                     break
                 env_next = account_env(env, nxt[1])
@@ -1178,9 +1184,14 @@ def cmd_run(argv):
                 return
             line = s["exit_code"] == 0 and s["session_id"] and not STOPPING.is_set() and unshipped(
                 slot, a.ship_owner, s["results"], cwd, base)
-            if line and again(RESUME_PROMPT.format(line=line), a.max_turns, a.max_budget_usd):
+            if not line:
+                return
+            turns, budget, spent = left()
+            if spent:  # the first session used the cap up without being cut off by it: nothing left to resume on
+                s["capped"] = spent
+            elif again(RESUME_PROMPT.format(line=line), turns, budget):
                 s["resumed"] = True
-                wrap_up()  # the resume can reach the cap too
+            wrap_up()  # a cap the resume reached, or one the first session had used up
 
         threads = [threading.Thread(target=one, args=(m,)) for m in models] if cwd and not STOPPING.is_set() else []
         for t in threads:
