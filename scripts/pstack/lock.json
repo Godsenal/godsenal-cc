@@ -78,7 +78,10 @@
     "create-formal-verification-skill": {
       "mode": "follow",
       "hash": "a4f20c16e459fe05",
-      "out": "563ce600397a597d"
+      "out": "563ce600397a597d",
+      "used_by": [
+        "skills/go/references/high.md"
+      ]
     },
     "create-verification-skill": {
       "mode": "merge",
@@ -113,7 +116,10 @@
     "interrogate": {
       "mode": "follow",
       "hash": "284021300a250ff3",
-      "out": "80846d434c34f468"
+      "out": "80846d434c34f468",
+      "used_by": [
+        "skills/review/references/proven.md"
+      ]
     },
     "ketchup": {
       "mode": "follow",
@@ -332,7 +338,10 @@
     "statechart": {
       "mode": "follow",
       "hash": "3d4742b468212287",
-      "out": "b7f4610e054d7d74"
+      "out": "b7f4610e054d7d74",
+      "used_by": [
+        "skills/go/references/high.md"
+      ]
     },
     "swarm": {
       "mode": "follow",

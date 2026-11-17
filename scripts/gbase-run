@@ -867,6 +867,21 @@ def unshipped(slot, owner, texts, cwd, base):
     return line if unpushed not in (None, "", "0") else None
 
 
+def unverified(evidence):
+    """What a passing run did not show, one sentence each: a required behavior check that couldn't reach its surface
+    (`behavior` `open`), and a check that ran on another kind of input than real use has (`differs:`)."""
+    out = []
+    # append-only file: a later line for the same check (a rerun, a resumed session) replaces the earlier one
+    latest = {(str(e.get("step")), str(e.get("command"))): e for e in evidence if isinstance(e, dict)}
+    for e in latest.values():
+        if e.get("step") == "behavior" and e.get("result") == "open":
+            out.append(f"동작 미확인: {e.get('command')} — {e.get('detail')}")
+        differs = re.search(r"differs:\s*(.+)", str(e.get("input") or ""))
+        if differs:
+            out.append(f"다른 입력으로 확인: {e.get('command')} — {differs.group(1).strip()}")
+    return out
+
+
 def ship_gaps(slot, owner, skills, evidence, settle, pr_url):
     """What a run that opened a PR skipped on the way: the gates are the skills' to keep, this is the record."""
     if slot not in SHIPPING_SLOTS or owner != "agent" or not pr_url:
@@ -878,6 +893,9 @@ def ship_gaps(slot, owner, skills, evidence, settle, pr_url):
         gaps.append("증거 없음(evidence.jsonl 비어 있음): 리뷰·검사 결과가 기록되지 않음")
     if not settle:
         gaps.append("settle 없음: CI·리뷰 봇 결과를 기다리지 않았거나 `settle:` 줄이 없음")
+    to_confirm = unverified(evidence)
+    if to_confirm:
+        gaps.append(f"사람 확인 필요 {len(to_confirm)}건(동작 미확인·다른 입력): " + " / ".join(to_confirm))
     return gaps
 
 
@@ -1240,6 +1258,7 @@ def cmd_run(argv):
             "sessions": sessions,
         })
         result.update({
+            "unverified": unverified(result["evidence"]),
             "gaps": ship_gaps(slot, a.ship_owner, skills, result["evidence"], result["settle"], pr_url),
         })
         if (run_dir / "stop-reason").exists():

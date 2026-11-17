@@ -1,6 +1,11 @@
 """monitor's pr-status: every classification and verdict, on hand-built GraphQL responses — no network."""
 import importlib.machinery
 import importlib.util
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -389,6 +394,161 @@ class LinksAndRender(unittest.TestCase):
         self.assertIn("failed: check (required) · gh run view --job 99 --log-failed", text)
         self.assertIn("settle: 사람 필요 @aaaaaaa", text)
         self.assertIn("next: ci — check", text)
+
+
+class Patch(unittest.TestCase):
+    """`pr-status patch` on a throwaway repo: main moves, the branch is rebased or merged, and the verified head is origin's."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.repo = self.tmp / "repo"
+        self.env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com", "GIT_COMMITTER_NAME": "t",
+                    "GIT_COMMITTER_EMAIL": "t@example.com", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+        self.git("init", "-q", "--bare", "-b", "main", str(self.tmp / "origin.git"), cwd=self.tmp)
+        self.git("clone", "-q", str(self.tmp / "origin.git"), str(self.repo), cwd=self.tmp)
+        self.commit({"app.py": "a = 1\nb = 2\nc = 3\n", "README.md": "# app\n"}, "init")
+        self.git("push", "-q", "-u", "origin", "main")
+        self.git("checkout", "-q", "-b", "feat/x")
+        self.commit({"app.py": "a = 1\nb = 2\nc = 30\n", "docs.md": "old words\n"}, "change c")
+        self.git("push", "-q", "-u", "origin", "feat/x")   # the head that was verified
+
+    def git(self, *args, cwd=None, check=True):
+        return subprocess.run(["git", *args], cwd=cwd or self.repo, env=self.env, capture_output=True, text=True, check=check).stdout.strip()
+
+    def commit(self, files, message):
+        for name, text in files.items():
+            (self.repo / name).write_text(text)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def main_moves(self, files):
+        self.git("checkout", "-q", "main")
+        self.commit(files, "main moves")
+        self.git("push", "-q", "origin", "main")
+        self.git("checkout", "-q", "feat/x")
+
+    def patch(self, *args, base=("--base", "origin/main"), env=None):
+        p = subprocess.run([sys.executable, str(PATH), "patch", *base, *args], cwd=self.repo, env=env or self.env,
+                           capture_output=True, text=True)
+        return p.returncode, p.stdout
+
+    def path_with(self, **scripts):
+        """An env whose PATH holds only git and the given fake commands."""
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        for name, body in {"git": f'exec "{shutil.which("git")}" "$@"', **scripts}.items():
+            (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
+            (bin_dir / name).chmod(0o755)
+        return {**self.env, "PATH": str(bin_dir)}
+
+    def test_a_clean_rebase_keeps_the_verification(self):
+        self.main_moves({"other.py": "x = 1\n"})
+        self.git("rebase", "-q", "origin/main")
+        code, out = self.patch()
+        self.assertEqual(code, 0)
+        self.assertIn("patch: same", out)
+        self.assertIn("next: nothing to re-verify", out)
+
+    def test_merging_the_base_in_keeps_it_too(self):
+        self.main_moves({"other.py": "x = 1\n"})
+        self.git("merge", "-q", "--no-edit", "origin/main")
+        self.assertIn("patch: same", self.patch()[1])
+
+    def test_a_resolution_that_changed_code_gets_one_verifier_for_those_files(self):
+        self.main_moves({"app.py": "a = 1\nb = 2\nc = 4\n"})
+        self.git("rebase", "origin/main", check=False)   # conflicts on c
+        (self.repo / "app.py").write_text("a = 1\nb = 2\nc = 34\n")
+        self.git("add", "-A")
+        self.git("-c", "core.editor=true", "rebase", "--continue")
+        code, out = self.patch()
+        self.assertEqual(code, 0)
+        self.assertIn("patch: changed", out)
+        self.assertIn("next: one verifier — rerun the checks and the behavior check that cover app.py (references/conflicts.md)", out)
+        self.assertNotIn("docs.md", out)   # its part of the change was replayed untouched
+
+    def test_a_fix_commit_on_top_counts_as_a_changed_patch(self):
+        self.commit({"app.py": "a = 1\nb = 20\nc = 30\n"}, "small fix")
+        self.assertIn("next: one verifier", self.patch()[1])
+
+    def test_a_reindented_block_or_a_replaced_binary_is_a_changed_patch(self):
+        # `git patch-id` alone ignores whitespace and binary hunks
+        self.commit({"app.py": "a = 1\nb = 2\n    c = 30\n"}, "indent c")
+        self.assertIn("next: one verifier", self.patch()[1])
+        self.git("push", "-q", "origin", "feat/x")
+        (self.repo / "img.bin").write_bytes(b"\x00\x01\xff")
+        self.commit({}, "add image")
+        self.git("push", "-q", "origin", "feat/x")
+        (self.repo / "img.bin").write_bytes(b"\x00\x02\xff\xfe")
+        self.commit({}, "replace image")
+        out = self.patch()[1]
+        self.assertIn("patch: changed", out)
+        self.assertIn("img.bin", out)
+
+    def test_a_wording_only_change_needs_no_verifier(self):
+        self.commit({"docs.md": "new words\n"}, "reword")
+        out = self.patch()[1]
+        self.assertIn("patch: changed", out)
+        self.assertIn("next: nothing to re-verify — only wording changed", out)
+
+    def test_a_code_file_named_like_a_wording_file_gets_a_verifier(self):
+        for name in ("license.py", "Notice.tsx", "changelog.ts", "page.mdx"):
+            self.commit({name: f"{name} changed\n"}, f"touch {name}")
+            self.assertIn(f"next: one verifier — rerun the checks and the behavior check that cover {name} ", self.patch()[1], name)
+            self.git("push", "-q", "origin", "feat/x")
+
+    def test_license_changelog_and_notice_are_wording(self):
+        self.commit({"LICENSE": "MIT\n", "CHANGELOG": "1.0\n", "notice.txt": "n\n", "guide.rst": "g\n"}, "wording")
+        self.assertIn("next: nothing to re-verify — only wording changed", self.patch()[1])
+
+    def test_a_file_name_git_would_quote_is_still_compared(self):
+        for name in ('has"quote.py', "한글.py"):
+            self.commit({name: "x = 1\n"}, "odd name")
+            out = self.patch()[1]
+            self.assertIn(f"that cover {name} ", out, name)
+            self.git("push", "-q", "origin", "feat/x")
+
+    def test_a_changed_patch_with_no_differing_file_goes_to_the_verifier(self):
+        real = {k: getattr(ps, k) for k in ("sh", "patch_id", "changed_files")}
+        self.addCleanup(vars(ps).update, real)
+        vars(ps).update(sh=lambda cmd, check=True: cmd[-1], changed_files=lambda fork, rev: set(),
+                        patch_id=lambda fork, rev, path=None: rev)   # the whole patches differ, no file does
+        out = ps.patch_lines("origin/main", "was", "head")
+        self.assertIn("no single file found", out[0])
+        self.assertIn("next: one verifier — rerun the checks and the behavior check that cover the whole change", out[1])
+
+    def test_a_diff_that_is_not_utf8_is_still_compared(self):
+        (self.repo / "latin1.py").write_bytes(b"name = 'caf\xe9'\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "latin-1 source")
+        code, out = self.patch()
+        self.assertEqual(code, 0)
+        self.assertIn("that cover latin1.py ", out)
+
+    def test_without_base_it_is_the_prs_base_on_origin(self):
+        self.git("branch", "-q", "release", "main")
+        self.git("push", "-q", "origin", "release")
+        self.commit({"app.py": "a = 1\nb = 20\nc = 30\n"}, "small fix")
+        self.assertIn("onto origin/release", self.patch("--was", "HEAD", base=(), env=self.path_with(gh="echo release"))[1])
+
+    def test_without_a_pr_or_without_gh_the_base_is_origin_head(self):
+        self.git("remote", "set-head", "origin", "main")
+        for scripts in ({"gh": "exit 1"}, {}):   # no PR for this branch; no gh on PATH
+            (self.tmp / "bin" / "gh").unlink(missing_ok=True)
+            code, out = self.patch("--was", "HEAD", base=(), env=self.path_with(**scripts))
+            self.assertEqual(code, 0, out)
+            self.assertIn("onto origin/main", out)
+
+    def test_the_verified_head_can_be_named(self):
+        self.commit({"app.py": "a = 1\nb = 20\nc = 30\n"}, "small fix")
+        self.assertIn("patch: same", self.patch("--was", "HEAD")[1])
+
+    def test_no_pushed_head_to_compare_says_how_to_name_it(self):
+        self.git("checkout", "-q", "-b", "feat/local-only")
+        code, out = self.patch()
+        self.assertEqual(code, 1)
+        self.assertIn("next: name them — pr-status patch --base", out)
 
 
 if __name__ == "__main__":

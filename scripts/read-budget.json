@@ -26,7 +26,7 @@
       "target": null,
       "limit": null,
       "extends": "medium",
-      "reads": []
+      "reads": ["plugins/base/skills/go/references/high.md"]
     }
   },
   "extras": {

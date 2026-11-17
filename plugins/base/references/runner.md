@@ -63,7 +63,8 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `budget_limit` | the cost cap in USD, when a session reached it; else `null`. Handled like `turn_limit` |
 | `turn_limit` | the turn cap, when a session reached it; else `null`. The run then got one wrap-up session of at most 30 turns and didn't ship |
 | `lessons`, `next` | the `교훈:` lines in order, and the `next:` command for them; without lessons, the `land` sentence of an unlanded local-only run; without either, the first of `warnings`; else `null` |
-| `gaps` | for an agent-owned `work`/`ship` run that opened a PR: what it skipped on the way (`gbase:go` not loaded, no evidence, no `settle:`), one sentence each; `[]` when nothing was skipped or no PR was opened. A caller shows these next to the PR link |
+| `gaps` | for an agent-owned `work`/`ship` run that opened a PR: what it skipped on the way (`gbase:go` not loaded, no evidence, no `settle:`) and how many `unverified` items it left, one sentence each; `[]` when nothing was skipped or no PR was opened. A caller shows these next to the PR link |
+| `unverified` | what a passing run did not show, one sentence each, from the evidence lines: `동작 미확인: <command> — <detail>` for a `behavior` `open` line (a required check that couldn't reach its surface) and `다른 입력으로 확인: <command> — <difference>` for an `input` with `differs:`; `[]` when none. The PR's Review focus carries the same items; a caller shows them with the result |
 | `warnings` | setup problems the run ran around (no accounts list); `[]` otherwise |
 | `notify` | `ok` or `failed` when a notify command ran; absent otherwise |
 | `concurrent` | run ids that were `running` on the same repo when this one started; absent when none |

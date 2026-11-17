@@ -4,16 +4,21 @@
   pr-status [--pr N] [--start] [--merge] [--verified-locally]   one snapshot
   pr-status wait [--timeout 270] [--interval 30] [--handled] [...]   --until-settled: poll until something needs action, then the snapshot
   pr-status watch [--interval 30] [...]                          for the Monitor tool: one line per state change, until merge/close
+  pr-status patch [--base <ref>] [--was <rev>]                   after a rebase or a base merge, before the push: is the change still the one that was verified?
 
   --start             begin a watch: forget earlier heads and timers for this PR
   --merge             also judge the merge gate and print the merge command
   --verified-locally  the caller's local checks passed this run (lets a merge past checks that never started)
   --handled           wait only: what was open at the first poll is already dealt with locally; return on something new or when all concludes
 
+  --base              patch only: the ref the branch was rebased onto (default: the PR's base on origin, else origin/HEAD)
+  --was               patch only: the head that was verified (default: the pushed head, @{upstream})
+
 `next:` lines are in the order to handle them. A `settle:` line is the verdict to report when nothing more can be fixed.
 State (first-seen time per head, links already shown) is kept in <git-dir>/gbase/pr-status-<n>.json.
 """
 import calendar
+import hashlib
 import json
 import re
 import subprocess
@@ -24,6 +29,8 @@ from pathlib import Path
 GIVE_UP_SECONDS = 30 * 60   # into the wait on one head
 MAX_PUSHED_HEADS = 3        # fixes pushed in one watch before the approach itself is the problem
 CHECK_GRACE_SECONDS = 120   # checks can take a minute to register after a push
+# a change to these alone re-verifies nothing; `license.py` and `page.mdx` are code
+WORDING_FILES = (r".*\.(md|rst|adoc)", r"(LICENSE|CHANGELOG|NOTICE)(\.txt)?")
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 # GitHub's own annotation for a job the account couldn't start; a test named "billing" must not match
 NOT_STARTED = re.compile(r"not started because|recent account payments have failed|spending limit needs to be increased", re.I)
@@ -428,6 +435,59 @@ def push_workflows(directory):
     return sorted(p.name for p in directory.glob("*.y*ml") if PUSH_TRIGGER.search(p.read_text(errors="ignore")))
 
 
+def patch_id(fork, rev, path=None):
+    """`git patch-id` of what `rev` changes since `fork`, where it left the base: the same after a rebase that replayed the change untouched."""
+    # bytes, not text: a diff may hold bytes that aren't UTF-8; the path is taken as it is, not as a pattern
+    diff = subprocess.run(["git", "--literal-pathspecs", "diff", "--binary", fork, rev, *(["--", path] if path else [])], capture_output=True)
+    if diff.returncode:
+        raise GhError(diff.stderr.decode(errors="replace").strip() or "git diff failed")
+    out = subprocess.run(["git", "patch-id", "--stable"], input=diff.stdout, capture_output=True).stdout.split()
+    # patch-id drops all whitespace and skips binary hunks, so a re-indented block (Python, YAML) or a replaced image would read as
+    # the same change: add the patch's own lines, without the positions and blob ids a rebase moves
+    body = [re.sub(rb"^@@ .*", b"@@", l) for l in diff.stdout.split(b"\n") if not l.startswith((b"index ", b"diff --git "))]
+    return (out[0].decode() if out else "") + ":" + hashlib.sha1(b"\n".join(body)).hexdigest()[:12]
+
+
+def changed_files(fork, rev):
+    return set(filter(None, sh(["git", "diff", "--name-only", "-z", fork, rev]).split("\0")))  # -z: git quotes odd names otherwise
+
+
+def patch_lines(base, was, head="HEAD"):
+    """Whether the earlier verification still describes the branch. One full verification, one verifier for a changed patch, none for wording."""
+    short = lambda rev: sh(["git", "rev-parse", "--short", rev])
+    was_fork, head_fork = (sh(["git", "merge-base", base, rev]) for rev in (was, head))
+    if patch_id(was_fork, was) == patch_id(head_fork, head):
+        return [f"patch: same — {short(was)} and {short(head)} carry the same change onto {base}",
+                "next: nothing to re-verify — the earlier checks describe this head; CI runs on it after the push"]
+    files = sorted(f for f in changed_files(was_fork, was) | changed_files(head_fork, head)
+                   if patch_id(was_fork, was, f) != patch_id(head_fork, head, f))
+    code = [f for f in files if not any(re.fullmatch(g, f.rsplit("/", 1)[-1], re.I) for g in WORDING_FILES)]
+    lines = [f"patch: changed — {short(was)} → {short(head)}: {', '.join(files) or 'no single file found'}"]
+    if not files:  # the whole patch differs but no file's does: not evidence that only wording changed
+        code = ["the whole change"]
+    if not code:
+        return lines + ["next: nothing to re-verify — only wording changed"]
+    return lines + [f"next: one verifier — rerun the checks and the behavior check that cover {', '.join(code)} (references/conflicts.md); "
+                    "not a second full review"]
+
+
+def cmd_patch(args):
+    base, was = take(args, "--base"), take(args, "--was")
+    try:
+        if not base:
+            try:
+                name = sh(["gh", "pr", "view", "--json", "baseRefName", "-q", ".baseRefName"], check=False)
+            except GhError:  # no gh here: origin/HEAD still names a base
+                name = ""
+            base = f"origin/{name}" if name else sh(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+        was = was or sh(["git", "rev-parse", "--abbrev-ref", "@{upstream}"])
+        print("\n".join(patch_lines(base, was)))
+    except GhError as e:
+        print(f"error: {e}\nnext: name them — pr-status patch --base <ref the branch was rebased onto> --was <the head that was verified>")
+        return 1
+    return 0
+
+
 def take(args, flag, default=None, cast=str):
     if flag not in args:
         return default
@@ -446,6 +506,8 @@ def main(argv):
     if "-h" in args or "--help" in args:
         print(__doc__.strip())
         return 0
+    if args and args[0] == "patch":
+        return cmd_patch(args[1:])
     pr_arg = take(args, "--pr")
     timeout = take(args, "--timeout", 270, int)
     interval = take(args, "--interval", 30, int)

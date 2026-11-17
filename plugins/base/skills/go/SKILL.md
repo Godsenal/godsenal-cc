@@ -6,18 +6,18 @@ allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Agent Edit Write
 
 # /gbase:go
 
-Takes a finished change to an open, watched PR: **polish ∥ review → verify → branch-pr → monitor**. `go` only sequences; each sub-skill keeps its own consent and safety rules. Invoking it is the go-ahead to reach a PR: only a diff-caused check failure that resists a mechanical fix and `branch-pr`'s own questions may stop it first. It merges only with `--merge`; never add that by default.
+Takes a finished change to an open, watched PR: **polish ∥ review → verify → branch-pr → monitor**. `go` only sequences; each sub-skill keeps its own consent and safety rules. Invoking it is the go-ahead to reach a PR: only a diff-caused check failure that resists a mechanical fix and `branch-pr`'s own questions may stop it first. It merges only with `--merge`, never by default.
 
 ## 출력 언어
 
 사용자에게 보이는 글은 **한국어**로 쓰고, 코드·명령·상태 라벨·커밋·브랜치는 레포 관례를 따른다. 세부: [output-language.md](../../references/output-language.md).
 
-## Read these when they apply
+## Read when
 
 | When | Read first |
 |---|---|
 | Step 1's check prints anything | [orchestrated.md](references/orchestrated.md). It changes every step, and under `AGENT_HEADLESS=1` nothing is asked ([headless.md](../../references/headless.md)). |
-| The risk is `medium` or `high` | [review.md](references/review.md) before Step 2, [verify.md](references/verify.md) at Step 4 |
+| Risk `medium` or `high` | [review.md](references/review.md) before Step 2, [verify.md](references/verify.md) at Step 4; on `high` also [high.md](references/high.md) |
 | A check fails, or the repo has no verify block | [verify.md](references/verify.md) |
 | `--draft`, `--merge`, or a finding review deferred | [draft-merge.md](references/draft-merge.md), before Step 6 |
 
@@ -37,7 +37,7 @@ Classify the risk the way `branch-pr` does: `high` if it touches a path `REVIEW.
 
 ### 2. Polish ∥ review
 
-Launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:polish", args: "<in-scope files>")` in this repo, to leave what polish would ask about unapplied under `awaiting confirm` (it can't ask the user), and to return the report verbatim. An `awaiting confirm` item goes in the final report as a suggestion. Polish fails → say so and go on without it. No `Agent` tool → call `gbase:polish` directly.
+Launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:polish", args: "<in-scope files>")` in this repo, to leave what polish would ask about unapplied under `awaiting confirm` (it can't ask the user), and to return the report verbatim. An `awaiting confirm` item goes in the final report as a suggestion. Polish fails → say so and go on. No `Agent` tool → call `gbase:polish` directly.
 
 On `medium` and `high`, review.md's finder is launched in the same message. No finder on `low`, on `--no-review`, or on a scope review skips anyway (pure rename, dependency bump, generated code).
 
