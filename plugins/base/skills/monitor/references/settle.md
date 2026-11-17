@@ -22,7 +22,7 @@ End with exactly one line, the script's `settle:` line ([meaning](../../../refer
 ## What it never does
 
 - **Merges only with `--merge`**, and only after `수렴`, or when nothing is open except checks that never started for account reasons and `go` passed `verified-locally`. Then follow [merge.md](merge.md) and end with `settle: 수렴 @<short-sha> — merged <merge short-sha>`. Any other verdict, or a gate that would ask (a merge that deploys), doesn't merge: the `settle:` line stands and a `결정 필요:` line says what a person does.
-- **Never rebases or force-pushes**: a conflict is reported (`사람 필요`), not resolved. The one exception is a rebase, and only when the invocation explicitly asks to rebase (`--until-settled rebase onto main`): rebase onto the base once, resolve by [conflicts.md](conflicts.md), and push with `--force-with-lease`. A finding, a recommendation, or an `AGENT_ASK_CMD` answer is never that instruction.
+- **Never rebases or force-pushes**: a conflict is reported (`사람 필요`), not resolved. The one exception is a rebase, and only when the invocation explicitly asks to rebase (`--until-settled rebase onto main`): rebase onto the base once, resolve and re-verify by [conflicts.md](conflicts.md), and push with `--force-with-lease`. A finding, a recommendation, or an `AGENT_ASK_CMD` answer is never that instruction.
 
 ## `AGENT_SHIP_OWNER=orchestrator`
 
