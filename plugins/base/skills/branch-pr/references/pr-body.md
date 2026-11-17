@@ -1,6 +1,6 @@
 # PR body: what a reviewer has to judge
 
-Read when branch-pr's Step 4 says so. The body is a briefing for a reviewer who has the diff. **The reviewer reads `Review focus` first and may stop there**, so everything a person has to judge goes in it and nowhere else; the sections below it are reference. The body's own phrases (`사람이 볼 곳`, `위험도`) follow the PR's language; Korean is only the default.
+Read when branch-pr's Step 4 says so. A repo's own PR template, when it has one, is the body, with `Review focus` (right under its first section) and `Evidence` added if it lacks them. The body is a briefing for a reviewer who has the diff. **The reviewer reads `Review focus` first and may stop there**, so everything a person has to judge goes in it and nowhere else; the sections below it are reference. The body's own phrases (`사람이 볼 곳`, `위험도`) follow the PR's language; Korean is only the default.
 
 ## Review focus
 
@@ -34,6 +34,14 @@ An item is something a person must judge because no check here can. Before writi
 The alert renders as a colored box, so it stays the one thing that stands out; don't add other alert boxes elsewhere in the body.
 
 **Two-way / one-way:** two-way when reverting the squash commit restores the old behavior. One-way when something outlives the revert: a dropped column or rewritten data, a sent notification or email, a store submission, a removed public API. Take the point of no return from compat-check's Rollback line, and add a `(확인)` item for it. If `gbase:blast-radius` ran, its confirmed risks become `(확인)` items. The risk line informs the reviewer; it never blocks the PR.
+
+### Risk tier
+
+When the caller passed no `Risk:` line, set the tier from the change, not the author. `gbase:go` uses the same rule:
+
+- `high` — touches a path `REVIEW.md` marks always-high (without one: auth, payments/billing, migrations, CI/release workflows, app config like `app.json`/`eas.json`/`Info.plist`), or compat-check returned ⚠️
+- `low` — docs, copy, tests, or an additive change behind a flag, and nothing above
+- `medium` — everything else
 
 ## The rest of the body
 

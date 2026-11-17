@@ -107,7 +107,7 @@ The caller owns the PR; this skill only hands back text.
   table names, or env keys.
 - Cross-service / multi-repo ordering can't be fully proven from one diff — state the assumption
   explicitly. In interactive use, ask via `AskUserQuestion` when the safe order genuinely depends on
-  info not in the diff (e.g. "are there old clients still calling `/v1/users`?"). *headless:* assume the cautious answer (old clients still call it) and say so.
+  info not in the diff (e.g. "are there old clients still calling `/v1/users`?"). *headless, or run by a subagent that can't ask:* assume the cautious answer (old clients still call it) and say so.
 
 ## Usage
 

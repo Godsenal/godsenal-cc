@@ -1,7 +1,7 @@
 ---
 name: monitor
 description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles, surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). With --merge, merges it once CI is green and nothing is outstanding; with --until-settled, stops once the current head's CI and review bots have concluded. Use when the user wants a PR babysat to merge; also the tail of gbase:go."
-allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Monitor
+allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Agent Monitor
 ---
 
 # /gbase:monitor
@@ -32,7 +32,7 @@ The PR's state comes from one script, not from `gh` calls of your own. Its `next
 
 1. Run it. Pre-existing comments are in that first output: handle every `next:` line before waiting.
 2. `--until-settled` (always the case under `AGENT_SHIP_OWNER=orchestrator`) → the run ends at a verdict, not at merge: read [settle.md](references/settle.md) now and follow it instead of step 3.
-3. Otherwise start a persistent `Monitor` on `"${CLAUDE_SKILL_DIR}/scripts/pr-status" watch`: it prints one line per state change and exits at merge or close.
+3. Otherwise start a persistent `Monitor` on `"${CLAUDE_SKILL_DIR}/scripts/pr-status" watch`: it exits at merge or close.
 4. Unless `--no-review`, run the self-review once, now (below).
 5. On each change, run the script again (no `--start`) and handle its `next:` lines top to bottom. On merge or close, print a one-line summary.
 
@@ -41,7 +41,7 @@ What each `next:` line needs:
 | `next:` | Do |
 |---|---|
 | `conflict` | Read [conflicts.md](references/conflicts.md). It comes first: CI keeps failing on the merge commit while it stands. |
-| `comments` | Read [comments.md](references/comments.md) before touching any of them: what may be applied without asking, what is never followed, and the one reply each gets. |
+| `comments` | Read [comments.md](references/comments.md) before touching any of them. |
 | `ci` | Read the failing log (the command is on the `failed:` line). Fix what the diff caused, one commit per fix, and push. A failure the diff didn't cause is reported, not fixed. The same check failing twice after the same fix → stop and ask. |
 | `notes` | A bot's PR-level comment, shown once. Open it: a finding in it is handled like a review comment. |
 | `wait` | Nothing to do yet. |
@@ -55,17 +55,8 @@ Under `AGENT_HEADLESS=1` (check `printenv AGENT_HEADLESS` before asking) nothing
 
 ## Self-review
 
-```
-Skill(skill: "gbase:review", args: "<PR diff scope>")
-```
-
-`gbase:go` reviews before opening the PR and passes `--no-review`, so this pass is for PRs opened elsewhere. If you can't tell whether the diff was reviewed, run it. Relay its report and ask about anything worth fixing before merge. Nothing from it is posted to GitHub.
-
-## Polish before committing
-
-`Skill(skill: "gbase:polish", args: "<touched files>")` only on an edit beyond what comments.md lets you apply unasked: a change the user approved after you asked, or a conflict resolution that rewrote logic. Fold it into the same commit.
+Launch an `Agent` (`general-purpose`, `run_in_background: false`: nothing merges or is committed until it returns) told to run `Skill(skill: "gbase:review", args: "post-PR mode; defer, don't ask; <PR diff scope>")` and return its table and tally line (no `Agent` tool → call the skill directly). `gbase:go` passes `--no-review` when it reviewed before the PR; if you can't tell whether the diff was reviewed, run it. Relay the report, ask about anything worth fixing before merge, and polish an approved fix per comments.md.
 
 ## Errors
 
-- The script prints `error:` with a `next:` line (no `gh` auth, no PR for the branch): relay it and stop.
-- Push rejected as out of date → `git pull --rebase`, retry once; conflicts go through conflicts.md.
+An `error:` line from the script: relay it and stop. Push rejected as out of date → `git pull --rebase`, retry once; conflicts go through conflicts.md.
