@@ -32,6 +32,8 @@ BRANCH_PR = skill("branch-pr")
 # go's branches: the pre-PR review (medium/high), the rest of the verification gate, --draft/--merge, and orchestrator runs
 GO_REVIEW = "plugins/base/skills/go/references/review.md"
 GO_VERIFY = "plugins/base/skills/go/references/verify.md"
+GO_HIGH = "plugins/base/skills/go/references/high.md"  # read on `high` only: the independent behavior check, order-of-events checks
+REVIEW_PROVEN = "plugins/base/skills/review/references/proven.md"
 GO_DRAFT_MERGE = "plugins/base/skills/go/references/draft-merge.md"
 GO_ORCH = "plugins/base/skills/go/references/orchestrated.md"
 WORK_PLAYBOOKS = "plugins/base/skills/work/references/playbooks.md"
@@ -77,6 +79,26 @@ CONTRACTS = [
     ("references/review.md", [skill("go")]),
     ("references/verify.md", [skill("go")]),
     ("references/draft-merge.md", [skill("go")]),
+    # high adds its verification in one file: an agent that didn't write the code runs the behavior check, and an open check holds the merge
+    ("references/high.md", [skill("go")]),
+    ("high.md", [GO_VERIFY]),
+    ("risk line", [GO_HIGH, CONFLICTS]),  # monitor learns the tier from the PR body branch-pr wrote, not from a flag
+    ("statechart", [GO_HIGH]),
+    ("create-formal-verification-skill", [GO_HIGH]),
+    # a skipped behavior check is unverified, not passed: a (확인) item in the PR, `open` in the evidence file, `unverified` in result.json
+    ("behavior: skip", [skill("work"), GO_VERIFY, GO_HIGH, BRANCH_PR, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
+    ("(확인)", [GO_VERIFY, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
+    ('== "open"', [SHIP_PREP, RUNNER]),
+    ("unverified", [GO_VERIFY, SHIP_PREP, RUNNER, RUNNER_DOC, ORCHESTRATOR]),
+    # after a rebase or base merge on a high PR, pr-status compares patch ids and its next: line says whether to re-verify
+    ("git patch-id", [PR_STATUS, CONFLICTS, ORCHESTRATOR]),
+    ("pr-status script> patch", [CONFLICTS]),
+    ("nothing to re-verify", [PR_STATUS, CONFLICTS]),
+    ("one verifier", [PR_STATUS, CONFLICTS]),
+    # review marks a high finding a run proved, inside the finding cell, and keeps one no run could reach
+    ("references/proven.md", [skill("review")]),
+    ("실행으로 확인됨", [REVIEW_PROVEN]),
+    ("실행 증거 없음", [REVIEW_PROVEN]),
     ("references/orchestrated.md", [skill("go")]),
     # work hands go its surface verification so go doesn't run the behavior check twice
     ("`behavior:`", [skill("work"), skill("go"), GO_VERIFY]),

@@ -58,6 +58,13 @@ A followed skill that outgrows check.py's limits (500 lines, a 1,536-character d
 | `principle-fix-root-causes`, `principle-subtract-before-you-add`, `principle-laziness-protocol` | The "Root cause before smallest" sentence in `work`'s Principles is written from these three | Whether the sentence still matches them: a guard is a fix only for a legitimate state, no speculative guards, the smallest change that solves the problem |
 | `benchmark-checklist` | `work` holds a measured number until "the seven questions" pass | The number of questions |
 
+Three more followed items carry `used_by` for the verification `high` adds (gbase 1.57.0):
+
+| Followed item | gbase file | When it changes, check |
+| --- | --- | --- |
+| `statechart`, `create-formal-verification-skill` | `skills/go/references/high.md` has the `high` behavior agent run the repo's formal verification skill, or model the changed transitions with `statechart` | How each is invoked and what it installs; whether the generated skill is still project-local and names its area |
+| `interrogate` | `skills/review/references/proven.md` takes its "prove it with a run" brief but keeps a finding no run could reach | Whether the brief still asks for the command and its output |
+
 After changing `work` or its references, run the two playbook evals (`claude plugin eval` from `plugins/base`, `--case trace-artifact-reads-forensics` and `--case phased-work-reads-multi-phase-plan`) and `small-fix-skips-playbooks`, and `python3 scripts/read-budget.py`.
 
 What was decided when `work` took poteto-mode in (gbase 1.56.0, upstream `3fa33bb`). "Merged" means `work` or a file it reads now says it:

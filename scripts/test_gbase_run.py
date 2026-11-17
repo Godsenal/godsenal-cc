@@ -597,6 +597,29 @@ class GbaseRunTest(unittest.TestCase):
                               "--model", "agent")
         self.assertEqual(json.loads(Path(out[-1]).read_text())["gaps"], [])
 
+    def test_an_unreached_behavior_check_and_a_differing_input_are_recorded_as_unverified(self):
+        evidence = [
+            {"step": "behavior", "result": "open", "command": "/verify login", "detail": "no simulator"},
+            {"step": "behavior", "result": "skip", "command": "-", "detail": "low risk"},        # not required: not unverified
+            {"step": "behavior", "result": "pass", "command": "/verify upload", "detail": "ok",
+             "input": "1024px copies; differs: device photos are 5712px originals"},
+            {"step": "checks", "result": "pass", "command": "pytest", "detail": "ok", "input": "fixture a"},
+            "not an object",
+            {"step": "checks", "result": "pass", "command": ["a", "list"], "detail": "hand-written"},
+        ]
+        self.assertEqual(gbase_run.unverified(evidence), [
+            "동작 미확인: /verify login — no simulator",
+            "다른 입력으로 확인: /verify upload — device photos are 5712px originals"])
+        rerun = evidence + [{"step": "behavior", "result": "pass", "command": "/verify login", "detail": "ok on a device"}]
+        self.assertEqual(len(gbase_run.unverified(rerun)), 1)            # a later pass closes the earlier open line
+        self.assertEqual(len(gbase_run.unverified(evidence + evidence)), 2)  # a resumed session's repeats count once
+        gaps = gbase_run.ship_gaps("work", "agent", ["gbase:go"], evidence, "settle: 수렴 @a", "u")
+        self.assertEqual(len(gaps), 1)
+        self.assertIn("사람 확인 필요 2건", gaps[0])
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "agent")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["unverified"], [])
+
     def test_a_prefix_set_later_takes_over_once_the_old_branch_pr_ends(self):
         g = lambda *a: subprocess.run(["git", "-C", str(self.repo), *a], check=True, capture_output=True, text=True).stdout.strip()
         branch = lambda out: json.loads(Path(out[-1]).read_text())["branch"]

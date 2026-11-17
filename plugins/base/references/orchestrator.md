@@ -41,12 +41,12 @@ Opening the PR from it: `gh pr create --title "$(head -n 1 "$f")" --body "$(tail
 
 ## Evidence file
 
-JSON Lines, appended with `>>`, never rewritten (the caller may have written lines first). One object per line:
+JSON Lines, appended with `>>`, never rewritten (the caller may have written lines first). A later line with the same `step` and `command` replaces the earlier one for a reader: a rerun's `pass` closes an `open`. One object per line:
 
 | Field | Required | Value |
 |---|---|---|
 | `step` | yes | `review`, `polish`, `checks`, `behavior`, `reproduce`, `settle` |
-| `result` | yes | `pass`, `fail`, `skip`, `open` (`review`, `settle`, and `reproduce` only: ran, but something awaits a decision or hasn't concluded — not a failure) |
+| `result` | yes | `pass`, `fail`, `skip`, `open` (`review`, `settle`, `reproduce`, and `behavior` only: ran, but something awaits a decision or hasn't concluded, and for `behavior` a required check that couldn't reach its surface — not a failure) |
 | `command` | yes | what ran: the shell command for `checks` and `reproduce`; the skill and feature for `behavior` (`/verify login`); the skill for `review` and `polish` |
 | `detail` | yes | one line, at most ~500 characters: on `fail` the lines that show the failure, on `skip` the reason, on `pass` what was observed, on `open` what is left |
 | `cause` | on `checks`/`behavior` `fail`, `reproduce` `open` | `diff` (the change caused it), `pre-existing`, `flaky`, or `environment` (no DB, device, or credential); on `reproduce` `open`: `input differs from report — <difference>` |
@@ -57,7 +57,7 @@ Lines per step:
 - `review` — one per `go` run, and per `monitor --until-settled` run whose self-review ran. `pass`: the review ran and no surviving finding is left open. `open`: findings that need a decision remain; `detail` lists `severity file:line`. (Before v1.28.0 this was `fail`; a reader of older files should treat a `review` `fail` as `open`.) `skip`: not run (`low` risk, `--no-review`, a scope review skips, or the finder never returned).
 - `polish` — one per `go` run. `fail` only when polish couldn't complete; a reverted edit isn't a failure.
 - `checks` — one per verification command, with its final result after any fix attempts. `--no-verify` or no commands found → one `skip` line.
-- `behavior` — one per feature checked on its surface: by the repo's verify skill, by a CLI or script run when there is none (`command` is then that shell command), or reused from `gbase:work`'s route run. `low` risk, or nothing that could be run → one `skip` line.
+- `behavior` — one per feature checked on its surface: by the repo's verify skill, by a CLI or script run when there is none (`command` is then that shell command), or reused from `gbase:work`'s route run (never on `high`: an agent that didn't write the code runs it). A check that wasn't required (`low` risk, `--no-verify`, a diff that changes nothing observable) → one `skip` line. A required check whose surface couldn't be reached, the report's `behavior: skip — <reason>` line → `open` with the reason in `detail`: unverified, not passed.
 - `settle` — one per `monitor --until-settled` run: `pass` for `수렴`, `open` for `미확정`, `fail` for `사람 필요`; `detail` is the `settle:` line. Its fix verifications are `checks` lines.
 - `reproduce` — the result of the reproduction check now: `fail` means the bug reproduced or the criterion isn't met, `pass` means it didn't reproduce, `skip` means no executable check was possible, `open` means it didn't reproduce on an input of another kind than the report's (`cause` says how they differ).
 
@@ -68,7 +68,7 @@ python3 -c 'import json,sys; k="step","result","command","detail","cause","input
   checks fail 'pnpm vitest run src/auth' 'auth.test.ts: expected 200, received 500' diff >> "$AGENT_EVIDENCE_FILE"
 ```
 
-A `checks` or `behavior` line whose `input` says `differs:` becomes a `(확인)` item in the PR's `## Review focus` (`실기기 확인 필요: <difference>`): passing on a fixture says nothing about the input that failed.
+A `checks` or `behavior` line whose `input` says `differs:` becomes a `(확인)` item in the PR's `## Review focus` (`실기기 확인 필요: <difference>`): passing on a fixture says nothing about the input that failed. A `behavior` `open` line becomes one too. `ship-prep check` fails a draft that lacks the item, and the runner lists both kinds in `result.json` as `unverified`.
 
 ## Settle
 
@@ -85,7 +85,7 @@ settle: 사람 필요 @<short-sha> — <item>, …
 - `미확정` — something hadn't concluded 30 minutes into the wait on this head.
 - `사람 필요` — something only a person can resolve: a failing check monitor couldn't fix, a review comment that needs a decision, a standing `CHANGES_REQUESTED`, or a merge conflict.
 
-When more than one applies, `사람 필요` wins over `미확정`. The head sha is the last one monitor waited on; each fix it pushes starts a new wait. It merges only when invoked with `--merge` (the task asked for it) and the verdict allows it, adding `— merged <merge short-sha>` to the line; and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase ([settle.md](../skills/monitor/references/settle.md)); otherwise it never rebases or force-pushes. Wherever monitor does resolve a conflict, a resolution that combined both sides' content is reviewed before it's pushed, or leaves a `review` `open` evidence line ([conflicts.md](../skills/monitor/references/conflicts.md)).
+When more than one applies, `사람 필요` wins over `미확정`. The head sha is the last one monitor waited on; each fix it pushes starts a new wait. It merges only when invoked with `--merge` (the task asked for it) and the verdict allows it, adding `— merged <merge short-sha>` to the line; and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase ([settle.md](../skills/monitor/references/settle.md)); otherwise it never rebases or force-pushes. Wherever monitor does resolve a conflict, a resolution that combined both sides' content is reviewed before it's pushed, or leaves a `review` `open` evidence line ([conflicts.md](../skills/monitor/references/conflicts.md)). On a `high` PR a rebase or base merge is followed by `pr-status patch`: the same `git patch-id` re-verifies nothing, a changed one gets one verifier.
 
 Under `AGENT_SHIP_OWNER=orchestrator` (the runner's default) monitor pushes nothing and posts nothing. It judges the pushed head once, commits its fixes locally, and, when there are any, writes an updated PR draft to `AGENT_PR_BODY_FILE` and ends with `ship: local …`, `PR 본문 초안: …`, and `settle: 미확정 @<pushed sha> — 푸시 대기: <n> commits` (or `사람 필요`). The caller pushes, updates the PR body from the draft (`gh pr edit --title "$(head -n 1 "$f")" --body "$(tail -n +3 "$f")"`), and runs settle again. `AGENT_SHIP_OWNER=agent` opts into pushing and replying.
 
