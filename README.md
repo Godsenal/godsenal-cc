@@ -222,6 +222,24 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Already wired in: gshorts' comment-target pre-filter (`comment-guide`) and face-aware crop focus (`foreign-clip-short`)
 - Recovering an undocumented signature: call it wrong on purpose and read the error
 
+### pstack inside gbase
+
+gbase carries [pstack](https://github.com/cursor/plugins/tree/main/pstack) (MIT, Copyright (c) 2026 Lauren Tan) and follows it as it changes. Nothing else is installed: the skills are part of gbase and are typed as `/gbase:<name>`.
+
+- **Followed as-is (49 skills, explicit only):** `architect`, `arena`, `swarm`, `interrogate`, `figure-it-out`, `benchmark-checklist`, `statechart`, `create-formal-verification-skill`, `maintain-formal-verification-skill`, `tdd`, `no-comments`, `technical-writing`, `typescript-best-practices`, `show-me-your-work`, `recall`, `reflect`, `automate-me`, `teach`, `sharpen`, `ketchup`, `ketchup-video`, `bro`, `in-your-own-words`, `poteto-help`, `poteto-mode` with its 21 playbooks, and the 24 `principle-*` skills; plus the `gbase:poteto-agent` and `gbase:comment-sicko` agents and pstack's guide (`plugins/base/docs/guide/`). They are generated from upstream and never edited here. Each gets gbase's Korean-output block and a pointer to `references/pstack-adapter.md`, which maps Cursor names to Claude Code and to gbase: shipping steps go through `gbase:go`, `/deslop` is `gbase:polish`, `control-ui`/`control-cli` are the repo's verify skill, and models come from the session, not from a per-role rule.
+- **gbase's own version kept:** `how`, `why`, `unslop`, `blast-radius`, `correct`, and `create-verify` (pstack's `create-verification-skill` + `maintain-verification-skill`). An upstream change to one of these arrives as a diff to merge.
+- **Not imported:** `setup-pstack` (writes an every-session model rule), `make-bot-ui` (runs a remote install script with sudo; Cursor Automations only), the worktree-cleanup playbook (deletes worktrees and simulators), the benny automation (Cursor Automations).
+- These skills stay out of the model's skill listing (`disable-model-invocation: true`), so they cost no context until used. A skill that needs another reads its `SKILL.md` by path.
+
+Sync, run from this repo:
+
+```bash
+python3 scripts/pstack-sync.py --check   # one JSON line: upstream_sha, locked_sha, changed, skills_changed, custom_changed, new_upstream, removed_upstream
+python3 scripts/pstack-sync.py --apply   # regenerate followed items, write merge diffs to scripts/pstack/pending/, update scripts/pstack/lock.json
+```
+
+A daily routine runs `--check`; when `changed` is true it starts a `work` run here that follows `plugins/base/references/pstack-sync.md` (apply, screen what came in, merge the pending diffs, PR). `scripts/pstack/lock.json` records the upstream commit and, per item, `follow` / `merge` / `skip` / `unusable` with the reason.
+
 ### Running gbase from an orchestrator
 
 A program that runs agents with no person attached (e.g. `claude -p` from a daemon) can slot gbase skills into its own steps. The contract is environment variables, files, greppable report lines, and a manifest; with none of the variables set, every skill behaves as it does interactively. Full spec: [`plugins/base/references/orchestrator.md`](plugins/base/references/orchestrator.md).
