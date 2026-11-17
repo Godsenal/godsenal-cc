@@ -56,8 +56,14 @@ FAKE_CLAUDE = textwrap.dedent('''\
                                 "max_turns": args[args.index("--max-turns") + 1] if "--max-turns" in args else None,
                                 "budget": args[args.index("--max-budget-usd") + 1] if "--max-budget-usd" in args else None})
                     + "\\n")
-        if resume and not glob.glob(os.path.join(cfg, "projects", "*", resume + ".jsonl")):
+        if resume and (marker("resume-lost") or not glob.glob(os.path.join(cfg, "projects", "*", resume + ".jsonl"))):
             print("No conversation found with session ID: " + resume)  # claude finds a session in its own config dir only
+            sys.exit(1)
+        if resume and marker("resume-fails"):  # the resume starts and spends, then ends on an error before any tool call
+            print(json.dumps({"type": "system", "subtype": "init", "session_id": resume, "model": "claude-midrun"}))
+            print(json.dumps({"type": "result", "is_error": True, "result": "API Error: 500 Internal server error",
+                              "num_turns": 1, "total_cost_usd": cost(0.25, resume),
+                              **({"subtype": os.environ["FAKE_RESUME_CAP"]} if os.environ.get("FAKE_RESUME_CAP") else {})}))
             sys.exit(1)
         sid = resume or "s-mid-" + os.path.basename(cfg)
         print(json.dumps({"type": "system", "subtype": "init", "session_id": sid, "model": "claude-midrun"}))
@@ -1049,6 +1055,50 @@ class GbaseRunTest(unittest.TestCase):
         self.assertIn("T-77", legs[1]["prompt"])  # the original prompt goes along
         self.assertEqual(result["sessions"]["midrun"]["session_id"], "s-mid-b")
         self.assertEqual(result["sessions"]["midrun"]["cost_usd"], 3.0)  # two sessions, $1.5 each
+
+    def test_a_resume_that_doesnt_take_still_counts_what_it_spent(self):
+        # b's resume of a's session cost $0.25 and a turn before it failed; the fresh session on b gets what is left
+        self.accounts(a=["limited-midrun"], b=["resume-fails"])
+        _, result, legs, _, _ = self.midrun("--max-turns", "50", "--max-budget-usd", "20")
+        self.assertEqual([h["how"] for h in result["handoffs"]], ["fresh"])
+        self.assertEqual([(x["cfg"], x["resume"], x["max_turns"], x["budget"]) for x in legs],
+                         [("a", None, "50", "20.0"), ("b", "s-mid-a", "44", "18.5"), ("b", None, "43", "18.25")])
+        s = result["sessions"]["midrun"]
+        self.assertEqual([(x["account"], x["how"], x["stopped"], x["cost_usd"], x["turns"]) for x in s["accounts"]],
+                         [("a", "start", "usage_limit", 1.5, 6), ("b", "resume", "error", 0.25, 1), ("b", "fresh", None, 1.5, 7)])
+        self.assertEqual((s["cost_usd"], s["turns"], s["session_id"]), (3.25, 14, "s-mid-b"))
+        self.assertEqual((result["status"], result["account"]), ("done", "b"))
+
+    def test_a_resume_that_finds_no_conversation_costs_nothing(self):
+        # plain-text "No conversation found": no result event, so no cost or turn to count
+        self.accounts(a=["limited-midrun"], b=["resume-lost"])
+        _, result, legs, _, _ = self.midrun("--max-turns", "50", "--max-budget-usd", "20")
+        self.assertEqual([(x["cfg"], x["resume"], x["max_turns"], x["budget"]) for x in legs],
+                         [("a", None, "50", "20.0"), ("b", "s-mid-a", "44", "18.5"), ("b", None, "44", "18.5")])
+        s = result["sessions"]["midrun"]
+        self.assertEqual([(x["how"], x["stopped"], x["cost_usd"], x["turns"]) for x in s["accounts"]],
+                         [("start", "usage_limit", 1.5, 6), ("resume", "error", None, 0), ("fresh", None, 1.5, 7)])
+        self.assertEqual((result["status"], s["cost_usd"], s["turns"]), ("done", 3.0, 13))
+
+    def test_a_failed_resume_that_used_the_cap_up_starts_no_fresh_session(self):
+        # 6 of 7 turns on a, the last one on b's failed resume: a fresh session would get 0 turns, which is no cap
+        self.accounts(a=["limited-midrun"], b=["resume-fails"])
+        _, result, legs, _, _ = self.midrun("--max-turns", "7")
+        self.assertEqual([(x["cfg"], x["resume"], x["max_turns"]) for x in legs],
+                         [("a", None, "7"), ("b", "s-mid-a", "1"), ("b", "s-mid-a", "30")])  # the last is the wrap-up
+        self.assertIn("reached its turn limit", legs[2]["prompt"])
+        s = result["sessions"]["midrun"]
+        self.assertEqual((result["turn_limit"], s["cost_usd"], [x["cost_usd"] for x in s["accounts"]]), (7, 2.0, [1.5, 0.5]))
+        self.assertEqual([h["how"] for h in result["handoffs"]], ["resume"])
+
+    def test_a_failed_resume_that_a_cap_ended_is_the_runs_cap(self):
+        # the cap the resume ended on isn't left on a fresh session that finished: no fresh one starts
+        self.accounts(a=["limited-midrun"], b=["resume-fails"])
+        self.env["FAKE_RESUME_CAP"] = "error_max_budget_usd"
+        _, result, legs, _, _ = self.midrun("--max-budget-usd", "20")
+        self.assertEqual([(x["cfg"], x["resume"], x["budget"]) for x in legs],
+                         [("a", None, "20.0"), ("b", "s-mid-a", "18.5"), ("b", "s-mid-a", "10")])  # the last is the wrap-up
+        self.assertEqual(result["budget_limit"], 20)
 
     def test_every_account_at_its_limit_mid_run_fails_with_each_listed(self):
         self.accounts(a=["limited-midrun"], b=["limited-midrun"], c=["limited-midrun"])
