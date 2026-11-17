@@ -83,7 +83,8 @@ FAKE_CLAUDE = textwrap.dedent('''\
     open(os.path.join(run_dir, "ran-on"), "a").write(os.path.basename(cfg) + "\\n")
     skill = lambda name, parent=None: print(json.dumps({"type": "assistant", "parent_tool_use_id": parent, "message": {
         "content": [{"type": "tool_use", "name": "Skill", "input": {"skill": name}}]}}))
-    if model == "stops" and "--resume" not in args:  # stops: the first session called bug-fix, only the resumed one go
+    # stops: the first session called bug-fix, only the resumed one go; byhand: never go, and no `pr:` line
+    if (model == "stops" and "--resume" not in args) or model == "byhand":
         skill("gbase:bug-fix")
     else:
         skill("gbase:go", "toolu_agent0" if model == "subgo" else None)  # subgo: only a subagent called go
@@ -655,11 +656,11 @@ class GbaseRunTest(unittest.TestCase):
 
     def test_a_pr_run_records_the_gates_it_skipped(self):
         gaps = gbase_run.ship_gaps
-        self.assertEqual(gaps("work", "agent", ["gbase:work", "gbase:go"], [{"step": "review"}], "settle: 수렴 @a", "u"), [])
-        skipped = gaps("work", "agent", ["gbase:work"], [], None, "u")
+        self.assertEqual(gaps("work", "agent", [["gbase:work", "gbase:go"]], [{"step": "review"}], "settle: 수렴 @a", "u"), [])
+        skipped = gaps("work", "agent", [["gbase:work"]], [], None, "u")
         self.assertEqual(len(skipped), 3)
         self.assertIn("gbase:go 없이", skipped[0])
-        self.assertEqual(gaps("work", "agent", ["gbase:work"], [], None, None), [])  # no PR: nothing shipped
+        self.assertEqual(gaps("work", "agent", [["gbase:work"]], [], None, None), [])  # no PR: nothing shipped
         self.assertEqual(gaps("work", "orchestrator", [], [], None, "u"), [])  # the caller ships
         self.assertEqual(gaps("review", "agent", [], [], None, "u"), [])
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
@@ -681,6 +682,45 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual((result["skills"], result["subagent_skills"][0]), (["gbase:work"], "gbase:go"))
         self.assertEqual(len(result["gaps"]), 1)
         self.assertIn("gbase:go 없이", result["gaps"][0])
+
+    def test_another_models_go_does_not_gate_the_session_that_opened_the_pr(self):
+        go, hand = ["gbase:work", "gbase:go"], ["gbase:work"]
+        opened = lambda opus=None, sonnet=None, sonnet_tools=3: gbase_run.pr_openers([(go, opus, 9), (hand, sonnet, sonnet_tools)])
+        self.assertEqual(opened(sonnet="u"), [hand])
+        self.assertEqual(opened(opus="u"), [go])
+        self.assertEqual(opened(opus="u", sonnet="u/"), [go, hand])  # each reported a PR, the same one or another
+        self.assertEqual(opened(), [go, hand])  # looked up from the branch: any session that worked may have opened it
+        self.assertEqual(opened(sonnet_tools=0), [go])  # one that never started (logged out, at its limit) didn't
+        self.assertEqual(gbase_run.pr_openers([]), [])
+        gaps = lambda openers: gbase_run.ship_gaps("work", "agent", openers, [{"step": "review"}], "settle: 수렴 @a", "u")
+        self.assertEqual(gaps(opened(opus="u")), [])
+        self.assertEqual(gaps(opened(sonnet_tools=0)), [])
+        for openers in (opened(sonnet="u"), opened(opus="u", sonnet="u2"), opened()):
+            self.assertIn("gbase:go 없이", gaps(openers)[0])
+        # a work slot on two models: haiku called go and opened no PR, subgo opened the PR without go
+        plugin = self.tmp / "plugins" / "base"
+        (plugin / ".claude-plugin").mkdir(parents=True)
+        (plugin / "skills" / "work").mkdir(parents=True)
+        (plugin / "skills" / "work" / "SKILL.md").write_text("work")
+        (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "gbase"}))
+        (plugin / ".claude-plugin" / "factory.json").write_text(json.dumps({"slots": {"work": {
+            "invoke": "/gbase:work <task>", "models": ["haiku", "subgo"], "env": [], "notes": ""}}}))
+        self.env["GBASE_PLUGIN_DIR"] = str(plugin)
+        r, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["skills"], result["pr_url"]), (["gbase:work", "gbase:go"], "https://github.com/o/r/pull/9"))
+        self.assertEqual(len(result["gaps"]), 1)
+        self.assertIn("gbase:go 없이", result["gaps"][0])
+        # no session reported the PR and its URL came from the branch: every session that worked is read
+        self.fake_gh("https://github.com/o/r/pull/64")
+        for models, gap in ((["settled", "byhand"], True), (["settled", "haiku"], False)):
+            (plugin / ".claude-plugin" / "factory.json").write_text(json.dumps({"slots": {"work": {
+                "invoke": "/gbase:work <task>", "models": models, "env": [], "notes": ""}}}))
+            _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent")
+            result = json.loads(Path(out[-1]).read_text())
+            self.assertEqual(result["pr_url"], "https://github.com/o/r/pull/64")
+            self.assertEqual(any("gbase:go 없이" in g for g in result["gaps"]), gap, models)
 
     def test_subagent_skills_carry_over_a_handoff_to_the_next_account(self):
         s = {"results": ["a"], "skills": ["gbase:go"], "subagent_skills": ["gbase:polish"]}
@@ -704,7 +744,7 @@ class GbaseRunTest(unittest.TestCase):
         rerun = evidence + [{"step": "behavior", "result": "pass", "command": "/verify login", "detail": "ok on a device"}]
         self.assertEqual(len(gbase_run.unverified(rerun)), 1)            # a later pass closes the earlier open line
         self.assertEqual(len(gbase_run.unverified(evidence + evidence)), 2)  # a resumed session's repeats count once
-        gaps = gbase_run.ship_gaps("work", "agent", ["gbase:go"], evidence, "settle: 수렴 @a", "u")
+        gaps = gbase_run.ship_gaps("work", "agent", [["gbase:go"]], evidence, "settle: 수렴 @a", "u")
         self.assertEqual(len(gaps), 1)
         self.assertIn("사람 확인 필요 2건", gaps[0])
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",

@@ -887,12 +887,21 @@ def unverified(evidence):
     return out
 
 
-def ship_gaps(slot, owner, skills, evidence, settle, pr_url):
-    """What a run that opened a PR skipped on the way: the gates are the skills' to keep, this is the record."""
+def pr_openers(sessions):
+    """The skill lists of the sessions that may have opened the run's PR, from each one's (skills, `pr:` URL it
+    reported, tool calls): the ones that reported a PR; when none did (the URL was looked up from the branch),
+    every one that worked. A session that made no tool call (logged out, at its limit) opened nothing."""
+    worked = [(called, url) for called, url, tool_uses in sessions if tool_uses]
+    return [called for called, url in worked if url] or [called for called, _ in worked]
+
+
+def ship_gaps(slot, owner, openers, evidence, settle, pr_url):
+    """What a run that opened a PR skipped on the way: the gates are the skills' to keep, this is the record.
+    `openers` is pr_openers(): on a slot with several models, another model's go didn't gate this PR."""
     if slot not in SHIPPING_SLOTS or owner != "agent" or not pr_url:
         return []
     gaps = []
-    if "gbase:go" not in skills:
+    if any("gbase:go" not in called for called in openers):
         gaps.append("gbase:go 없이 PR이 열림(손으로 커밋·push): 리뷰·검증 게이트를 거치지 않음")
     if not evidence:
         gaps.append("증거 없음(evidence.jsonl 비어 있음): 리뷰·검사 결과가 기록되지 않음")
@@ -1203,8 +1212,9 @@ def cmd_run(argv):
         idle = [s for s in sessions.values() if prestart_failure(s)]
         # sessions no account could take on: each one it reached was logged out or at its limit
         stuck = [s for s in sessions.values() if prestart_failure(s) or s.get("usage_limited")]
-        skills = list(dict.fromkeys([*re.findall(r"^/([\w-]+:[\w-]+)", prompt),
-                                     *(k for s in sessions.values() for k in s.get("skills", []))]))
+        invoked = re.findall(r"^/([\w-]+:[\w-]+)", prompt)
+        own = {m: [*invoked, *s.get("skills", [])] for m, s in sessions.items()}  # per session, for ship_gaps
+        skills = list(dict.fromkeys([*invoked, *(k for s in sessions.values() for k in s.get("skills", []))]))
         subagent_skills = list(dict.fromkeys(k for s in sessions.values() for k in s.get("subagent_skills", [])))
         for s in sessions.values():
             for k in ("errors", "skills", "subagent_skills", "is_error", "capped", "end_error", "usage_limited"):
@@ -1277,9 +1287,12 @@ def cmd_run(argv):
             "warnings": warnings,
             "sessions": sessions,
         })
+        # no session that worked: the prompt's own skill is what there is to read
+        openers = pr_openers([(own[m], r["pr_url"], sessions[m].get("tool_uses"))
+                              for m, r in zip(results, parsed)]) or [invoked]
         result.update({
             "unverified": unverified(result["evidence"]),
-            "gaps": ship_gaps(slot, a.ship_owner, skills, result["evidence"], result["settle"], pr_url),
+            "gaps": ship_gaps(slot, a.ship_owner, openers, result["evidence"], result["settle"], pr_url),
         })
         if (run_dir / "stop-reason").exists():
             result["stop_reason"] = (run_dir / "stop-reason").read_text(encoding="utf-8").strip()
