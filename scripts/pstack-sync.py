@@ -7,6 +7,8 @@
 
 The lock (scripts/pstack/lock.json) says how each upstream item is handled:
   follow    regenerated from upstream on every --apply; never edited by hand
+            (`used_by` on a follow item lists the gbase files written against it: its change is reported in
+            custom_changed as well, because those files need a person's read)
   merge     gbase keeps its own version (`into`); upstream changes land as scripts/pstack/pending/<item>.diff
   skip      not imported (`reason`)
   unusable  can't run in Claude Code (`reason`)
@@ -331,9 +333,13 @@ def compare(lock, items):
     for name, entry in known.items():
         if entry["mode"] in changed and name in items and tree_hash(items[name]) != entry.get("hash"):
             changed[entry["mode"]].append(name)
+    # a followed item a gbase file is written against (`used_by`): regenerating it is not enough
+    # the same goes for one upstream removed: the gbase file now points at nothing
+    gone = [name for name in set(known) - set(items) if known[name]["mode"] == "follow"]
+    depended = [name for name in changed["follow"] + gone if known[name].get("used_by")]
     return {
         "skills_changed": sorted(changed["follow"]),
-        "custom_changed": sorted(changed["merge"]),
+        "custom_changed": sorted(changed["merge"] + depended),
         "new_upstream": sorted(set(items) - set(known)),
         "removed_upstream": sorted(set(known) - set(items)),
     }
@@ -363,7 +369,7 @@ def apply(args, root):
     known = lock["items"]
     kept = {rel for name, e in known.items() if e["mode"] == "follow" for rel in items.get(name, {})}
     report = {"applied": [], "pending": [], "removed": [], "scripts_new": [], "scripts_changed": [],
-              "new_upstream": diff["new_upstream"]}
+              "new_upstream": diff["new_upstream"], "dependents": {}}
 
     # Plan first, write after: a failure while generating leaves the tree and the lock as they were.
     writes, removals, diffs = [], [], []
@@ -378,6 +384,8 @@ def apply(args, root):
         if name not in items:
             if entry["mode"] == "follow":  # following upstream includes following a removal
                 removals.append(target)
+                if entry.get("used_by"):
+                    report["dependents"][name] = [f"{PLUGIN}/{p}" for p in entry["used_by"]]
                 del known[name]
                 report["removed"].append(name)
             continue  # a removed merge/skip item stays in the lock until a person decides (see pstack-sync.md)
@@ -394,6 +402,8 @@ def apply(args, root):
             if before != after:
                 writes.append((base, target, after))
                 report["applied"].append(name)
+                if entry.get("used_by"):  # the gbase files to reread against this item's diff
+                    report["dependents"][name] = [f"{PLUGIN}/{p}" for p in entry["used_by"]]
             entry["hash"], entry["out"] = tree_hash(upstream), tree_hash(after)
         elif entry["mode"] == "merge":
             before = read_tree(root / SNAPSHOT, target)
@@ -436,6 +446,9 @@ def verify(root):
             got = tree_hash(read_tree(root / PLUGIN, target_of(name)))
             if got != entry.get("out"):
                 problems.append(f"{PLUGIN}/{target_of(name)}: differs from the generated copy (follow item `{name}`) — don't edit it; rerun scripts/pstack-sync.py --apply, or change its mode in {LOCK}")
+            for path in entry.get("used_by", []):
+                if not (root / PLUGIN / path).exists():
+                    problems.append(f"{LOCK}: `{name}` lists used_by {path}, which is not in {PLUGIN}/")
         elif entry["mode"] == "merge":
             if not (root / PLUGIN / entry.get("into", "?")).exists():
                 problems.append(f"{LOCK}: merge item `{name}` points at missing {entry.get('into')}")

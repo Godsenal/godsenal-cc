@@ -55,7 +55,10 @@
     "benchmark-checklist": {
       "mode": "follow",
       "hash": "b72ea2e7c24e06e7",
-      "out": "a4c8baad0c234c11"
+      "out": "a4c8baad0c234c11",
+      "used_by": [
+        "skills/work/SKILL.md"
+      ]
     },
     "blast-radius": {
       "mode": "merge",
@@ -149,7 +152,12 @@
     "poteto-mode": {
       "mode": "follow",
       "hash": "ee088e9000353ea5",
-      "out": "01f8b9f5735df256"
+      "out": "01f8b9f5735df256",
+      "used_by": [
+        "skills/work/SKILL.md",
+        "skills/work/references/playbooks.md",
+        "hooks/session-start.md"
+      ]
     },
     "principle-attack-the-premise": {
       "mode": "follow",
@@ -189,7 +197,10 @@
     "principle-fix-root-causes": {
       "mode": "follow",
       "hash": "5560728040edb99c",
-      "out": "a1dc1ead2e9aa6b3"
+      "out": "a1dc1ead2e9aa6b3",
+      "used_by": [
+        "skills/work/SKILL.md"
+      ]
     },
     "principle-foundational-thinking": {
       "mode": "follow",
@@ -204,7 +215,10 @@
     "principle-laziness-protocol": {
       "mode": "follow",
       "hash": "802250bbc2f37414",
-      "out": "eaac0e88753623ac"
+      "out": "eaac0e88753623ac",
+      "used_by": [
+        "skills/work/SKILL.md"
+      ]
     },
     "principle-make-operations-idempotent": {
       "mode": "follow",
@@ -259,7 +273,10 @@
     "principle-subtract-before-you-add": {
       "mode": "follow",
       "hash": "d4899866bf51f2c6",
-      "out": "4160d771f87ded0d"
+      "out": "4160d771f87ded0d",
+      "used_by": [
+        "skills/work/SKILL.md"
+      ]
     },
     "principle-test-behavior-not-implementation": {
       "mode": "follow",

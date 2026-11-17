@@ -21,7 +21,7 @@ A pstack skill names others as "the **name** skill", `/name`, or a `principle-<t
 | `maintain-verification-skill` | `gbase:create-verify --maintain` |
 | `/deslop` (cursor-team-kit) | `gbase:polish` |
 | `control-ui`, `control-cli` (cursor-team-kit) | The repo's verify skill: `.claude/skills/verify-*/` or `.claude/skills/verify/`. None → `gbase:create-verify` can generate one; otherwise drive the app directly and say no verify skill exists. |
-| `/poteto-mode` during a `gbase:work` run | Stay in `work`. Read a playbook only for a route `work` has no steps for. |
+| `/poteto-mode`, or a task it would take | During a `gbase:work` run, stay in it: "via poteto-mode" in a playbook means by `work`'s own routes. Otherwise `Skill(skill: "gbase:work")`. `work` is poteto-mode inside gbase: its route table names the playbook to read, and `skills/work/references/playbooks.md` says how a playbook's steps change there (no commits along the way, a single unit stays in the main session). |
 | Playbooks **Opening a PR**, **Shipping**, **Babysit**, and any step that commits, pushes, opens, or merges a PR | `Skill(skill: "gbase:go")`, then `gbase:monitor` for an open PR. Nothing ships by hand, `go` merges only with `--merge`, and it never force-pushes. Branch, commit, and PR format come from [conventions.md](conventions.md), not from `worker.md` or a playbook. |
 | `/setup-pstack`, the `pstack-models` rule | Not in gbase. See Models. Never write `~/.claude/rules/` or `~/.cursor/`. |
 | `make-bot-ui`, the **Worktree cleanup** playbook, the benny automation | Not in gbase. Say so in one line and continue. `skills/poteto-mode/scripts/worktree-audit.sh` is read-only and can still be run; deleting worktrees, simulators, or caches is the user's call. |

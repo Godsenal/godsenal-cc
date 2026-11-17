@@ -1,8 +1,12 @@
 # Running workers
 
-Read this when a change splits into two or more independent code units. A single unit is built in the main session.
+Read this before launching a `gbase:scout` or `gbase:worker`. Independent units are ones where neither needs the other's result and they don't write the same files; a single unit is built in the main session. Independent scouts go out several in one message.
+
+**You own their output.** Read the diff yourself and write your own summary. Skills that dispatch their own agents (`go`, `how`, `why`) keep their types.
 
 ## Launch
+
+- **Fresh agent per new task**, briefed with the goal, the original ask, every later instruction, and the previous agent's report. Continue an existing agent only when the work needs state that lives in it (its checkout, a running simulator or server). A second opinion is the same prompt on another model: agreement is the signal, not a persona.
 
 - One `subagent_type: "gbase:worker"` per unit, all in one message, with `run_in_background: true` and `isolation: "worktree"`.
 - Brief each with the unit, its check, and file pointers, not pasted context.
