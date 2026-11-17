@@ -1,0 +1,356 @@
+{
+  "schema": 1,
+  "upstream": {
+    "repo": "cursor/plugins",
+    "ref": "main",
+    "tree": "harness/pstack/claude-code",
+    "license": "MIT, Copyright (c) 2026 Lauren Tan",
+    "sha": "3fa33bb0f927bea2ccacd48a3cfda95145fb6bae",
+    "version": "0.15.43"
+  },
+  "exclude": [
+    {
+      "path": "skills/statechart/scripts/test/",
+      "reason": "도구 자체의 테스트 말뭉치 3.6MB. 실행에는 쓰이지 않는다"
+    },
+    {
+      "path": "docs/guide/images/",
+      "reason": "가이드 스크린샷 2.2MB. 링크는 GitHub 원본으로 바꾼다"
+    },
+    {
+      "path": "skills/poteto-mode/playbooks/worktree-cleanup.md",
+      "reason": "워크트리·시뮬레이터·캐시를 지우는 절차(git worktree remove --force, rm -rf, simctl delete all). 읽기 전용인 scripts/worktree-audit.sh 만 가져온다"
+    }
+  ],
+  "items": {
+    "agents/comment-sicko": {
+      "mode": "follow",
+      "hash": "7ef7f1f7a685c26b",
+      "out": "6fe2126bc60e4f2e"
+    },
+    "agents/poteto-agent": {
+      "mode": "follow",
+      "hash": "42c73e9a83d6f092",
+      "out": "a22a6e6f81a9993d"
+    },
+    "architect": {
+      "mode": "follow",
+      "hash": "bb1d23b535f4a6dd",
+      "out": "c47f4d1a2f952f9b"
+    },
+    "arena": {
+      "mode": "follow",
+      "hash": "2d202fd128c56db4",
+      "out": "aef3143840bc232a"
+    },
+    "automate-me": {
+      "mode": "follow",
+      "hash": "e4445f6803505406",
+      "out": "78b10449ba998efa"
+    },
+    "automations/benny": {
+      "mode": "unusable",
+      "reason": "Cursor Automations(슬랙 이슈 분류 루틴) 전용. Claude Code에는 Automations가 없다"
+    },
+    "benchmark-checklist": {
+      "mode": "follow",
+      "hash": "b72ea2e7c24e06e7",
+      "out": "a4c8baad0c234c11"
+    },
+    "blast-radius": {
+      "mode": "merge",
+      "into": "skills/blast-radius",
+      "hash": "f53b57922214e09a"
+    },
+    "bro": {
+      "mode": "follow",
+      "hash": "eae5c7d7b3fbca8f",
+      "out": "a528d8a53fbebfc6"
+    },
+    "correct": {
+      "mode": "merge",
+      "into": "skills/correct",
+      "hash": "678d609173508012"
+    },
+    "create-formal-verification-skill": {
+      "mode": "follow",
+      "hash": "a4f20c16e459fe05",
+      "out": "563ce600397a597d"
+    },
+    "create-verification-skill": {
+      "mode": "merge",
+      "into": "skills/create-verify",
+      "hash": "0b3dff3fed2f68cb"
+    },
+    "docs/guide": {
+      "mode": "follow",
+      "hash": "6e3cf9581e582087",
+      "out": "b872356cde9dc9b8"
+    },
+    "docs/harness": {
+      "mode": "merge",
+      "into": "references/pstack-adapter.md",
+      "hash": "4299c772eb8389f6"
+    },
+    "figure-it-out": {
+      "mode": "follow",
+      "hash": "7b624858c6b3a501",
+      "out": "3f80008ef6fe3feb"
+    },
+    "how": {
+      "mode": "merge",
+      "into": "skills/how",
+      "hash": "abb39204d98a40d8"
+    },
+    "in-your-own-words": {
+      "mode": "follow",
+      "hash": "aeba3be35c0bbe74",
+      "out": "fcbba01747bb5c5c"
+    },
+    "interrogate": {
+      "mode": "follow",
+      "hash": "284021300a250ff3",
+      "out": "80846d434c34f468"
+    },
+    "ketchup": {
+      "mode": "follow",
+      "hash": "f15f6c51f0081822",
+      "out": "a444feaeb23b6ef8"
+    },
+    "ketchup-video": {
+      "mode": "follow",
+      "hash": "e76ad68bffc3868d",
+      "out": "34611a8b6b7bb3aa"
+    },
+    "maintain-formal-verification-skill": {
+      "mode": "follow",
+      "hash": "c981f5c9ef87cfdc",
+      "out": "a6d6657a8f3abaed"
+    },
+    "maintain-verification-skill": {
+      "mode": "merge",
+      "into": "skills/create-verify",
+      "hash": "1f9ad86ad133fc5e"
+    },
+    "make-bot-ui": {
+      "mode": "skip",
+      "reason": "원격 스크립트를 sudo 로 실행하고(curl tailscale install.sh | sudo sh) 웹훅 키를 다루며 서버를 0.0.0.0 에 연다. Cursor Automations(Grok Bot 루틴) 전용이기도 하다"
+    },
+    "no-comments": {
+      "mode": "follow",
+      "hash": "a9d9071656f0c8a7",
+      "out": "6c23fb5bafcce69d"
+    },
+    "poteto-help": {
+      "mode": "follow",
+      "hash": "7f6c814bcad6f89b",
+      "out": "6eac9b4d8f08b3e2"
+    },
+    "poteto-mode": {
+      "mode": "follow",
+      "hash": "ee088e9000353ea5",
+      "out": "01f8b9f5735df256"
+    },
+    "principle-attack-the-premise": {
+      "mode": "follow",
+      "hash": "930e1c3faeec7631",
+      "out": "bc2866f714ee3511"
+    },
+    "principle-boundary-discipline": {
+      "mode": "follow",
+      "hash": "b80d96e8791b4ae3",
+      "out": "7682f4c5470cc5cf"
+    },
+    "principle-build-the-lever": {
+      "mode": "follow",
+      "hash": "fdb9bf39d66512b6",
+      "out": "437a70d1e7819e48"
+    },
+    "principle-encode-lessons-in-structure": {
+      "mode": "follow",
+      "hash": "3248c7b0d87772e4",
+      "out": "7c1079a89f48ba51"
+    },
+    "principle-exhaust-the-design-space": {
+      "mode": "follow",
+      "hash": "62eab4779e832f79",
+      "out": "ab916742c0b435dc"
+    },
+    "principle-experience-first": {
+      "mode": "follow",
+      "hash": "4b29a5c1d0ca970a",
+      "out": "9c49536f332338b8"
+    },
+    "principle-explain-the-number": {
+      "mode": "follow",
+      "hash": "f5ea03138d640f7c",
+      "out": "3c835ed5df590729"
+    },
+    "principle-fix-root-causes": {
+      "mode": "follow",
+      "hash": "5560728040edb99c",
+      "out": "a1dc1ead2e9aa6b3"
+    },
+    "principle-foundational-thinking": {
+      "mode": "follow",
+      "hash": "0144c5382a8ad0e0",
+      "out": "97a1bedbed9d8b33"
+    },
+    "principle-guard-the-context-window": {
+      "mode": "follow",
+      "hash": "6fe2f7364aa17d4e",
+      "out": "fcc25489b51e0366"
+    },
+    "principle-laziness-protocol": {
+      "mode": "follow",
+      "hash": "802250bbc2f37414",
+      "out": "eaac0e88753623ac"
+    },
+    "principle-make-operations-idempotent": {
+      "mode": "follow",
+      "hash": "2551f87dc2f6312c",
+      "out": "5b26a34741555ee6"
+    },
+    "principle-migrate-callers-then-delete-legacy-apis": {
+      "mode": "follow",
+      "hash": "22ef66244077aae8",
+      "out": "31ed5a7f84cc877b"
+    },
+    "principle-minimize-reader-load": {
+      "mode": "follow",
+      "hash": "f4dd698913ff2434",
+      "out": "2b0f0ab2edff1015"
+    },
+    "principle-model-the-domain": {
+      "mode": "follow",
+      "hash": "77647cf6016b4987",
+      "out": "01508f843b0a79a2"
+    },
+    "principle-never-block-on-the-human": {
+      "mode": "follow",
+      "hash": "75769e8da6645ead",
+      "out": "4faf03dfaa9a55e3"
+    },
+    "principle-outcome-oriented-execution": {
+      "mode": "follow",
+      "hash": "351fa4751a22c8d7",
+      "out": "212d40f73557ded6"
+    },
+    "principle-prove-it-works": {
+      "mode": "follow",
+      "hash": "256beb3afe26fb2c",
+      "out": "3a28767b30ae59bd"
+    },
+    "principle-redesign-from-first-principles": {
+      "mode": "follow",
+      "hash": "66f79b67d2693c29",
+      "out": "0fe2d48352bb3bb0"
+    },
+    "principle-separate-before-serializing-shared-state": {
+      "mode": "follow",
+      "hash": "da24262e7b4d53cb",
+      "out": "6c1d58005a05fab3"
+    },
+    "principle-sequence-verifiable-units": {
+      "mode": "follow",
+      "hash": "fe7b0705dcb432de",
+      "out": "8afb731d49666a59"
+    },
+    "principle-subtract-before-you-add": {
+      "mode": "follow",
+      "hash": "d4899866bf51f2c6",
+      "out": "4160d771f87ded0d"
+    },
+    "principle-test-behavior-not-implementation": {
+      "mode": "follow",
+      "hash": "c3b70f28c5e48573",
+      "out": "b61aa45ee8525844"
+    },
+    "principle-type-system-discipline": {
+      "mode": "follow",
+      "hash": "c4e34f0b9c8c5827",
+      "out": "2d48dc62af17f97e"
+    },
+    "recall": {
+      "mode": "follow",
+      "hash": "d474369fdb3657fa",
+      "out": "decd947cdf455727"
+    },
+    "reflect": {
+      "mode": "follow",
+      "hash": "86cbaf1f6030c3d6",
+      "out": "a9615ed0356567fd"
+    },
+    "root/.claude-plugin/plugin.json": {
+      "mode": "skip",
+      "reason": "pstack 플러그인 매니페스트(Claude Code용 사본)"
+    },
+    "root/LICENSE": {
+      "mode": "follow",
+      "hash": "8bcd4085051098c2",
+      "out": "77cddaa916168031"
+    },
+    "root/README.md": {
+      "mode": "skip",
+      "reason": "pstack 설치·소개 문서. gbase는 자체 README를 쓰고, 이 파일을 가리키는 링크는 GitHub 원본으로 바꾼다"
+    },
+    "root/plugin.json": {
+      "mode": "skip",
+      "reason": "pstack 플러그인 매니페스트. 버전만 upstream.version 에 기록한다"
+    },
+    "setup-pstack": {
+      "mode": "skip",
+      "reason": "모든 세션에 로드되는 ~/.claude/rules/pstack-models.md 를 쓴다. gbase는 슬롯별 모델(factory.json)과 사용자 규칙으로 모델을 정하고, 역할별 모델은 references/pstack-adapter.md 의 Models 표가 대신한다"
+    },
+    "sharpen": {
+      "mode": "follow",
+      "hash": "8ff492fe50764506",
+      "out": "b832105aace4b275"
+    },
+    "show-me-your-work": {
+      "mode": "follow",
+      "hash": "f9d346dfcb8eaa17",
+      "out": "9d64cae923b0a2f6"
+    },
+    "statechart": {
+      "mode": "follow",
+      "hash": "3d4742b468212287",
+      "out": "b7f4610e054d7d74"
+    },
+    "swarm": {
+      "mode": "follow",
+      "hash": "b18ae64b1724df74",
+      "out": "c3b5d8dc622a2e92"
+    },
+    "tdd": {
+      "mode": "follow",
+      "hash": "7113ea45679d9280",
+      "out": "e7d5be8947a62a60"
+    },
+    "teach": {
+      "mode": "follow",
+      "hash": "9c4e9023191e1485",
+      "out": "8c5c8b6f5d95ace5"
+    },
+    "technical-writing": {
+      "mode": "follow",
+      "hash": "05cac1b8a5f18217",
+      "out": "779ac33a6b6eafa5"
+    },
+    "typescript-best-practices": {
+      "mode": "follow",
+      "hash": "049f1791d73d9711",
+      "out": "8ccf80821daf8493"
+    },
+    "unslop": {
+      "mode": "merge",
+      "into": "skills/unslop",
+      "hash": "fba58f0418f66641"
+    },
+    "why": {
+      "mode": "merge",
+      "into": "skills/why",
+      "hash": "659b5583bc01d9a8"
+    }
+  }
+}
