@@ -1,0 +1,50 @@
+{
+  "unit": "characters of instruction text one PR run loads into its main session",
+  "note": "limit = the ceiling check.py enforces now; target = where the route has to end up. Lower a limit whenever a route shrinks; raising one needs a reason in the PR.",
+  "routes": {
+    "low": {
+      "target": 25000,
+      "limit": 47600,
+      "reads": [
+        "plugins/base/skills/work/SKILL.md",
+        "plugins/base/skills/go/SKILL.md",
+        "plugins/base/skills/branch-pr/SKILL.md",
+        "plugins/base/skills/monitor/SKILL.md",
+        "plugins/base/skills/polish/SKILL.md",
+        "plugins/base/skills/unslop/SKILL.md"
+      ]
+    },
+    "medium": {
+      "target": 40000,
+      "limit": 68400,
+      "extends": "low",
+      "reads": [
+        "plugins/base/skills/review/SKILL.md",
+        "plugins/base/skills/compat-check/SKILL.md",
+        "plugins/base/skills/branch-pr/references/pr-body.md"
+      ]
+    },
+    "high": {
+      "target": null,
+      "limit": null,
+      "extends": "medium",
+      "reads": []
+    }
+  },
+  "extras": {
+    "headless": {
+      "note": "an unattended run settles the PR instead of watching it, and reviews low-risk changes before the PR",
+      "limit": 13700,
+      "reads": [
+        "plugins/base/skills/monitor/references/settle.md",
+        "plugins/base/skills/monitor/references/merge.md",
+        "plugins/base/skills/review/SKILL.md"
+      ]
+    },
+    "ui": {
+      "note": "a change to what a user sees",
+      "limit": null,
+      "reads": ["plugins/base/skills/design-taste/SKILL.md"]
+    }
+  }
+}
