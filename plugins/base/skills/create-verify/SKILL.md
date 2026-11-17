@@ -30,16 +30,16 @@ Answer from the codebase; ask only what can't be observed (test account credenti
 - **Observe** — screenshots, accessibility snapshots, response bodies, logs, exit codes, DB rows.
 - **Isolate** — can two instances run side by side? If not, the skill must refuse to drive an instance it didn't start; corrupting the user's dev session is worse than a skipped check.
 
-If the checkout doesn't build or start, fix that or report it precisely first — a skill written against a broken base teaches wrong steps.
+If the checkout doesn't build or start, fix that or report it precisely first — a skill written against a broken base teaches wrong steps. When a missing asset the feature doesn't need blocks startup (a static dir the API never serves, a sample config), the generated skill may create it. It marks the asset as verification scaffolding and removes it in cleanup.
 
 ## 2. Generate the skill
 
 Write `.claude/skills/verify-<app>/SKILL.md` with frontmatter (`name: verify-<app>`, and a `description` naming the app, surface, and when to use it — without frontmatter it never registers). Sections, each filled from what step 1 found, no placeholders:
 
-- **Launch** — exact command, and how to tell it's *usable* (a health check can pass while migrations still run). Reaches a usable state from empty data, seeds included. Teardown command.
+- **Launch** — exact command, and how to tell it's *usable* (a health check can pass while migrations still run). Reaches a usable state from empty data, migrations and seeds included. Teardown command. A short-lived CLI or TUI has no server to keep alive: launch builds the binary (or installs deps) once, and each drive starts in its own isolated PTY or tmux session.
 - **Doctor** — one read-only check: process up, right build, port owned by this run, auth valid. Run first, and again after anything surprising.
 - **Drive** — the real selectors/commands from this repo. Stable handles (accessibility labels, test IDs, routes, prompt strings) over coordinates.
-- **Evidence** — what to capture and where (`artifacts/verify/<feature>/`, gitignored). Proof standards: drive the real user path, not internal setters or test-only endpoints; capture the action *and* the resulting state; check side effects (rows, files, requests) alongside the screen; a dry-run's claims are verified by observation, not by its name.
+- **Evidence** — what to capture and where (`artifacts/verify/<feature>/`, gitignored). Proof standards: drive the real user path, not internal setters or test-only endpoints; capture the action *and* the resulting state; check side effects (rows, files, requests) alongside the screen; mocks only where a production boundary already isolates the external system; what a dry-run or test mode skips is verified by observation (files, network, git refs), not by its name — some still touch the network or open a browser.
 - **Cleanup** — kill only what this run started, never by process name. Cleanup never deletes evidence.
 - **Helpers** — any shipped script is executable and its invocation appears in the body.
 
@@ -51,15 +51,23 @@ Write `.claude/skills/verify-<app>/SKILL.md` with frontmatter (`name: verify-<ap
 
 Run the generated skill end to end once: launch → doctor → drive ONE mapped feature → capture evidence → cleanup → confirm the evidence still exists. Run cleanup after every failed iteration too, so broken attempts don't strand processes or ports. **A generated skill that was never executed is a draft, not a deliverable** — report it as such if the run can't complete.
 
-Add `artifacts/verify/` to `.gitignore`. Leave the skill uncommitted for `/gbase:go`.
+If the run was proved in a stand-in for the real target (a container for a fresh VM, a local stack for a remote one, a simulator for a device), list every setup step the stand-in did that the target won't. Those steps stay unverified until a run on the real target covers them.
+
+Add `artifacts/verify/` to `.gitignore`. Leave the skill uncommitted for `/gbase:go`, and tell the user `/gbase:create-verify --maintain` keeps the map honest as the app changes (a cadence only if they ask).
 
 ## --maintain
 
 A feature map rots as the app changes. Locate `.claude/skills/verify-*/` or `.claude/skills/verify/` (several → ask, *headless:* each in turn; none → stop and offer create mode).
 
 1. **Index hygiene** — README index vs. feature files: missing, extra, dead entries.
-2. **Source wave** — one read-only sub-agent per feature file, in parallel, with `model: "sonnet"` (the live pass re-checks whatever they claim): how the feature works now from source, likely drift with `file:line`, one live recipe. They never drive the app or edit.
-3. **Live pass** — required even when source looks clean. The main agent drives every feature at least once, doctor before the first drive and after any failure. An unreachable feature is reported with the missing prerequisite and the route tried.
-4. **Triage** — wrong description → fix the map; working behavior the harness can't drive → fix the harness and re-drive it; app actually broken → product regression, report it to the user and **don't paper over it in the map**.
+2. **Source wave** — one read-only sub-agent per feature file, in parallel, with `model: "sonnet"` (the live pass re-checks whatever they claim): each returns a feature summary, source entry points, likely drift with `file:line` (or none), and one live recipe. They never drive the app or edit.
+3. **Reconcile** — every feature file has a returned summary. Merge overlapping recipes into as few app states as practical; spot-check cited drift, don't re-prove clean claims. Sweep recent commits for user-facing surfaces the map lacks, and call one missing only with a concrete source path.
+4. **Live pass** — required even when source looks clean. The main agent drives every feature at least once, following the skill's own Launch model. These hold whatever fails:
+   - Never drive an instance that hasn't passed doctor since it last surprised you: doctor before the first drive, on each fresh session, and after any failed drive. Where doctor can't see the failure (a wedged UI on a healthy process), reset to a known state or relaunch.
+   - Evidence captured so far survives every cleanup — checked at its named location, not assumed.
+   - Nothing a drive started outlives its use: failed-iteration residue is cleaned whether the session is stuck, exited, or shared (on a shared instance, clean the residue, not the instance). Final teardown comes after the last drive, re-proofs included.
+   - A doctor failure caused by skill drift is a drift finding: fix it, restart only what the fix invalidated, and retry once. Call the pass `blocked` only if it still fails.
+   - A feature is `verified-unreachable` only with the concrete prerequisite (auth, entitlement, OS, external state) and the route tried. A prerequisite the map omits is itself drift.
+5. **Triage** — wrong or missing user-POV description → fix the map; working behavior the harness can't drive → fix the harness (same Helpers rule as generation) and re-drive it live before it counts; app actually broken → product regression, report it to the user and **don't paper over it in the map**.
 
-Edit only the verify skill's own directory. Outcome is one of `clean` (no edits), `changed` (list proven corrections), `blocked` (what stopped it).
+Edit only the verify skill's own directory, never product code. Outcome is one of `clean` (every feature got source and live coverage, no edits), `changed` (re-read every changed file, list the proven corrections, and leave them uncommitted for `/gbase:go`), `blocked` (what stopped it). Report the coverage with the outcome. Run notes (features covered, unreachable prerequisites, confirmed drift) stay in a scratch dir, uncommitted.
