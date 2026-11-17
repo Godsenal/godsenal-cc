@@ -1,0 +1,534 @@
+#!/usr/bin/env python3
+"""The PR state gbase:monitor acts on: one `gh` query, classified, with what to do next.
+
+  pr-status [--pr N] [--start] [--merge] [--verified-locally]   one snapshot
+  pr-status wait [--timeout 270] [--interval 30] [--handled] [...]   --until-settled: poll until something needs action, then the snapshot
+  pr-status watch [--interval 30] [...]                          for the Monitor tool: one line per state change, until merge/close
+
+  --start             begin a watch: forget earlier heads and timers for this PR
+  --merge             also judge the merge gate and print the merge command
+  --verified-locally  the caller's local checks passed this run (lets a merge past checks that never started)
+  --handled           wait only: what was open at the first poll is already dealt with locally; return on something new or when all concludes
+
+`next:` lines are in the order to handle them. A `settle:` line is the verdict to report when nothing more can be fixed.
+State (first-seen time per head, links already shown) is kept in <git-dir>/gbase/pr-status-<n>.json.
+"""
+import calendar
+import json
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+GIVE_UP_SECONDS = 30 * 60   # into the wait on one head
+MAX_PUSHED_HEADS = 3        # fixes pushed in one watch before the approach itself is the problem
+CHECK_GRACE_SECONDS = 120   # checks can take a minute to register after a push
+TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+# GitHub's own annotation for a job the account couldn't start; a test named "billing" must not match
+NOT_STARTED = re.compile(r"not started because|recent account payments have failed|spending limit needs to be increased", re.I)
+NOT_A_TRY_LINK = re.compile(r"^https?://docs\.|badge|\.(svg|png|jpe?g|gif)(\?|$)", re.I)
+PUSH_TRIGGER = re.compile(r"^\s*push:|^(on|'on'|\"on\"):\s*\[?[^\n#]*\bpush\b|^\s*-\s*push\s*$", re.M)
+LINK_HOSTS = re.compile(
+    r"https?://[^\s)\]>\"'|]*(?:expo\.dev|exp\.host|vercel\.app|netlify\.app|pages\.dev|web\.app|testflight\.apple\.com|"
+    r"appdistribution\.firebase\.(?:dev|google\.com)|chromatic\.com|play\.google\.com/apps/(?:internaltest|testing))[^\s)\]>\"'|]*", re.I)
+
+QUERY = """
+query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){
+  pullRequest(number:$number){
+    number url state isDraft mergeable mergeStateStatus reviewDecision baseRefName headRefName headRefOid
+    commits(last:1){nodes{commit{author{user{login}} statusCheckRollup{contexts(first:100){nodes{__typename
+      ... on CheckRun{name status conclusion startedAt detailsUrl databaseId isRequired(pullRequestNumber:$number) checkSuite{app{slug}}}
+      ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}}
+    reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:50){nodes{databaseId author{login __typename} authorAssociation body createdAt url}}}}
+    reviews(last:50){nodes{databaseId author{login __typename} authorAssociation state body submittedAt commit{oid} url}}
+    comments(last:50){nodes{databaseId author{login __typename} authorAssociation body createdAt updatedAt url}}
+    reviewRequests(first:20){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login}}}}
+  }
+  pullRequests(states:MERGED,first:5,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{
+    reviews(first:30){nodes{author{login __typename}}}}}
+}}"""
+
+
+ANNOTATIONS = {}
+
+
+class GhError(Exception):
+    pass
+
+
+def sh(cmd, check=True):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as e:
+        raise GhError(f"can't run {cmd[0]} — {e.strerror}")
+    if check and p.returncode:
+        message = (p.stderr or p.stdout).strip()
+        raise GhError(message.splitlines()[-1] if message else f"{cmd[0]} exited {p.returncode}")
+    return p.stdout.strip()
+
+
+# --- classification (pure) -------------------------------------------------
+
+def epoch(iso):
+    return calendar.timegm(time.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")) if iso else 0  # GitHub timestamps are UTC
+
+
+def login(author):
+    return (author or {}).get("login") or "ghost"
+
+
+def is_bot(author):
+    return (author or {}).get("__typename") == "Bot" or login(author).endswith("[bot]")
+
+
+def bot_key(name):
+    return re.sub(r"\[bot\]$", "", name or "").lower()
+
+
+def check_kind(node, annotations=()):
+    """passed / failed / pending / skipped / not-started (a job the account couldn't start: not a diff failure)."""
+    if node.get("__typename") == "StatusContext":
+        state = node.get("state")
+        return {"SUCCESS": "passed", "PENDING": "pending", "EXPECTED": "pending"}.get(state, "failed")
+    if node.get("status") != "COMPLETED":
+        return "pending"
+    conclusion = node.get("conclusion")
+    if conclusion in ("SUCCESS", "NEUTRAL"):
+        return "passed"
+    if conclusion == "SKIPPED":
+        return "skipped"
+    if any(NOT_STARTED.search(a or "") for a in annotations):
+        return "not-started"
+    return "failed"
+
+
+def first_line(body, width=110):
+    line = next((l.strip() for l in (body or "").splitlines() if l.strip()), "")
+    return line if len(line) <= width else line[: width - 1] + "…"
+
+
+def normalize(data, me, annotations=lambda check_id: (), polls=()):
+    """GraphQL response -> the snapshot every decision below reads. `polls`: when earlier snapshots of this watch were taken."""
+    repo = data["repository"]
+    pr = repo["pullRequest"]
+    commit = (pr["commits"]["nodes"] or [{}])[-1].get("commit", {})
+    rollup = ((commit.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []
+    checks = []
+    for n in rollup:
+        run = n.get("__typename") != "StatusContext"
+        notes = annotations(n["databaseId"]) if run and n.get("status") == "COMPLETED" and n.get("conclusion") not in ("SUCCESS", "NEUTRAL", "SKIPPED") and n.get("databaseId") else ()
+        checks.append({"name": n.get("name") or n.get("context"), "kind": check_kind(n, notes), "required": bool(n.get("isRequired")),
+                       "url": n.get("detailsUrl") or n.get("targetUrl") or "", "id": n.get("databaseId"),
+                       "app": bot_key(((n.get("checkSuite") or {}).get("app") or {}).get("slug")), "started": epoch(n.get("startedAt"))})
+
+    threads = pr["reviewThreads"]["nodes"] or []
+    thread_comments = [c for t in threads for c in t["comments"]["nodes"]]
+    reviews = pr["reviews"]["nodes"] or []
+    comments = pr["comments"]["nodes"] or []
+    # reviewers only: a bot that merely comments (a deploy preview, an issue link-back) is never waited on
+    expected = set()
+    merged_reviews = [x for m in repo.get("pullRequests", {}).get("nodes") or [] for x in m["reviews"]["nodes"]]
+    for group in merged_reviews, thread_comments, reviews:
+        expected |= {bot_key(login(x["author"])) for x in group if is_bot(x.get("author"))}
+    requested = {bot_key(login(r["requestedReviewer"])) for r in pr["reviewRequests"]["nodes"]
+                 if (r.get("requestedReviewer") or {}).get("__typename") == "Bot"}
+    expected |= requested
+    expected.discard(bot_key(me))
+    expected -= {"github-actions"}  # posts check summaries, reviews nothing
+
+    def trusted(author, assoc):
+        return assoc in TRUSTED_ASSOCIATIONS or (is_bot(author) and bot_key(login(author)) in expected)
+
+    items = []
+    for t in threads:
+        cs = t["comments"]["nodes"]
+        if t["isResolved"] or not cs or login(cs[-1]["author"]) == me:
+            continue  # resolved, or already answered by us
+        last = cs[-1]
+        items.append({"type": "thread", "id": cs[0]["databaseId"], "author": login(last["author"]), "assoc": last.get("authorAssociation"),
+                      "bot": is_bot(last["author"]), "trusted": trusted(last["author"], last.get("authorAssociation")),
+                      "where": f"{t.get('path')}:{t.get('line') or '?'}" + (" (outdated)" if t.get("isOutdated") else ""),
+                      "quote": first_line(last["body"]), "url": last.get("url"), "suggestion": "```suggestion" in (last["body"] or "")})
+    latest_review = {}
+    for r in reviews:
+        if r["state"] in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
+            latest_review[login(r["author"])] = r
+    for who, r in latest_review.items():
+        if r["state"] == "CHANGES_REQUESTED" and who != me:
+            items.append({"type": "changes-requested", "id": r["databaseId"], "author": who, "assoc": r.get("authorAssociation"),
+                          "bot": is_bot(r["author"]), "trusted": trusted(r["author"], r.get("authorAssociation")), "where": "review",
+                          "quote": first_line(r["body"]) or "(no summary — see its inline comments)", "url": r.get("url"), "suggestion": False})
+    mine = [epoch(c["createdAt"]) for c in comments if login(c["author"]) == me]
+    answered_until = max(mine) if mine else 0
+    # our comment answers what we had seen when we wrote it: a comment that arrived after the last snapshot before it is still open
+    answered_until = max([t for t in polls if t < answered_until], default=answered_until)
+    notes = []  # a bot's PR-level text is shown once, not waited on: it may be a preview link or a list of findings
+    for c in comments:
+        if is_bot(c["author"]) and login(c["author"]) != me:
+            notes.append({"id": c["databaseId"], "author": login(c["author"]), "quote": first_line(c["body"]),
+                          "at": c.get("updatedAt") or c["createdAt"], "url": c.get("url")})
+    for r in reviews:
+        if is_bot(r["author"]) and r["state"] == "COMMENTED" and (r["body"] or "").strip() and login(r["author"]) != me:
+            notes.append({"id": r["databaseId"], "author": login(r["author"]), "quote": first_line(r["body"]), "at": r["submittedAt"], "url": r.get("url")})
+    for c in comments:  # a person's PR-level comment is open until we comment after it
+        if login(c["author"]) == me or is_bot(c["author"]) or epoch(c["createdAt"]) <= answered_until:
+            continue
+        items.append({"type": "comment", "id": c["databaseId"], "author": login(c["author"]), "assoc": c.get("authorAssociation"), "bot": False,
+                      "trusted": trusted(c["author"], c.get("authorAssociation")), "where": "conversation",
+                      "quote": first_line(c["body"]), "url": c.get("url"), "suggestion": False})
+    for r in reviews:
+        if r["state"] == "COMMENTED" and (r["body"] or "").strip() and login(r["author"]) != me and not is_bot(r["author"]) \
+                and epoch(r["submittedAt"]) > answered_until:
+            items.append({"type": "review", "id": r["databaseId"], "author": login(r["author"]), "assoc": r.get("authorAssociation"), "bot": False,
+                          "trusted": trusted(r["author"], r.get("authorAssociation")), "where": "review",
+                          "quote": first_line(r["body"]), "url": r.get("url"), "suggestion": False})
+
+    head = pr["headRefOid"]
+    starts = [c["started"] for c in checks if c["started"]]
+    pushed = min(starts) if starts else None  # the first check on a head starts right after its push
+    activity = {}
+
+    def bump(author, when):
+        if is_bot(author):
+            key = bot_key(login(author))
+            activity[key] = max(activity.get(key, 0), when)
+
+    for r in reviews:  # a review of this head counts whenever it was written
+        bump(r["author"], float("inf") if (r.get("commit") or {}).get("oid") == head else epoch(r["submittedAt"]))
+    for c in comments:
+        bump(c["author"], epoch(c.get("updatedAt") or c["createdAt"]))
+    for c in thread_comments:
+        bump(c["author"], epoch(c["createdAt"]))
+    concluded_apps = {c["app"] for c in checks if c["app"] and c["kind"] != "pending"} - {c["app"] for c in checks if c["kind"] == "pending"}
+
+    links = []
+    sources = [(login(c["author"]), c["body"]) for c in comments if is_bot(c["author"])] + [(c["name"], c["url"]) for c in checks]
+    for source, text in sources:
+        for url in (u.rstrip(".,") for u in LINK_HOSTS.findall(text or "")):
+            if url not in [l["url"] for l in links] and not NOT_A_TRY_LINK.search(url):
+                links.append({"url": url, "source": source})
+
+    return {"number": pr["number"], "url": pr["url"], "state": pr["state"], "draft": pr["isDraft"], "head": head,
+            "mergeable": pr["mergeable"], "merge_state": pr["mergeStateStatus"], "review_decision": pr.get("reviewDecision"),
+            "base": pr["baseRefName"], "branch": pr["headRefName"], "pushed": pushed, "notes": notes,
+            "head_is_mine": login(((commit.get("author") or {}).get("user"))) == me,
+            "checks": checks, "items": items, "expected": sorted(expected), "activity": activity,
+            "concluded_apps": sorted(concluded_apps), "links": links}
+
+
+def waiting_bots(snap, since):
+    """Expected automated reviewers with nothing on this head yet: no review of it, no comment or edit after `since`, no concluded check."""
+    return [b for b in snap["expected"] if snap["activity"].get(b, 0) < since and b not in snap["concluded_apps"]]
+
+
+def by_kind(snap, kind):
+    return [c for c in snap["checks"] if c["kind"] == kind]
+
+
+def decide(snap, first_seen, now, pushed=0, settle_rules=True):
+    """What the snapshot means: `next` steps in order, the settle verdict, and whether the head has settled.
+
+    `pushed`: heads of ours that arrived during this watch. `settle_rules`: the --until-settled limits (30 minutes a head, three pushed fixes)."""
+    sha = snap["head"][:7]
+    if snap["state"] != "OPEN":
+        return {"next": [f"done — the PR is {snap['state'].lower()}; print a one-line summary and stop"], "settled": True, "settle": None,
+                "waiting": [], "pending": [], "waited": 0}
+    since = snap["pushed"] or first_seen
+    waited = max(0, now - first_seen)
+    failed, pending, unstarted = by_kind(snap, "failed"), by_kind(snap, "pending"), by_kind(snap, "not-started")
+    waiting = waiting_bots(snap, since)
+    registering = not snap["checks"] and waited < CHECK_GRACE_SECONDS
+    conflict = snap["mergeable"] == "CONFLICTING"
+    timed_out = settle_rules and waited >= GIVE_UP_SECONDS
+    computing = snap["mergeable"] == "UNKNOWN"  # GitHub hasn't worked out mergeability yet: a conflict may be hiding
+    settled = not pending and not waiting and not registering and not computing
+
+    nxt, human = [], []
+    if conflict:
+        nxt.append("conflict — read references/conflicts.md (CI keeps failing on the merge commit while it stands)")
+        human.append(f"병합 충돌(base: {snap['base']})")
+    if snap["items"]:
+        nxt.append(f"comments — {len(snap['items'])} open; classify each by references/comments.md and reply once")
+        human += [f"{i['author']} {i['where']}" for i in snap["items"]]
+    if failed:
+        nxt.append("ci — " + ", ".join(c["name"] for c in failed) + "; read the failing log, fix what the diff caused (one commit per fix); "
+                   "the same check failing twice after the same fix is a question, not a third try")
+        human += [f"실패한 체크 {c['name']}" for c in failed]
+    if unstarted:
+        human += [f"CI 미실행(계정) {c['name']}" for c in unstarted]
+    if settle_rules and pushed >= MAX_PUSHED_HEADS and (conflict or snap["items"] or failed):
+        nxt.insert(0, f"limit — {MAX_PUSHED_HEADS} fixes already pushed in this watch: push no more; report what is still open")
+
+    settle = None
+    if not settled and not timed_out:
+        what = [c["name"] for c in pending] + waiting + (["checks to register"] if registering else []) \
+            + (["GitHub's mergeability check"] if computing else [])
+        nxt.append("wait — `pr-status wait` again; still running: " + ", ".join(what))
+    elif not settled:
+        missing = [c["name"] for c in pending] + waiting + (["병합 가능 여부(GitHub 계산 중)"] if computing else [])
+        nxt.append(f"give up — {int(waited // 60)} minutes on this head; report what hasn't concluded")
+        settle = f"settle: 미확정 @{sha} — 안 옴: {', '.join(missing)}"
+    if human:
+        settle = f"settle: 사람 필요 @{sha} — {', '.join(human)}"  # wins over 미확정; only if it can't be fixed here
+        if settled and not nxt:  # nothing here to fix or wait for: say so, or `wait` would never return
+            nxt.append("unstarted — these checks never started for account reasons, not because of the diff; nothing to fix "
+                       "(with --merge: references/merge.md)")
+    elif settled:
+        settle = f"settle: 수렴 @{sha}"
+        nxt.append("settled — nothing open on this head")
+    return {"next": nxt, "settled": settled, "settle": settle, "waiting": waiting, "pending": [c["name"] for c in pending], "waited": waited}
+
+
+def merge_gate(snap, verdict, verified_locally=False):
+    """(ok, reasons) for `--merge`. The deploy-on-merge question stays with the skill: it needs the workflows read."""
+    if snap["state"] != "OPEN":
+        return False, [f"the PR is {snap['state'].lower()}"]
+    reasons = []
+    failed, unstarted = by_kind(snap, "failed"), by_kind(snap, "not-started")
+    blocking = failed  # required or not: a red check next to a merge is how 14 PRs went in broken
+    if snap["draft"]:
+        reasons.append("still a draft")
+    if snap["mergeable"] == "CONFLICTING":
+        reasons.append("merge conflict")
+    if blocking:
+        reasons.append("failing: " + ", ".join(c["name"] for c in blocking))
+    if not verdict["settled"]:
+        still = verdict["pending"] + verdict["waiting"]
+        reasons.append("not settled: " + ", ".join(still) if still else "not settled")
+    if snap["review_decision"] == "CHANGES_REQUESTED" or any(i["type"] == "changes-requested" for i in snap["items"]):
+        reasons.append("a CHANGES_REQUESTED review stands")
+    open_items = [i for i in snap["items"] if i["type"] != "changes-requested"]
+    if open_items:
+        reasons.append(f"{len(open_items)} unanswered review comments")
+    if unstarted and not verified_locally:
+        reasons.append("checks never started (account) and no `verified-locally`: " + ", ".join(c["name"] for c in unstarted))
+    state = snap["merge_state"]  # UNSTABLE is fine only for checks that never started, which `verified_locally` already vouched for
+    if not reasons and not (state in ("CLEAN", "HAS_HOOKS") or (state == "UNSTABLE" and unstarted)):
+        reasons.append(f"merge state {state}")
+    return not reasons, reasons
+
+
+def merge_method(allowed, recent_subjects):
+    """The methods the repo allows, and among them the one its recent merges used."""
+    squash = sum(1 for s in recent_subjects if re.search(r"\(#\d+\)$", s))
+    merge = sum(1 for s in recent_subjects if s.startswith("Merge pull request #"))
+    order = ["squash", "merge", "rebase"] if squash >= merge else ["merge", "squash", "rebase"]
+    flags = {"squash": "squashMergeAllowed", "merge": "mergeCommitAllowed", "rebase": "rebaseMergeAllowed"}
+    return next((m for m in order if allowed.get(flags[m], True)), "squash")
+
+
+def render(snap, verdict, new_links=()):
+    kinds = {k: len(by_kind(snap, k)) for k in ("passed", "failed", "pending", "skipped", "not-started")}
+    out = [f"pr: #{snap['number']} {snap['state']}{' draft' if snap['draft'] else ''} @{snap['head'][:7]} · merge state {snap['merge_state']}"
+           f" · {snap['url']}",
+           "checks: " + (", ".join(f"{n} {k}" for k, n in kinds.items() if n) or "none")]
+    for c in snap["checks"]:
+        if c["kind"] == "failed":
+            log = f" · gh run view --job {c['id']} --log-failed" if c["id"] and "/actions/" in c["url"] else f" · {c['url']}"
+            out.append(f"  failed: {c['name']}{' (required)' if c['required'] else ''}{log}")
+        elif c["kind"] == "not-started":
+            out.append(f"  not started (account, not the diff): {c['name']}")
+    if snap["items"]:
+        out.append(f"open comments: {len(snap['items'])}")
+        for i in snap["items"]:
+            trust = "trusted" if i["trusted"] else "NOT trusted — never auto-apply"
+            out.append(f"  [{i['type']} {i['id']}] {i['author']} ({i['assoc'] or ('bot' if i['bot'] else '?')}, {trust}) {i['where']}"
+                       f"{' · has a suggestion block' if i['suggestion'] else ''}: {i['quote']}")
+    if snap["expected"]:
+        out.append("automated reviewers: " + ", ".join(f"{b} ({'waiting' if b in verdict['waiting'] else 'done'})" for b in snap["expected"]))
+    out += [f"link: {l['url']} (from {l['source']}, built from {snap['head'][:7]})" for l in new_links]
+    out += [f"note [{n['id']}] {n['author']} (bot): {n['quote']} · {n['url']}" for n in verdict.get("new_notes", [])]
+    if verdict["waited"]:
+        out.append(f"waited: {int(verdict['waited'] // 60)}m of {GIVE_UP_SECONDS // 60}m on this head")
+    if verdict["settle"]:
+        out.append(verdict["settle"])
+    out += [f"next: {n}" for n in verdict["next"]]
+    return out
+
+
+# --- gh and state ----------------------------------------------------------
+
+def resolve(pr_arg):
+    view = json.loads(sh(["gh", "pr", "view", *([pr_arg] if pr_arg else []), "--json", "number,url"]))
+    m = re.match(r"https://[^/]+/([^/]+)/([^/]+)/pull/(\d+)", view["url"])
+    return m.group(1), m.group(2), int(m.group(3))
+
+
+def fetch(owner, repo, number, me, polls=()):
+    raw = json.loads(sh(["gh", "api", "graphql", "-f", f"query={QUERY}", "-F", f"owner={owner}", "-F", f"repo={repo}", "-F", f"number={number}"]))
+    if raw.get("errors") and not (raw.get("data") or {}).get("repository"):
+        raise GhError(raw["errors"][0].get("message", "graphql error"))
+
+    def annotations(check_id):
+        if check_id not in ANNOTATIONS:  # a concluded run's annotations don't change: ask once, not on every poll
+            try:
+                ANNOTATIONS[check_id] = [a.get("message", "") for a in json.loads(sh(["gh", "api", f"repos/{owner}/{repo}/check-runs/{check_id}/annotations"]))]
+            except (GhError, ValueError):
+                return []
+        return ANNOTATIONS[check_id]
+    return normalize(raw["data"], me, annotations, polls)
+
+
+def state_path(number):
+    git_dir = sh(["git", "rev-parse", "--absolute-git-dir"], check=False)
+    base = Path(git_dir) / "gbase" if git_dir else Path.home() / ".cache" / "gbase"
+    base.mkdir(parents=True, exist_ok=True)
+    return base / f"pr-status-{number}.json"
+
+
+def load_state(path, fresh=False):
+    if not fresh and path.exists():
+        try:
+            return json.loads(path.read_text())
+        except ValueError:
+            pass
+    return {"heads": {}, "links": []}
+
+
+def observe(state, snap, now):
+    """Record this poll in the state; returns (first-seen time of the head, links not shown before, bot notes not shown before)."""
+    if snap["head"] not in state["heads"] and state["heads"] and snap.get("head_is_mine"):
+        state["pushed"] = state.get("pushed", 0) + 1  # a head of ours that arrived during the watch: a fix we pushed
+    first_seen = state["heads"].setdefault(snap["head"], now)
+    new_links = [l for l in snap["links"] if l["url"] not in state["links"]]
+    state["links"] += [l["url"] for l in new_links]
+    keys = {f"{n['id']}@{n['at']}": n for n in snap.get("notes", [])}  # an edited comment is new again
+    shown = state.setdefault("notes", [])
+    new_notes = [n for k, n in keys.items() if k not in shown]
+    shown += [k for k in keys if k not in shown]
+    state["polls"] = (state.get("polls", []) + [now])[-200:]
+    return first_seen, new_links, new_notes
+
+
+def merge_lines(snap, verdict, owner, repo, verified_locally):
+    ok, reasons = merge_gate(snap, verdict, verified_locally)
+    if not ok:
+        return ["merge: not now — " + "; ".join(reasons)]
+    out = []
+    try:
+        allowed = json.loads(sh(["gh", "repo", "view", f"{owner}/{repo}", "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]))
+        subjects = sh(["git", "log", f"origin/{snap['base']}", "-15", "--format=%s"], check=False).splitlines()
+        method = merge_method(allowed, subjects)
+        stacked = json.loads(sh(["gh", "pr", "list", "--base", snap["branch"], "--state", "open", "--json", "number"]))
+    except (GhError, ValueError) as e:
+        return [f"merge: gate passed, but the repo's merge settings couldn't be read — {e}"]
+    for s in stacked:
+        out.append(f"merge: retarget stacked PR first — gh pr edit {s['number']} --base {snap['base']} (don't rebase or push its branch)")
+    workflows = push_workflows(Path(sh(["git", "rev-parse", "--show-toplevel"], check=False) or ".") / ".github" / "workflows")
+    if workflows:
+        out.append(f"merge: workflows that run on push — {', '.join(workflows)}. If one deploys on {snap['base']} and this PR's paths aren't "
+                   "excluded, the merge is a deploy: don't merge, a person decides (references/merge.md)")
+    out.append(f"merge: gate passed — gh pr merge {snap['number']} --{method} --delete-branch (drop --delete-branch if the repo keeps merged branches)")
+    return out
+
+
+def push_workflows(directory):
+    """Workflow files that run on push, in any of the three ways YAML lets `on:` say it."""
+    return sorted(p.name for p in directory.glob("*.y*ml") if PUSH_TRIGGER.search(p.read_text(errors="ignore")))
+
+
+def take(args, flag, default=None, cast=str):
+    if flag not in args:
+        return default
+    i = args.index(flag)
+    try:
+        value = cast(args[i + 1])
+    except (IndexError, ValueError):
+        raise SystemExit(f"error: {flag} needs a value\n\n{__doc__.strip()}")
+    del args[i:i + 2]
+    return value
+
+
+def main(argv):
+    args = list(argv)
+    mode = args.pop(0) if args and args[0] in ("wait", "watch") else "snapshot"
+    if "-h" in args or "--help" in args:
+        print(__doc__.strip())
+        return 0
+    pr_arg = take(args, "--pr")
+    timeout = take(args, "--timeout", 270, int)
+    interval = take(args, "--interval", 30, int)
+    want_merge, verified, handled = "--merge" in args, "--verified-locally" in args, "--handled" in args
+    settle_rules = mode == "wait" or "--until-settled" in args
+    try:
+        owner, repo, number = resolve(pr_arg)
+        me = sh(["gh", "api", "user", "-q", ".login"])
+    except GhError as e:
+        print(f"error: {e}\nnext: no PR for this branch → /gbase:branch-pr; no gh auth → the user runs `gh auth login`")
+        return 1
+    path = state_path(number)
+    state = load_state(path, fresh="--start" in args)
+
+    def poll():
+        polls = state.get("polls", [])
+        snap = fetch(owner, repo, number, me, polls)
+        for _ in range(3):  # mergeability is computed lazily: the first query after a push often says UNKNOWN
+            if snap["state"] != "OPEN" or snap["mergeable"] != "UNKNOWN":
+                break
+            time.sleep(2)
+            snap = fetch(owner, repo, number, me, polls)
+        now = time.time()
+        first_seen, new_links, new_notes = observe(state, snap, now)
+        verdict = decide(snap, first_seen, now, state.get("pushed", 0), settle_rules)
+        if new_notes and snap["state"] == "OPEN":
+            verdict["new_notes"] = new_notes
+            verdict["next"].insert(0, f"notes — {len(new_notes)} new bot comment(s): open each one; a finding in it is handled like a review comment "
+                                      "(references/comments.md), a preview link or a summary needs nothing")
+        path.write_text(json.dumps(state))
+        return snap, verdict, new_links
+
+    def full(snap, verdict, new_links):
+        lines = render(snap, verdict, new_links)
+        if want_merge and snap["state"] == "OPEN":
+            lines += merge_lines(snap, verdict, owner, repo, verified)
+        return lines
+
+    if mode == "snapshot":
+        try:
+            print("\n".join(full(*poll())))
+        except GhError as e:
+            print(f"error: {e}")
+            return 1
+        return 0
+
+    deadline, last, baseline = time.time() + timeout, None, None
+    while True:
+        try:
+            snap, verdict, new_links = poll()
+        except GhError as e:
+            print(f"{time.strftime('%H:%M:%S')} gh error: {e}", flush=True)
+            snap = None
+        if snap:
+            actionable = [n for n in verdict["next"] if not n.startswith("wait")]
+            if handled:  # fixed locally, so still red on the pushed head: only something new, or everything concluding, is news
+                if baseline is None:
+                    baseline = set(actionable)
+                actionable = [n for n in actionable if n not in baseline] or (verdict["next"] if verdict["settled"] else [])
+            if mode == "wait":
+                if actionable:
+                    print("\n".join(full(snap, verdict, new_links)))
+                    return 0
+                kinds = {k: len(by_kind(snap, k)) for k in ("passed", "pending")}
+                for l in new_links:  # shown once, so never dropped on a quiet poll
+                    print(f"link: {l['url']} (from {l['source']}, built from {snap['head'][:7]})")
+                print(f"{time.strftime('%H:%M:%S')} @{snap['head'][:7]} checks {kinds['passed']} passed, {kinds['pending']} pending; "
+                      f"reviewers waiting: {', '.join(verdict['waiting']) or 'none'}; {int(verdict['waited'] // 60)}m of "
+                      f"{GIVE_UP_SECONDS // 60}m", flush=True)
+            else:
+                lines = [l for l in full(snap, verdict, new_links) if not l.startswith("waited:")]
+                if lines != last:
+                    changed = [l for l in lines if last is None or l not in last]
+                    if changed:  # a line that only went away is not an event
+                        print(" ‖ ".join(l.strip() for l in changed), flush=True)
+                    last = lines
+                if snap["state"] != "OPEN":
+                    return 0
+        if mode == "wait" and time.time() + interval > deadline:
+            print("next: wait — nothing changed yet; run `pr-status wait` again")
+            return 0
+        time.sleep(interval)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
