@@ -25,6 +25,14 @@ FAKE_CLAUDE = textwrap.dedent('''\
     model = args[args.index("--model") + 1] if "--model" in args else "default"
     cfg = os.environ.get("CLAUDE_CONFIG_DIR", "")
     marker = lambda name: bool(cfg) and os.path.exists(os.path.join(cfg, name))
+    def cost(spent, sid):
+        # as claude reports it: a `--resume` session's total_cost_usd goes on from where the session stood, in
+        # another config dir too (run 20261031-224815-work-822870: 4.48 before the resume, 4.60 after it)
+        path = os.path.join(os.path.dirname(os.environ["AGENT_EVIDENCE_FILE"]), "cost-" + sid)
+        if not hasattr(cost, "base"):
+            cost.base = float(open(path).read()) if "--resume" in args and os.path.exists(path) else 0
+        open(path, "w").write(str(cost.base + spent))
+        return cost.base + spent
     if "--max-turns" in args and args[args.index("-p") + 1] == "ok":  # gbase-run's account preflight: logged-out fails it, logged-out-run doesn't
         if cfg:
             open(os.path.join(cfg, "preflights"), "a").write("x")
@@ -59,15 +67,15 @@ FAKE_CLAUDE = textwrap.dedent('''\
             open(os.path.join(cfg, "projects", "-fake-cwd", sid, "agent-1.jsonl"), "w").write("{}\\n")
         print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}}))
         open("work-" + os.path.basename(cfg) + ".txt", "w").write("x")
-        print(json.dumps({"type": "result", "result": "백그라운드 작업을 기다립니다", "num_turns": 4, "total_cost_usd": 1.0}))
+        print(json.dumps({"type": "result", "result": "백그라운드 작업을 기다립니다", "num_turns": 4, "total_cost_usd": cost(1.0, sid)}))
         if marker("limited-midrun"):  # a later turn (a background task finishing) hits the limit
             print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}}))
             print(json.dumps({"type": "result", "is_error": True, "terminal_reason": "api_error", "api_error": "usage_limit_reached",
                               "result": "You've hit your weekly limit · resets Nov 21 at 9am (Asia/Seoul)", "num_turns": 2,
-                              "total_cost_usd": 1.5}))
+                              "total_cost_usd": cost(1.5, sid)}))
             sys.exit(1)
         print(json.dumps({"type": "result", "result": "끝냈습니다\\nship: local gbase/w @abc1234 — 1 commits, not pushed\\n"
-                          "settle: 수렴 @abc1234\\n", "num_turns": 3, "total_cost_usd": 1.5}))
+                          "settle: 수렴 @abc1234\\n", "num_turns": 3, "total_cost_usd": cost(1.5, sid)}))
         sys.exit(0)
     assert "ScheduleWakeup" in args[args.index("--disallowedTools") + 1]
     assert "GITHUB_TOKEN" not in os.environ and "GBASE_NOTIFY_CMD" not in os.environ
@@ -119,16 +127,17 @@ FAKE_CLAUDE = textwrap.dedent('''\
     finals["subgo"] = finals["agent"]
     final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
-    print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-" + model, "model": model}))
-    print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.01}))
+    sid = "s-" + model
+    print(json.dumps({"type": "system", "subtype": "init", "session_id": sid, "model": model}))
+    print(json.dumps({"type": "result", "result": final, "total_cost_usd": cost(0.01, sid)}))
     if model == "stops":  # the turn ended on a review table before go: the change sits uncommitted, no PR
         if "--resume" in args and "reached its" in args[args.index("-p") + 1]:  # the wrap-up after a cap
             print(json.dumps({"type": "result", "result": "go 도중 멈췄습니다\\n남은 작업: PR 열기", "num_turns": 2,
-                              "total_cost_usd": 0.1}))
+                              "total_cost_usd": cost(0.1, sid)}))
             sys.exit(0)
         if "--resume" in args and os.environ.get("FAKE_RESUME_CAP"):  # the resumed session reaches the cap too
             print(json.dumps({"type": "result", "subtype": os.environ["FAKE_RESUME_CAP"], "is_error": True, "num_turns": 9,
-                              "total_cost_usd": 0.7}))
+                              "total_cost_usd": cost(0.7, sid)}))
             sys.exit(1)
         if "--resume" in args:
             final = "pr: https://github.com/o/r/pull/12\\nsettle: 수렴 @abc1234\\n"
@@ -136,21 +145,21 @@ FAKE_CLAUDE = textwrap.dedent('''\
         else:
             open("change.txt", "w").write("x")
             final = "| # | severity | file:line | finding | action |\\n|---|---|---|---|---|\\n| 1 | low | `a.py:1` | x | auto-fixed |\\n"
-        print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.5,
+        print(json.dumps({"type": "result", "result": final, "total_cost_usd": cost(0.5, sid),
                           "num_turns": 0 if "--resume" in args else int(os.environ.get("FAKE_FIRST_TURNS", "0"))}))
         sys.exit(0)
     if model == "capped":  # the turn cap ended the session mid-work; the wrap-up session reports what's left
         if "--resume" in args:
             open(os.path.join(run_dir, "wrapup-args"), "w").write(json.dumps(args))
             print(json.dumps({"type": "result", "result": "절반 했습니다\\n남은 작업: B 화면 붙이기\\n남은 작업: C 마이그레이션\\n"
-                                                           "결정 필요: 이어서 할지 → 멈춤", "total_cost_usd": 0.1}))
+                                                           "결정 필요: 이어서 할지 → 멈춤", "total_cost_usd": cost(0.1, sid)}))
             sys.exit(0)
         open("change.txt", "w").write("x")
         print(json.dumps({"type": "result", "subtype": os.environ.get("FAKE_CAP", "error_max_turns"), "is_error": True,
-                          "total_cost_usd": 2.0}))
+                          "total_cost_usd": cost(2.0, sid)}))
         sys.exit(1)
     if model == "twoturns":  # a later turn (a background task finishing) with no report lines
-        print(json.dumps({"type": "result", "result": "기다리던 작업이 끝났습니다. 할 일은 없습니다.", "total_cost_usd": 0.02}))
+        print(json.dumps({"type": "result", "result": "기다리던 작업이 끝났습니다. 할 일은 없습니다.", "total_cost_usd": cost(0.02, sid)}))
 ''')
 
 
@@ -561,6 +570,8 @@ class GbaseRunTest(unittest.TestCase):
         result = json.loads(Path(out[-1]).read_text())
         self.assertEqual((result["pr_url"], result["settle"]), ("https://github.com/o/r/pull/12", "settle: 수렴 @abc1234"))
         self.assertEqual((result["sessions"]["stops"]["resumed"], result["sessions"]["stops"]["cost_usd"]), (True, 1.0))
+        # the account's own part carries the resume it ran too
+        self.assertEqual([x["cost_usd"] for x in result["sessions"]["stops"]["accounts"]], [1.0])
         self.assertEqual(result["sessions"]["stops"]["tool_uses"], 11)  # 5 before the resume, 6 in it
         self.assertEqual(result["subagent_skills"], ["gbase:polish", "code-review", "gbase:unslop", "gbase:compat-check"])
         # the go that only the resumed session called gated this PR
@@ -613,10 +624,26 @@ class GbaseRunTest(unittest.TestCase):
 
     def test_a_resumed_or_wrap_up_session_keeps_its_errors_and_how_it_ended(self):
         s = {"results": ["a"], "cost_usd": 1.0, "tool_uses": 3, "turns": 4, "errors": ["e1"], "end_error": None}
-        gbase_run.merge_session(s, {"results": ["b"], "cost_usd": 0.5, "tool_uses": 2, "turns": 1, "errors": ["e2"],
-                                    "end_error": "limit", "capped": "turns", "exit_code": 1})
+        gbase_run.merge_session(s, {"results": ["b"], "cost_usd": 1.5, "tool_uses": 2, "turns": 1, "errors": ["e2"],
+                                    "end_error": "limit", "capped": "turns", "exit_code": 1}, resumed=True)
         self.assertEqual((s["tool_uses"], s["turns"], s["errors"], s["end_error"], s["capped"], s["exit_code"]),
                          (5, 5, ["e1", "e2"], "limit", "turns", 1))
+
+    def test_a_resumed_session_reports_its_cost_from_the_start_of_the_session(self):
+        # run 20261031-224815-work-822870: the log's last total_cost_usd was 4.598 and result.json said 9.08
+        s = {"results": [], "cost_usd": 1.0}
+        spent = [gbase_run.merge_session(s, {"results": [], "cost_usd": c}, resumed=r) for c, r in (
+            (1.5, True),    # the same session on: $0.5 more
+            (None, True),   # a turn that ended on an API error carries no cost
+            (2.0, False),   # a fresh session after a usage limit counts from zero
+            (2.25, True),   # the shipping resume of that fresh session
+            (2.25, True))]  # a resume that spent nothing (the next account was at its limit too)
+        self.assertEqual((s["cost_usd"], spent), (3.75, [0.5, None, 2.0, 0.25, 0.0]))
+        # a fresh session that ended with no cost is still the one the next resume counts from
+        s = {"results": [], "cost_usd": 1.5}
+        gbase_run.merge_session(s, {"results": [], "cost_usd": None, "session_id": "s-b"}, resumed=False)
+        self.assertEqual((gbase_run.merge_session(s, {"results": [], "cost_usd": 0.25}, resumed=True), s["cost_usd"]),
+                         (0.25, 1.75))
 
     def test_a_run_that_reaches_the_turn_cap_wraps_up_and_reports_what_is_left(self):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
@@ -724,7 +751,7 @@ class GbaseRunTest(unittest.TestCase):
 
     def test_subagent_skills_carry_over_a_handoff_to_the_next_account(self):
         s = {"results": ["a"], "skills": ["gbase:go"], "subagent_skills": ["gbase:polish"]}
-        gbase_run.merge_session(s, {"results": ["b"], "skills": ["gbase:monitor"], "subagent_skills": ["gbase:review"]})
+        gbase_run.merge_session(s, {"results": ["b"], "skills": ["gbase:monitor"], "subagent_skills": ["gbase:review"]}, resumed=True)
         self.assertEqual((s["skills"], s["subagent_skills"]),
                          (["gbase:go", "gbase:monitor"], ["gbase:polish", "gbase:review"]))
 
@@ -1003,6 +1030,15 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(notified[0].split()[:3], [result["run_id"], "done", "0"])
         self.assertIn("continuing on b (resume)", r.stderr)
 
+    def test_each_account_gets_the_budget_the_ones_before_it_left(self):
+        self.accounts(a=["limited-midrun"], b=["limited-midrun"], c=[])
+        _, result, legs, _, _ = self.midrun("--max-budget-usd", "20")
+        self.assertEqual([(x["cfg"], x["budget"]) for x in legs], [("a", "20.0"), ("b", "18.5"), ("c", "17.0")])
+        s = result["sessions"]["midrun"]
+        # each account spent $1.5 on the one session: its own part, and the run's total
+        self.assertEqual((s["cost_usd"], [x["cost_usd"] for x in s["accounts"]], result["budget_limit"]),
+                         (4.5, [1.5] * 3, None))
+
     def test_a_session_that_cant_be_carried_over_starts_fresh_on_the_worktree(self):
         self.accounts(a=["limited-midrun", "no-transcript"], b=[])
         _, result, legs, _, _ = self.midrun("--task", "T-77")
@@ -1012,6 +1048,7 @@ class GbaseRunTest(unittest.TestCase):
         self.assertIn("stopped at a usage limit", legs[1]["prompt"])
         self.assertIn("T-77", legs[1]["prompt"])  # the original prompt goes along
         self.assertEqual(result["sessions"]["midrun"]["session_id"], "s-mid-b")
+        self.assertEqual(result["sessions"]["midrun"]["cost_usd"], 3.0)  # two sessions, $1.5 each
 
     def test_every_account_at_its_limit_mid_run_fails_with_each_listed(self):
         self.accounts(a=["limited-midrun"], b=["limited-midrun"], c=["limited-midrun"])
