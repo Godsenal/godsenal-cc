@@ -110,6 +110,7 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 
 - Looks where grep stops: the called library's source at its pinned version (and local patches), execution timing, JSON/DB/wire formats, feature flags, code three hops downstream
 - Finds the one fact the change is safe because of and **proves it by running code** — every claim is graded on a 5-step evidence ladder (said so → `file:line` → walked the failure → ran a script → reproduced in the app), and an unproven one is labelled `unproven`
+- A big or wide change runs as an `arena`, so more than one model answers the same question
 - Deploy-ordering hazards are handed to `compat-check`; read-only on the repo (scratch scripts go to a temp dir)
 
 **work** (skill, model-invocable + session hook) — The front door for a task. Starts on its own for qualifying tasks, or as `/gbase:work <task>`. Modeled on pstack's `poteto-mode`, without its personal style — gbase now covers what pstack was used for, so pstack can be uninstalled.
@@ -187,14 +188,15 @@ Core productivity tools for Claude Code — skill discovery, autonomous branch/P
 - Interviews the repo, not the user: surface, run command, existing harness (Playwright/Maestro/Detox first), evidence, isolation
 - Generated skill has Launch / Doctor / Drive / Evidence / Cleanup sections plus a per-feature map (`features/`, four fixed sections per feature)
 - **Runs the generated skill end to end once** before handing it over — an unexecuted skill is reported as a draft
-- `--maintain` audits the map against source (one read-only sub-agent per feature) and a live pass; fixes doc/harness drift, reports real regressions instead of papering over them
+- A run proved in a stand-in (a container, a local stack, a simulator) lists the setup steps the real target still has to cover
+- `--maintain` audits the map against source (one read-only sub-agent per feature), reconciles their findings, and drives every feature live — doctor after anything surprising, evidence kept through every cleanup, nothing left running; fixes doc/harness drift, reports real regressions instead of papering over them
 - `go` runs it for features the diff touches
 
 **correct** (skill, model-invocable) — Turn mistakes agents keep repeating into checks. Adapted from pstack's `/correct` and Matt Pocock's `retro`.
 
 - Mines recent commits, reverts, PR review comments, and past session transcripts (which hold pre-PR `review` reports that never reach GitHub); a class counts once it has happened twice
 - Fixes each class at the highest level that works — architecture → types → lint/CI check whose error names the fix → test → a journey in the verify skill that the agent drives on the real app → `REVIEW.md` text last — after one multi-select confirmation
-- Proves each new check fails on a real past instance, then passes on current code
+- Proves each new check fails on a real past instance, then passes on current code; an exception needs a reason, an expiry date, and a person's approval
 - Judgment-call rules go to `REVIEW.md` (read by the reviewer, who has a diff and room), not `CLAUDE.md` (loaded into every session — pointers only); an existing-but-unwired check gets wired, not rebuilt
 - Keeps an `## Enforced rules` table in `REVIEW.md` pairing each rule with what enforces it
 - `--session` runs it as a retrospective on one session: slow navigation → a pointer, missing information → access (tee logs, read-only service access), expensive tool calls → a narrower command, checkable mistakes → the same ladder. Every candidate must cite a specific moment

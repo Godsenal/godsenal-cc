@@ -18,11 +18,13 @@ Read this index before driving the app, then use the matching feature file as th
 ## Driving conventions
 - Start every recipe from baseline unless its preconditions say otherwise.
 - Accessibility labels / test IDs over CSS selectors, coordinates, or tab order.
+- Treat every command as literal: quoted names and flags stay unchanged.
 - Restore seeded data after a mutation; never delete evidence.
 
 ## Proof
 - Capture the action and the resulting state, not only the final screen.
-- UI: screenshot + accessibility snapshot. CLI: command, stdout, stderr, exit code. Mutations: a second, read-only view of the stored value.
+- UI: screenshot with the app identity visible + accessibility snapshot. CLI: command, stdout, stderr, exit code. Mutations: a second, read-only view of the stored value.
+- Record the feature ID and entry point used with every artifact.
 - Report an unreachable entry point with the command tried and the unmet precondition. Never report a skipped entry point as verified through another path.
 
 ## Features
@@ -58,4 +60,4 @@ Preconditions:
 - Titles are trimmed on save; assert the rendered title, not the input value.
 ```
 
-Every action bullet pairs a user action with an exact command and an observable result. A proof that drives one convenient entry point is incomplete when the map lists others.
+`How to get to it` lists every entry point a user has, not only the convenient one. Every action bullet pairs a user action with an exact command and an observable result. A proof that drives one convenient entry point is incomplete when the map lists others.

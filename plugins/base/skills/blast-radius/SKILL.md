@@ -1,7 +1,7 @@
 ---
 name: blast-radius
 description: "Finds what a change could break somewhere else before it ships — beyond the diff, where grep stops — and proves the one fact it's safe because of by running real code instead of writing it up. Use for 'blast radius of X', 'what could this break', '이거 뭐 깨질 수 있어', or a small diff you don't trust yet."
-allowed-tools: Bash Read Write Glob Grep
+allowed-tools: Bash Read Write Glob Grep Agent
 ---
 
 # /gbase:blast-radius
@@ -35,6 +35,7 @@ Step 4 is usually one small script that imports the same library the app ships a
 3. **Look where grep stops.** Read the source of the library you call at its pinned version, plus any local patch (`patches/`, `patch-package`). Work out when things run: microtasks, effects and unmount, app background/foreground. Follow what a symbol search misses: JSON an API returns, a DB column, a wire format, another language reading the same bytes, a feature flag, code three hops downstream.
 4. **Be honest about each risk** — a real chance of happening and a real cost if it does. Keep the confirmed ones; list checked-and-cleared ones separately. Cite real `file:line`; a search that finds nothing is still an answer; never invent a caller or an API.
 5. **Prove the one fact** — write the script or test, run it, paste what happened. Scratch scripts go in a temp dir, not the repo.
+6. **Run a big or wide change as an arena.** `Read` [../arena/SKILL.md](../arena/SKILL.md) and follow it with this question as the task. Different models catch different real bugs. A risk only one candidate found is checked against the code before it stays.
 
 ## Reply
 
@@ -43,3 +44,5 @@ Step 4 is usually one small script that imports the same library the app ships a
 - **Risks** — how it breaks, `file:line`, how likely and how bad, how to check.
 - **Cleared** — what you checked and why it's fine.
 - **Before you merge** — the cheapest test or repro that catches the real bug, including the script you wrote.
+
+Write the reply by `gbase:unslop`'s rules. Before it goes somewhere public (a PR comment, an issue), strip anything private: secrets, customer data, internal hostnames.

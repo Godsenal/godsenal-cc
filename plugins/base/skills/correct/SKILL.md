@@ -50,7 +50,7 @@ Show the classes as `class | evidence | level | why not higher` and confirm with
 
 ## Fix and prove
 
-Fix the chosen classes, one commit each. Prove each new check fails on a real past mistake (re-apply the old hunk in a scratch `git worktree`; a journey is driven there too), then passes on current code. Run the same command locally and in CI. Exceptions go on the offending line with a reason.
+Fix the chosen classes, one commit each. Prove each new check fails on a real past mistake (re-apply the old hunk in a scratch `git worktree`; a journey is driven there too), then passes on current code. Run the same command locally and in CI. An exception goes on the offending line with a reason and an expiry date. Only a person approves one, so propose it in the reply (*headless:* a `결정 필요:` line) instead of adding it yourself; a check that can't pass on current code without the exception waits for that answer and isn't added yet.
 
 ## Keep the rule table
 

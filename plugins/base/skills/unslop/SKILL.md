@@ -21,7 +21,7 @@ Ported from pstack's `unslop` (MIT), with Korean tells added. Rewrite the text s
 ## Language
 
 - **AI vocabulary**: additionally, crucial, delve, enhance, fostering, garner, intricate, landscape, pivotal, robust, seamless, showcase, tapestry, testament, underscore, vibrant. Use the plain word.
-- **Plain words over fancy ones**: use (utilize, leverage), help (facilitate), is/has (serves as, stands as, boasts, features), if (in the event that), because (due to the fact that), to (in order to).
+- **Plain words over fancy ones**: use (utilize, leverage), help (facilitate), is/has (serves as, stands as, boasts, features), if (in the event that), because (due to the fact that), to (in order to). Delete filler that carries no fact ("it is important to note that").
 - **Abstract metaphor nouns**: substrate, wedge, vector, locus, nexus, primitive (as a noun), harness, surface ("API surface"), scaffolding, paradigm, north star, flywheel, ratchet. Pick the concrete word.
 - **Mannered prose**: aphorisms, rhetorical fragments, personified code ("the plan holds it"), figurative verbs ("rides along"). Say it literally.
 - **"Not just X, but Y"**, forced groups of three, synonym cycling (pick one name and repeat it), false ranges ("from X to Y" off any real scale).
@@ -30,13 +30,13 @@ Ported from pstack's `unslop` (MIT), with Korean tells added. Rewrite the text s
 
 ## Style
 
-- **No em dashes, en dashes, or hyphen-as-dash.** End the sentence or use a comma.
+- **No em dashes, en dashes, or hyphen-as-dash**, and no parentheses standing in for one. End the sentence or use a comma.
 - **No mid-sentence colon as a connector.** A colon before a list or an example is fine.
 - **Inline-header lists** ("**Performance:** Performance improved…") → prose. A bold lead-in ending in a period followed by new detail is fine.
 - **Boldface** only on the one thing that must not be missed. Sentence-case headings. No decorative emojis. Straight quotes.
 - **Dense or over-compressed sentences.** One idea per sentence; write the articles, verbs, and words that arrows and abbreviations replaced.
 - **Tables and bullets are prose too.** A cell or bullet that strings nouns, arrows, or terms only the author's session knows ("줄", "건별 연결", "토큰 추가") becomes a sentence a newcomer understands, saying what changed and why. Keep cells short by moving the explanation into a bullet, not by compressing it.
-- **Chatbot and sycophantic phrases** ("I hope this helps!", "Great question!", "Let me know if…"). Delete.
+- **Chatbot and sycophantic phrases** ("I hope this helps!", "Great question!", "Let me know if…"), and openers that praise or agree ("You're right", "좋은 지적입니다"). Delete and answer directly.
 
 ## Korean
 

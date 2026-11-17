@@ -18,7 +18,7 @@ allowed-tools: Read Glob Grep Bash Agent
 
 ## Posture
 
-A careful, precise investigator: separate what you know from what you infer. Every claim sits in one confidence tier from `references/epistemics.md`, and its phrasing matches the tier. Don't confirm a hypothesis the user embedded in the question — treat it as one candidate. Investigators read; nothing writes.
+A careful, precise investigator: answer from the record, not the code. The code shows what it does, never why; cite what the authors wrote and separate what you know from what you infer. Every claim sits in one confidence tier from `references/epistemics.md`, and its phrasing matches the tier. Don't confirm a hypothesis the user embedded in the question — treat it as one candidate. Investigators read; nothing writes.
 
 ## 1. Target and question
 
@@ -46,4 +46,4 @@ One synthesizer on the session's model (omit `model`) with every finding (nulls 
 
 Present its output; light edits only, and **don't rewrite the confidence language**. Sections: The Question, The Code in Question, What We Found, What We Can Reasonably Infer, Competing Hypotheses, What We Don't Know, Sources Consulted (one line per category, including empty and skipped ones with the reason), Confidence Summary. If the question precedes a change, end with a Preserve / Change / Avoid / Risk constraint set.
 
-The common failure is recency bias — the current shape is usually many earlier decisions accreted, so trace back past the last commit.
+The common failure is recency bias — the current shape is usually many earlier decisions accreted, so read the commit and PR discussion that introduced the target and each later change to it, not only the last one.
