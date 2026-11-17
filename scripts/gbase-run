@@ -1162,8 +1162,15 @@ def cmd_run(argv):
                 try:
                     more = run_claude(CONTINUE_PROMPT, cwd, env_next, m, log, resume=s["session_id"],
                                       max_turns=turns, max_budget=budget) if how == "resume" else None
-                    if more is None or (not more["tool_uses"] and more["exit_code"] and not prestart_failure(more)):
-                        how = "fresh"  # the resume didn't take ("No conversation found"): start over on the worktree
+                    if more and not more["tool_uses"] and more["exit_code"] and not prestart_failure(more):
+                        # the resume didn't take ("No conversation found", an error before any tool call): its own
+                        # leg, and what it spent comes off what the fresh session gets
+                        s["accounts"].append({**leg(more, nxt, how), "cost_usd": merge_session(s, more, True),
+                                              "stopped": "error"})
+                        turns, budget, spent = left()
+                        spent, more = spent or s.get("capped"), None
+                    if more is None and not spent:
+                        how = "fresh"  # start over on the worktree
                         more = run_claude(CONTINUE_FRESH_PROMPT.format(prompt=prompt), cwd, env_next, m, log,
                                           append=True, max_turns=turns, max_budget=budget)
                 except OSError as e:
@@ -1172,9 +1179,13 @@ def cmd_run(argv):
                 print(f"gbase-run: {account[0]} stopped on {kind} after {s['tool_uses']} tool calls; "
                       f"continuing on {nxt[0]} ({how})", file=sys.stderr)
                 handoffs.append({"model": m, "from": account[0], "to": nxt[0], "how": how, "detail": detail})
-                account, last = nxt, more
-                own = merge_session(s, more, how == "resume")
+                account = nxt
                 s["account"] = account[0]
+                if more is None:  # the failed resume used a cap up: no fresh session, the wrap-up below
+                    s["capped"] = spent
+                    break
+                last = more
+                own = merge_session(s, more, how == "resume")
                 s["accounts"].append({**leg(more, account, how), "cost_usd": own})
 
             def again(text, turns, budget):  # one more session on the same conversation; its report joins the first one's
