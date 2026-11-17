@@ -121,6 +121,14 @@ FAKE_CLAUDE = textwrap.dedent('''\
     print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-" + model, "model": model}))
     print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.01}))
     if model == "stops":  # the turn ended on a review table before go: the change sits uncommitted, no PR
+        if "--resume" in args and os.environ.get("FAKE_RESUME_CAP"):  # the resumed session reaches the cap too
+            if "reached its" in args[args.index("-p") + 1]:  # its wrap-up
+                print(json.dumps({"type": "result", "result": "go 도중 멈췄습니다\\n남은 작업: PR 열기", "num_turns": 2,
+                                  "total_cost_usd": 0.1}))
+                sys.exit(0)
+            print(json.dumps({"type": "result", "subtype": os.environ["FAKE_RESUME_CAP"], "is_error": True, "num_turns": 9,
+                              "total_cost_usd": 0.7}))
+            sys.exit(1)
         if "--resume" in args:
             final = "pr: https://github.com/o/r/pull/12\\nsettle: 수렴 @abc1234\\n"
             open(os.path.join(run_dir, "resume-prompt"), "w").write(args[args.index("-p") + 1])
@@ -551,6 +559,7 @@ class GbaseRunTest(unittest.TestCase):
         result = json.loads(Path(out[-1]).read_text())
         self.assertEqual((result["pr_url"], result["settle"]), ("https://github.com/o/r/pull/12", "settle: 수렴 @abc1234"))
         self.assertEqual((result["sessions"]["stops"]["resumed"], result["sessions"]["stops"]["cost_usd"]), (True, 1.0))
+        self.assertEqual(result["sessions"]["stops"]["tool_uses"], 11)  # 5 before the resume, 6 in it
         self.assertEqual(result["subagent_skills"], ["gbase:polish", "code-review", "gbase:unslop", "gbase:compat-check"])
         # the go that only the resumed session called gated this PR
         self.assertEqual(result["skills"], ["gbase:work", "gbase:bug-fix", "gbase:go"])
@@ -560,6 +569,29 @@ class GbaseRunTest(unittest.TestCase):
         (self.repo / "change.txt").unlink()
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--ship-owner", "agent", "--model", "lessons")
         self.assertNotIn("resumed", json.loads(Path(out[-1]).read_text())["sessions"]["lessons"])
+
+    def test_a_resumed_session_that_reaches_a_cap_is_reported_like_the_first_one(self):
+        for cap, flag, field, other in (("error_max_turns", "--max-turns", "turn_limit", "budget_limit"),
+                                        ("error_max_budget_usd", "--max-budget-usd", "budget_limit", "turn_limit")):
+            self.env["FAKE_RESUME_CAP"] = cap
+            _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                                  "--model", "stops", flag, "50")
+            result = json.loads(Path(out[-1]).read_text())
+            self.assertEqual((result[field], result[other], result["status"]), (50, None, "done"), cap)
+            self.assertEqual(result["followups"], ["PR 열기"])  # the capped resume got its wrap-up session
+            self.assertIsNone(result["pr_url"])
+            session = result["sessions"]["stops"]
+            # tool calls: 5 in the first session, 6 each in the resume and the wrap-up; turns: 9 + 2 (the first reports none)
+            self.assertEqual((session["resumed"], session["tool_uses"], session["turns"]), (True, 17, 11))
+            self.assertAlmostEqual(session["cost_usd"], 1.3)
+            (self.repo / "change.txt").unlink()
+
+    def test_a_resumed_or_wrap_up_session_keeps_its_errors_and_how_it_ended(self):
+        s = {"results": ["a"], "cost_usd": 1.0, "tool_uses": 3, "turns": 4, "errors": ["e1"], "end_error": None}
+        gbase_run.merge_session(s, {"results": ["b"], "cost_usd": 0.5, "tool_uses": 2, "turns": 1, "errors": ["e2"],
+                                    "end_error": "limit", "capped": "turns", "exit_code": 1})
+        self.assertEqual((s["tool_uses"], s["turns"], s["errors"], s["end_error"], s["capped"], s["exit_code"]),
+                         (5, 5, ["e1", "e2"], "limit", "turns", 1))
 
     def test_a_run_that_reaches_the_turn_cap_wraps_up_and_reports_what_is_left(self):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",

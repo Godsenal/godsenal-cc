@@ -638,8 +638,9 @@ def leg(info, account, how):
 
 
 def merge_session(s, more):
-    """Fold the session that went on under the next account into the first one: its report joins the first one's,
-    costs, turns and tool calls add up, and its exit code, session and cap stand for the whole."""
+    """Fold a later session on the same work (the next account's, the shipping resume, the wrap-up) into the first
+    one: its report joins the first one's, costs, turns and tool calls add up, and its exit code, session and cap
+    stand for the whole."""
     costs = [c for c in (s.get("cost_usd"), more.get("cost_usd")) if c is not None]
     s.update(results=s["results"] + more["results"], errors=s.get("errors", []) + more.get("errors", []),
              skills=s.get("skills", []) + more.get("skills", []),
@@ -1158,28 +1159,28 @@ def cmd_run(argv):
                 except OSError as e:  # the first session's report stays
                     s["resume_error"] = str(e)
                     return False
-                costs = [c for c in (s["cost_usd"], more["cost_usd"]) if c is not None]
-                s.update(results=s["results"] + more["results"], exit_code=more["exit_code"],
-                         skills=s.get("skills", []) + more.get("skills", []),
-                         subagent_skills=s.get("subagent_skills", []) + more.get("subagent_skills", []),
-                         cost_usd=sum(costs) if costs else None)
+                merge_session(s, more)
                 return True
 
-            capped = s.pop("capped", None)
-            if capped:  # a cap ended it mid-work: no shipping resume, only the wrap-up report
+            def wrap_up():  # when a cap ended the last session mid-work: record the limit, get the wrap-up report
+                capped = s.pop("capped", None)
+                if not capped:
+                    return False
                 if capped == "budget":
                     s["budget_limit"], limit = a.max_budget_usd, f"budget limit (${a.max_budget_usd:g})"
                 else:
                     s["turn_limit"], limit = a.max_turns, f"turn limit ({a.max_turns})"
                 if s["session_id"] and not STOPPING.is_set():
                     again(WRAPUP_PROMPT.format(limit=limit), WRAPUP_TURNS, WRAPUP_BUDGET_USD)
+                return True
+
+            if wrap_up():  # no shipping resume after a cap
                 return
             line = s["exit_code"] == 0 and s["session_id"] and not STOPPING.is_set() and unshipped(
                 slot, a.ship_owner, s["results"], cwd, base)
-            if not line:
-                return
-            if again(RESUME_PROMPT.format(line=line), a.max_turns, a.max_budget_usd):
+            if line and again(RESUME_PROMPT.format(line=line), a.max_turns, a.max_budget_usd):
                 s["resumed"] = True
+                wrap_up()  # the resume can reach the cap too
 
         threads = [threading.Thread(target=one, args=(m,)) for m in models] if cwd and not STOPPING.is_set() else []
         for t in threads:
