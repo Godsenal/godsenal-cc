@@ -83,7 +83,10 @@ FAKE_CLAUDE = textwrap.dedent('''\
     open(os.path.join(run_dir, "ran-on"), "a").write(os.path.basename(cfg) + "\\n")
     skill = lambda name, parent=None: print(json.dumps({"type": "assistant", "parent_tool_use_id": parent, "message": {
         "content": [{"type": "tool_use", "name": "Skill", "input": {"skill": name}}]}}))
-    skill("gbase:go", "toolu_agent0" if model == "subgo" else None)  # subgo: only a subagent called go
+    if model == "stops" and "--resume" not in args:  # stops: the first session called bug-fix, only the resumed one go
+        skill("gbase:bug-fix")
+    else:
+        skill("gbase:go", "toolu_agent0" if model == "subgo" else None)  # subgo: only a subagent called go
     for name in ("gbase:polish", "code-review", "gbase:polish", "gbase:unslop"):  # the skills go runs in an Agent
         skill(name, "toolu_agent1")
     if "--resume" in args:  # what only the resumed session's subagent called
@@ -117,7 +120,7 @@ FAKE_CLAUDE = textwrap.dedent('''\
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
     print(json.dumps({"type": "system", "subtype": "init", "session_id": "s-" + model, "model": model}))
     print(json.dumps({"type": "result", "result": final, "total_cost_usd": 0.01}))
-    if model == "stops":  # go ended its turn on review's table: the change sits uncommitted, no PR
+    if model == "stops":  # the turn ended on a review table before go: the change sits uncommitted, no PR
         if "--resume" in args:
             final = "pr: https://github.com/o/r/pull/12\\nsettle: 수렴 @abc1234\\n"
             open(os.path.join(run_dir, "resume-prompt"), "w").write(args[args.index("-p") + 1])
@@ -549,6 +552,9 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual((result["pr_url"], result["settle"]), ("https://github.com/o/r/pull/12", "settle: 수렴 @abc1234"))
         self.assertEqual((result["sessions"]["stops"]["resumed"], result["sessions"]["stops"]["cost_usd"]), (True, 1.0))
         self.assertEqual(result["subagent_skills"], ["gbase:polish", "code-review", "gbase:unslop", "gbase:compat-check"])
+        # the go that only the resumed session called gated this PR
+        self.assertEqual(result["skills"], ["gbase:work", "gbase:bug-fix", "gbase:go"])
+        self.assertFalse([g for g in result["gaps"] if "gbase:go 없이" in g])
         self.assertIn("no `pr:` line", (Path(result["run_dir"]) / "resume-prompt").read_text())
         # nothing in the worktree: nothing to resume
         (self.repo / "change.txt").unlink()

@@ -1160,6 +1160,7 @@ def cmd_run(argv):
                     return False
                 costs = [c for c in (s["cost_usd"], more["cost_usd"]) if c is not None]
                 s.update(results=s["results"] + more["results"], exit_code=more["exit_code"],
+                         skills=s.get("skills", []) + more.get("skills", []),
                          subagent_skills=s.get("subagent_skills", []) + more.get("subagent_skills", []),
                          cost_usd=sum(costs) if costs else None)
                 return True
