@@ -1,396 +1,84 @@
 ---
-description: "Automate branch creation, commit grouping, and PR generation from current changes"
-allowed-tools: ["Bash", "Read", "Glob", "Grep", "AskUserQuestion", "Skill"]
+name: branch-pr
+description: "Takes the current changes to an open pull request without step-by-step confirmation: unwraps pause commits, backs up the tree, picks the branch and groups logical commits by the repo's conventions, writes a PR body whose Review focus section says what a person must judge, pushes, and opens the PR. Use when the user asks to open a PR or to commit and push the current work as one, or runs /gbase:branch-pr; also the PR step of gbase:go."
+allowed-tools: Bash Read Glob Grep AskUserQuestion Skill
 ---
 
-# /branch-pr Command
+# /gbase:branch-pr
 
-Analyzes current changes, creates a branch, auto-groups files into logical commits, and generates a PR.
-
-**Runs fully autonomously by default.** Invoking `/branch-pr` is itself the go-ahead to decide the branch
-name, group commits, push, and open the PR without step-by-step confirmation. Only pause when a case in
-[Ask only when necessary](#ask-only-when-necessary) genuinely applies. Report what you decided as you go;
-don't ask the user to ratify routine choices.
+Takes the current changes to an open PR: branch, logical commits, push, PR body. Invoking it is the go-ahead for all of that; decide the branch name, the grouping, and the body yourself and report them as you go. It stops only for an `ask:` line from the script below.
 
 ## 출력 언어
 
-사용자에게 보이는 텍스트는 전부 **한국어**로 쓴다 — 보고·요약·표의 설명 칸·질문과 옵션, 하위 에이전트가 돌려주는 글 중 사용자에게 그대로 노출되는 것까지. 코드·경로·명령어·스킬/툴 이름·상태 라벨(`high`, `PASS`, `✅`)은 그대로 두고, 커밋 메시지·브랜치 이름은 레포 관례(`git log`)를 따른다. PR 제목·본문은 기본 한국어(섹션 제목은 영어) — 레포가 분명히 다른 언어로 PR을 써 왔으면 그 언어. 사용자가 다른 언어로 요청하면 그 언어를 따른다.
+사용자에게 보이는 글은 **한국어**로 쓰고, 코드·명령·상태 라벨·커밋·브랜치는 레포 관례를 따른다. PR 제목·본문은 기본 한국어(섹션 제목은 영어)이고 레포가 다른 언어로 써 왔으면 그 언어다. 세부: [output-language.md](../../references/output-language.md).
 
-## Safety Rules (Mandatory)
+## Safety
 
-**Strictly Prohibited Commands:**
-- `git reset --hard`
-- `git checkout .`
-- `git clean -f`
-- `git stash drop` (unless explicitly requested by user)
-- `git push --force` (`--force-with-lease` is fine for legitimate rebases)
+Never `git reset --hard`, `git checkout .`, `git clean -f`, `git stash drop`, or `git push --force` (`--force-with-lease` is fine for a legitimate rebase). On any error stop, print `git status`, and give the restore command from the script's `backup:` line.
 
-**Required Practices:**
-- Operate autonomously — decide branch name, commit grouping, and PR body yourself
-- Stop only for the [Ask only when necessary](#ask-only-when-necessary) cases
-- Never use destructive commands
-- On error, stop immediately and provide recovery instructions
+## Steps
 
-## Ask only when necessary
+The mechanical parts are one script, `ship-prep` (`scripts/ship-prep` in this skill's directory).
 
-These are the *only* cases that interrupt the autonomous flow (use `AskUserQuestion`). Everything else
-proceeds without asking:
-
-- **Secrets/credentials in the diff** — `.env*`, private keys, tokens, or other secret-looking values.
-  Stop; never auto-commit them. Ask how to proceed (e.g. unstage, add to `.gitignore`).
-- **Unrelated pre-existing changes** — the working tree mixes in WIP clearly unrelated to the intended
-  change. Ask whether to include it or leave it behind.
-- **Ambiguous PR split** — the changes span clearly separate features and it's unclear whether they
-  belong in one PR or several. Ask: one PR vs split.
-- **On a diverged non-default branch** — already on a feature branch with its own history. Ask: new
-  branch off the default, or keep committing on the current one.
-- **Remote ambiguity** — no remote, multiple remotes, or the target branch already exists on the remote.
-  Ask which remote / how to proceed.
-
-When none apply, run end to end silently except for progress reporting.
-
-Under `AGENT_HEADLESS=1` (check `printenv AGENT_HEADLESS` before asking) these cases don't ask: follow [headless.md](../references/headless.md). A secret is never committed — leave it out and record it.
-
-## Local mode
-
-When the args start with `Ship-owner: orchestrator; PR-body-file: <path>` (`gbase:go` under `AGENT_SHIP_OWNER=orchestrator`), another program pushes the branch and opens the PR. This run prepares both and touches no remote:
-
-- **Branch:** commit on the current branch; Steps 3–4 run only when it is the default branch. The caller owns its branch, so the diverged-branch and remote cases aren't questions here.
-- **Already committed:** a clean tree with commits ahead of the base skips Steps 2–6 instead of stopping.
-- **Remote untouched:** skip Step 7, `gh pr create`, and the `gbase-assets` upload; embed each screenshot as `![<label>](<absolute local path>)` so the caller can upload it and rewrite the link.
-- **Body:** Step 8 as written. Invoke `gbase:compat-check` there even for a change that looks additive; it is the draft's only deploy-order review. Run it on `<base>...HEAD` (base = `origin/<default>` when it exists, else the local default branch). Write the title as line 1, an empty line 2, then the body, to the path (`mkdir -p` its directory; overwrite).
-- **Report** the lines the caller greps: `ship: local <branch> @<short-sha> — <n> commits, not pushed` and `PR 본문 초안: <path>` ([format](../references/orchestrator.md#report-lines)). Not pushing is the contract, not a decision: no `결정 필요:` line for the push or the PR.
-
-## Execution Steps
-
-### Step 1: Status Analysis (Read-Only)
-
-First, unwrap `gbase:pause` checkpoints so the analysis below sees their changes. A pause commit has a `wip:` subject
-**and** an `Intent:` body line; a hand-written `wip:` commit without it is the user's and stays. Count the unpushed
-pause commits at the tip, keep their bodies (the resume notes — read them for the PR's Why), then soft-reset:
+**1. Start.** Args that begin with `Ship-owner: orchestrator; PR-body-file: <path>` mean another program pushes and opens the PR: read [local-mode.md](references/local-mode.md) and add `--local`.
 
 ```bash
-n=0
-while git log -1 --format=%s "HEAD~$n" 2>/dev/null | grep -q '^wip:' \
-  && git log -1 --format=%b "HEAD~$n" | grep -q '^Intent:' \
-  && [ -z "$(git branch -r --contains "HEAD~$n")" ]; do n=$((n+1)); done
-[ "$n" -gt 0 ] && git log -"$n" --format=%B && git reset --soft "HEAD~$n"
+"${CLAUDE_SKILL_DIR}/scripts/ship-prep" start
 ```
 
-A pushed pause commit is never reset. Then analyze:
+It unwraps unpushed `gbase:pause` commits (`wip:` subject and an `Intent:` body, via `git reset --soft`; their notes feed the PR's Why) and backs the tree up under `refs/gbase/backup/`. Exit 3 means nothing to ship: say so and stop.
 
-```bash
-# Check current changes
-git status
+- **`ask:` lines** are questions: a secret in the diff (never commit it), a branch with its own history and no PR, a missing or ambiguous remote. Three more are yours to notice: a secret-looking value the script didn't flag (it only knows common shapes), WIP clearly unrelated to the change, and changes that are clearly separate features (one PR or several). Under `AGENT_HEADLESS=1` (check `printenv AGENT_HEADLESS` before asking) nothing is asked: follow [headless.md](../../references/headless.md). A secret is left out and recorded (then `open --partial`).
+- **Read every file on the `conventions` line** before naming anything. The repo's settings, then the user's conventions file, then history, then the gbase default decide the branch name, commit format, PR title, ticket reference, labels, and draft state: [conventions.md](../../references/conventions.md).
 
-# View staged/unstaged change details
-git diff HEAD
+**2. Branch and commits.** Follow the `branch plan:` line (a new branch only when it says so; gbase default `feat/` `fix/` `refactor/` `docs/` `chore/` + slug). Group the files into logical commits (by layer or feature), each with the repo's commit format and the attribution trailer the session specifies.
 
-# Check current branch
-git branch --show-current
+**3. Compat and risk.** On `compat: run`, call `Skill(skill: "gbase:compat-check", args: "<the range on that line>")`, even for a change that looks additive: it is the PR's only deploy-order review. `⚠️ Requires ordered rollout` → its `## Rollout / Deploy order` block goes into the body and its one-line summary to the user. `✅`, or `compat: skip` → no section, nothing said.
 
-# View recent commits for context
-git log --oneline -5
+Risk, unless the caller passed a `Risk:` line (the tier is set from the change, not the author):
 
-# The repo's rules for branch names, commits, and the PR (conventions.md)
-git config --get gbase.conventions
-git ls-files | grep -iE '(^|/)contributing\.md$|pull_request_template|commitlint|^\.husky/'
-```
-
-Read every file those last two commands print before Step 3; [conventions.md](../references/conventions.md) gives
-their order. Use `git ls-files`, not a globbed `ls`: under zsh an unmatched glob fails the whole line, and one run
-missed the repo's PR template that way and wrote its body in gbase's format.
-
-Analyze changed files and compile the following:
-- List of changed files
-- Change type for each file (modified/added/deleted)
-- Logical grouping of files (by directory/feature)
-
-**Nothing to ship** (clean tree — no modified, staged, or untracked files) → stop here and tell the user;
-in [local mode](#local-mode), only when no commits are ahead of the base either.
-Do not proceed to Step 2: there is nothing to back up.
-
-### Step 2: Create Backup
-
-Always create a backup before starting. It is a commit under its own ref, written from a copy of the index, so
-the working tree and the real index are never touched and nothing has to be reapplied:
-
-```bash
-ts="$(date +%Y%m%d-%H%M%S)-$$"
-idx=$(mktemp)
-cp "$(git rev-parse --git-path index)" "$idx"
-GIT_INDEX_FILE="$idx" git add -A
-backup=$(git commit-tree "$(GIT_INDEX_FILE="$idx" git write-tree)" -p HEAD -m "branch-pr-backup-$ts")
-rm -f "$idx"
-git update-ref "refs/gbase/backup/$ts" "$backup"
-git diff --stat HEAD "refs/gbase/backup/$ts" | tail -1   # must list the changes you saw in Step 1
-```
-
-The backup holds every modified, staged, and untracked file (ignored files are not in it). Keep the ref name
-for the report. Restore with `git restore --source=refs/gbase/backup/<ts> --worktree -- .`.
-
-Not `git stash`: the stash list is shared by every worktree of the repo, so with two runs side by side
-`git stash apply` can bring back the other run's backup, and each run left one more entry in the user's list.
-
-### Step 3: Decide Branch Name
-
-Pick a branch name from the change analysis — no confirmation needed. Report it in one line, then continue.
-The repo's own branch rule comes first ([conventions.md](../references/conventions.md)); without one, by change type:
-
-- `feat/feature-name` - New feature
-- `fix/bug-name` - Bug fix
-- `refactor/area` - Refactoring
-- `docs/doc-name` - Documentation changes
-- `chore/task-name` - Miscellaneous tasks
-
-### Step 4: Create Branch
-
-```bash
-# Create and switch to new branch
-git checkout -b <branch-name>
-```
-
-### Step 5: Group Commits
-
-Group changed files logically and commit them — decide the grouping and messages yourself, no confirmation
-needed. Report each group as you commit it.
-
-**Grouping Criteria:**
-1. By directory/layer (db, api, components, etc.)
-2. By feature relevance
-3. By change type (schema, migration, test, etc.)
-
-For each group, provide:
-- List of included files
-- Suggested commit message: the repo's format ([conventions.md](../references/conventions.md)), conventional commits when it has none
-
-Example:
-```
-Group 1: Database changes
-  - src/db/schema.ts
-  - db/migrations/0001_xxx.sql
-  → "feat(db): add user preferences table"
-
-Group 2: API endpoints
-  - src/app/api/preferences/route.ts
-  → "feat(api): add preferences endpoint"
-
-Group 3: UI components
-  - src/components/PreferencesForm.tsx
-  - src/app/settings/page.tsx
-  → "feat(ui): add preferences settings page"
-```
-
-### Step 6: Execute Commits
-
-Commit sequentially for each group:
-
-```bash
-# Group 1
-git add <file1> <file2> ...
-git commit -m "$(cat <<'EOF'
-commit message
-
-<attribution trailer the session specifies, if any>
-EOF
-)"
-
-# Group 2 ...
-```
-
-Run `git status` after each commit to verify state.
-
-### Step 7: Push
-
-```bash
-# Push to remote with upstream tracking
-git push -u origin <branch-name>
-```
-
-### Step 8: Create PR
-
-First, check backward-compatibility / deploy ordering. Invoke the `compat-check` skill on the pushed range:
-
-```
-Skill(skill: "gbase:compat-check", args: "origin/<default-branch>...HEAD")
-```
-
-- If it returns `⚠️ Requires ordered rollout`, inject its `## Rollout / Deploy order` block into the PR
-  body (below) and print its one-line summary to the user as a heads-up.
-- If it returns `✅`, omit the section entirely and say nothing extra.
-
-Classify the risk, unless the caller (e.g. `gbase:go`) passed a `Risk:` line — the tier is set from
-the change, not the author:
-
-- `high` — touches a path `REVIEW.md` marks always-high (without one: auth, payments/billing, migrations,
-  CI/release workflows, app config like `app.json`/`eas.json`/`Info.plist`), or compat-check returned ⚠️
+- `high` — touches a path `REVIEW.md` marks always-high (without one: auth, payments/billing, migrations, CI/release workflows, app config like `app.json`/`eas.json`/`Info.plist`), or compat-check returned ⚠️
 - `low` — docs, copy, tests, or an additive change behind a flag, and nothing above
 - `medium` — everything else
 
-**The repo's PR template, when it has one, is the body.** Fill that template's sections in its order instead of
-`Why`, `Change outline`, and `Notes` below, and add whichever of `Review focus` (with its risk line and folded list)
-and `Evidence` it lacks: `Review focus` right under its first section, `Evidence` wherever it fits. The format below
-is for a repo with no template. Write the title, the body, and the body's own phrases (`사람이 볼 곳`, `위험도`) in the language the settings or the
-merged PRs use; Korean is only the default.
+**4. Draft the PR** in a file (`$(git rev-parse --absolute-git-dir)/gbase/pr-body.md`, or the caller's `PR-body-file`): the title on line 1, an empty line 2, the body from line 3. The repo's PR template, when it has one, is the body, with `Review focus` (right under its first section) and `Evidence` added if it lacks them. Otherwise:
 
-The PR title, ticket reference, labels, reviewers, and draft state follow [conventions.md](../references/conventions.md).
-
-Then create the PR. Add `--draft` to `gh pr create` when the user or `gbase:go` passed `--draft` —
-`gbase:monitor` flips it to ready once CI is green and its self-review is resolved.
-
-**Before `gh pr create`, call `Skill(skill: "gbase:unslop")` and rewrite the drafted title and body by it, every table cell and bullet included.** Knowing its rules is not running it: a body written straight into the heredoc is where this step gets skipped. The same holds for every later `gh pr edit --body`.
-
-The body is a briefing for a reviewer who has the diff. **The reviewer reads `Review focus` first and may
-stop there**, so everything a person has to judge goes in it and nowhere else; the sections below it are
-reference:
-
-```bash
-gh pr create --title "<PR title>" --body "$(cat <<'EOF'
+```markdown
 ## Why
 <exactly one sentence: the problem, and what becomes possible once this ships>
 
 ## Review focus
-> [!IMPORTANT]
-> **사람이 볼 곳 <N>건**
-> 1. **<the question, as one short bold line>** (결정)
->    `path:line` · <why no check can answer it, a few words>
-> 2. **<what to look at and what "right" looks like>** (확인)
->    <where: a screenshot below, `path:line`, a device>
-> 3. **<the failure, as a question>** (보류 · medium)
->    `path:line` · <failure scenario>
+> [!NOTE]
+> **사람이 판단할 곳 없음.** <why the checks and the Evidence cover it>
 
-**위험도** <low / medium / high> (<the path or hazard that set it>) · <two-way / one-way> · <how to undo: revert the squash commit, plus anything left behind>
-
-<details><summary>보류한 리뷰 지적 <K>건 · low 또는 기존 코드</summary>
-
-- `path:line` <finding, one line> (low · 기존 코드)
-</details>
-
-<!-- N = 0: `> [!NOTE]` and one line: **사람이 판단할 곳 없음.** <why the checks and the Evidence cover it>.
-     K = 0: drop the details block. -->
+**위험도** <low / medium / high> (<the path or hazard that set it>) · <two-way / one-way> · <how to undo>
 
 ## Change outline
-<one numbered `###` heading per concern, at most four (e.g. `### 1. 새 스킬`, `### 2. 저장 흐름`). Under each:
-the view from the table below that fits it, then at most three one-sentence bullets saying why. Table cells
-hold a few words; explanation goes in the bullets, never a paragraph. Not a per-commit or per-file
-changelog: the Commits tab already is one>
+<one numbered `###` heading per concern, at most four; under each a small table or diff and at most three one-sentence bullets saying why. Not a per-file changelog>
 
 ## Evidence
-<before → after first, in the form that shows this change best (table below); a `| | Before | After |`
-table when there are two or more. Then the checks already run (the `Verification:` lines the caller
-passed), one `- [x]` line each with what was observed>
-
-<!-- ## Rollout / Deploy order  ← only when compat-check returned ⚠️ -->
-
-## Notes
-<only what a reviewer would trip on that isn't a Review focus item (a deliberate omission, an out-of-scope
-find). Usually empty: drop the section>
+<before → after first; then the caller's `Verification:` lines, one `- [x]` each with what was observed>
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
-EOF
-)"
 ```
 
-**Review focus** — what a person must judge because no check here can. Before writing an item, name what the
-checks would miss; if you can't, it isn't an item. Most-severe first, at most five; more than that means
-the PR should be split, so say so as item 1. Each item is a bold line a reviewer can answer, its kind in parentheses after the bold, and one plain line
-under it for where and why. Keep code spans out of the bold part:
+The body before `## Change outline` fits on one screen; every cell and bullet is a sentence someone outside this session understands.
 
-- `(결정)` a product or design call: copy, a tradeoff the author picked, a behavior change someone may not want, a pattern other code will copy.
-- `(확인)` evidence only a person can judge (how a screen looks, real data, a device), any surface the run couldn't reach (`behavior: skip`), or a `high`-tier path from the risk rule above — point at the exact lines. A `Verification:` line with `differs:` is always one, titled `실기기 확인 필요: <difference>`: the check passed on another kind of input than the one that failed.
-- `(보류 · <severity>)` a finding from the caller's `Deferred:` line marked `introduced` and rated `medium` or above. The rest (`low`, or `pre-existing`) go in the folded details block, marked `기존 코드` when pre-existing so they don't read as the author's fault — they never count toward N.
+**Read [pr-body.md](references/pr-body.md) before drafting when any of these holds**; a `low` change with none of them uses the skeleton as it is:
 
-The alert renders as a colored box, so it stays the one thing that stands out; don't add other alert boxes elsewhere in the body.
+- the risk is `medium` or `high`, or the change is one-way (something outlives a revert)
+- the caller passed a `Deferred:` finding, a `behavior: skip`, or a `Verification:` line with `differs:`
+- something needs a person's judgment (a product call, how a screen looks): the `[!NOTE]` box becomes numbered `[!IMPORTANT]` items
+- the change shows on a screen (screenshots), or compat-check returned ⚠️
 
-**Two-way / one-way:** two-way when reverting the squash commit restores the old behavior. One-way when something
-outlives the revert — a dropped column or rewritten data, a sent notification or email, a store
-submission, a removed public API; take the point of no return from compat-check's Rollback line, and add
-a `(확인)` item for it. If `gbase:blast-radius` ran, its confirmed risks become `(확인)` items.
-The risk line informs the reviewer; it never blocks the PR.
+**Before the draft leaves, call `Skill(skill: "gbase:unslop")` and rewrite the title and body by it, every table cell and bullet included.** Knowing its rules is not running it; the same holds for every later `gh pr edit --body`.
 
-**Readable in a minute.** The body before `## Change outline` fits on one screen. Every section is tables
-and one-line bullets, no paragraph over two lines. Short is not shorthand: every table cell and bullet is a
-sentence a reader who wasn't in this session understands, saying what changed and why, never a row of nouns,
-arrows, or session jargon. A Change outline over ~25 lines or four groups, and any
-long table or command output, goes inside `<details><summary>…</summary>` with its lead line outside; if
-it still doesn't fit, the PR should be split.
-
-**Pick the form per change** — for each Outline view and each Evidence pair, the one a reviewer grasps fastest:
-
-| What changed | Show it as |
-|---|---|
-| How a screen looks (UI, layout, copy) | before/after screenshots side by side |
-| Interaction or animation | a short GIF |
-| A flow across components or services | a `mermaid` sequence diagram (GitHub renders it) |
-| Logic or an algorithm | a pseudocode `diff`, plus the test that failed and now passes |
-| An API, event, or RPC contract | a request/response JSON `diff` |
-| Schema | a table `diff`, plus what the migration does |
-| Performance | one number with its unit, before → after |
-| A refactor | a file-tree `diff`, plus "the same tests pass unchanged" |
-| CLI or script behavior | terminal output before/after |
-
-**Screenshots and GIFs.** A change to what a user sees ships with the image in the body, in one place only. When the look is the change (layout, copy, a new screen), it goes in `## Change outline` as that concern's view, and Evidence says "see the screenshots above". When it proves a code change (a bug fix, a logic change), it goes in `## Evidence`. A local path left
-in a pushed PR body (`~/…/shots/after.png`) is not evidence, because the reviewer can't open it. Take them from the run's
-captures: the `verify-*` artifacts (`artifacts/verify/<feature>/`, gitignored) or the evidence dir in the
-`behavior:` lines. "After" is always available; include "before" only when the run already captured it
-(e.g. it reproduced the bug first) — don't relaunch the old build just for a picture. When the run took no
-screenshot of a UI change, take one of the after state now if the app is already running; otherwise make
-it a `(확인)` item. A GIF needs `ffmpeg` to convert a recording (`xcrun simctl io booted recordVideo`,
-Playwright video); without it, use two or three stills.
-`gh` can't attach images to a PR body, so, unless a setting says where images go ([conventions.md](../references/conventions.md)), upload them to the `gbase-assets` branch with the contents API —
-never commit them to the PR branch, and touch nothing in the working tree:
+**5. Open.**
 
 ```bash
-repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-gh api "repos/$repo/git/ref/heads/gbase-assets" >/dev/null 2>&1 || \
-  gh api "repos/$repo/git/refs" -f ref=refs/heads/gbase-assets -f sha="$(git rev-list --max-parents=0 HEAD | tail -1)"
-# body via stdin — a screenshot's base64 can exceed the argument-length limit
-{ printf '{"branch":"gbase-assets","message":"assets: <branch-name>/<file>","content":"'
-  base64 < <local file> | tr -d '\n'; printf '"}'; } |
-  gh api -X PUT "repos/$repo/contents/<branch-name>/<file>" --input -
-# embed: ![after](https://github.com/<repo>/raw/gbase-assets/<branch-name>/<file>)
+"${CLAUDE_SKILL_DIR}/scripts/ship-prep" open <draft>     # add --draft when the user or gbase:go passed it
 ```
 
-On a public repo those images are public — only upload screens with seeded demo data, never real user data.
+It checks the draft (fix what it reports and rerun), pushes the branch, opens the PR, and prints `pr: <url>`. `--partial` when tracked files were left uncommitted on purpose; `--remote <name>` when the push doesn't go to `origin`. Put that line in the final report at column 0 ([format](../../references/orchestrator.md#report-lines)): `gbase:go` carries it up and a headless caller greps it. A failed push is never retried with force.
 
-Return the PR URL to the user, and put it in the final report as `pr: <url>` at column 0 ([format](../references/orchestrator.md#report-lines)) — `gbase:go` carries that line up, and a headless caller greps it.
-
-### Step 9: Cleanup
-
-Don't ask. Leave the backup ref in place and print one line so the user can remove it themselves later:
-- "Backup left at `refs/gbase/backup/<ts>` — `git update-ref -d refs/gbase/backup/<ts>` to remove, `git for-each-ref refs/gbase/backup` to list; `gbase-run gc` removes it after 14 days."
-
-## Error Handling
-
-On any error:
-1. Stop all operations immediately
-2. Print current state (`git status`)
-3. Provide recovery instructions:
-   - "To restore from backup: `git restore --source=refs/gbase/backup/<ts> --worktree -- .` (the ref stays, so it can be used again)"
-   - "To delete the branch: `git checkout <default-branch> && git branch -D <branch-name>`"
-
-## Usage Example
-
-```
-User: /branch-pr
-
-Claude: Analyzing changes…
-  Modified: src/db/schema.ts, src/app/api/users/route.ts
-  Added:    src/components/UserProfile.tsx
-
-Branch: feat/user-profile
-Committing:
-  ✓ feat(db): add user profile fields
-  ✓ feat(api): add user profile endpoint
-  ✓ feat(ui): add UserProfile component
-Pushed feat/user-profile → origin.
-
-compat-check: ⚠️ schema.ts adds a NOT NULL column — needs migrate-before-deploy.
-  Added a "Rollout / Deploy order" section to the PR.
-
-PR opened: https://github.com/owner/repo/pull/142
-Backup left at refs/gbase/backup/<ts> — `git update-ref -d refs/gbase/backup/<ts>` to remove.
-```
-
-No "proceed?" prompt — it only stops for the [Ask only when necessary](#ask-only-when-necessary) cases
-(e.g. a secret in the diff, unrelated WIP, an ambiguous PR split).
+Leave the backup ref in place and say so in one line, with its `git update-ref -d` command (`gbase-run gc` removes it after 14 days).
