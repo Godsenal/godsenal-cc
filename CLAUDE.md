@@ -11,7 +11,7 @@ plugins/base/  → gbase              .claude-plugin/plugin.json, skills/<name>/
                                     agents/*.md (subagent types, registered as gbase:<name>), hooks/ (SessionStart routing rule)
 plugins/app/   → gapp               .claude-plugin/plugin.json, skills/<name>/SKILL.md (+ references/)
 plugins/shorts/ → gshorts           .claude-plugin/plugin.json, skills/<name>/SKILL.md (+ references/)
-scripts/check.py                    repo checks CI runs (.github/workflows/check.yml)
+scripts/check.py                    repo checks CI runs (.github/workflows/check.yml); tests for its contract check in scripts/test_check.py
 scripts/gbase-run                   headless runner for factory.json slots (claude -p → result.json); tests in scripts/test_gbase_run.py
 scripts/read-budget.py              characters a PR run loads into its main session, per route; limits in scripts/read-budget.json (check.py enforces); tests in scripts/test_read_budget.py
 scripts/test_ship_prep.py, test_pr_status.py, test_added_comments.py   tests for the scripts the skills run: skills/branch-pr/scripts/ship-prep, skills/monitor/scripts/pr-status, skills/polish/scripts/added-comments
@@ -62,6 +62,6 @@ Follow Anthropic's skill-authoring guidance (platform.claude.com/docs/en/agents-
 ## Verify
 
 - tests: `python3 -m unittest discover -s scripts` — the runner against a fake `claude`, `ship-prep` against throwaway git repos and a fake `gh`, `pr-status` on hand-built API responses (CI runs it too).
-- check: `python3 scripts/check.py --base main` — JSON validity, version sync and bump, frontmatter, line/description limits, `## 출력 언어` blocks, the read budget per route, and the cross-skill contract tokens above. CI runs it on every PR (`.github/workflows/check.yml`); when you add a contract, add its token to `CONTRACTS` in the script.
+- check: `python3 scripts/check.py --base main` — JSON validity, version sync and bump, frontmatter, line/description limits, `## 출력 언어` blocks, the read budget per route, and the cross-skill contract tokens above. CI runs it on every PR (`.github/workflows/check.yml`); when you add a contract, add it to `CONTRACTS` in the script as a `Contract` with a name, the reason its files change together, and its tokens; a failure prints that reason.
 - trigger test (manual, not run by `go`): `/plugin marketplace add ./`, `/plugin install gbase@godsenal`, then `/reload-plugins` and give Claude a task that should trigger the skill — confirm it loads the skill rather than improvising.
 <!-- gbase:verify:end -->

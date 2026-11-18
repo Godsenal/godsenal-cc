@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple, Union
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
@@ -67,246 +68,376 @@ PSTACK_SYNC = "scripts/pstack-sync.py"
 PSTACK_DOC = "plugins/base/references/pstack-sync.md"
 PSTACK_ADAPTER = "plugins/base/references/pstack-adapter.md"
 RUNNER_DOC = "plugins/base/references/runner.md"  # the runner's usage and result.json, split out of orchestrator.md
+
+
+class Contract(NamedTuple):
+    name: str
+    why: str
+    checks: list[Union[tuple[str, list[str]], tuple[str, list[str], str]]]  # Union, not |: stock macOS python3 is 3.9
+
+
 CONTRACTS = [
-    ("⚠️ requires ordered rollout", [skill("compat-check"), BRANCH_PR]),
-    # compat-check's output template itself, not just prose that mentions the tokens
-    ("- `✅ no special deploy ordering needed`", [skill("compat-check")]),
-    ("- `⚠️ requires ordered rollout`", [skill("compat-check")]),
-    ("start at stage 2", [GO_REVIEW, skill("review")]),
-    ("defer, don't ask", [GO_REVIEW, skill("review"), skill("monitor")]),
-    ("one skeptic for low/medium", [skill("go"), GO_REVIEW, GO_ORCH, skill("review")]),
-    # polish, review, compat-check, and unslop run in subagents so their bodies stay out of the main session
-    ('skill(skill: "gbase:polish"', [skill("go")]),
-    (r'skill(skill: \"gbase:review\"', [GO_REVIEW]),  # review.md writes the call inside a quoted prompt, so the backslash is part of the token
-    ('skill(skill: "gbase:review"', [skill("monitor")]),
-    ('skill(skill: "gbase:compat-check"', [BRANCH_PR]),
-    ('skill(skill: "gbase:unslop"', [BRANCH_PR, skill("work")]),
-    ("awaiting confirm", [skill("go"), skill("polish"), COMMENTS, CONFLICTS]),  # every polish launch says what a subagent that can't ask does
-    ("printenv | grep '^agent_'", [skill("go"), GO_ORCH]),  # in go's Step 1 prose, runnable as written (a table cell needs the pipe escaped)
-    ("subagent that can't ask", [skill("compat-check")]),
-    # go's body names the reference each branch reads
-    ("references/review.md", [skill("go")]),
-    ("references/verify.md", [skill("go")]),
-    ("references/draft-merge.md", [skill("go")]),
-    # high adds its verification in one file: an agent that didn't write the code runs the behavior check, and an open check holds the merge
-    ("references/high.md", [skill("go")]),
-    ("high.md", [GO_VERIFY]),
-    ("risk line", [GO_HIGH, CONFLICTS]),  # monitor learns the tier from the PR body branch-pr wrote, not from a flag
-    ("statechart", [GO_HIGH]),
-    ("create-formal-verification-skill", [GO_HIGH]),
-    # a skipped behavior check is unverified, not passed: a (확인) item in the PR, `open` in the evidence file, `unverified` in result.json
-    ("behavior: skip", [skill("work"), GO_VERIFY, GO_HIGH, BRANCH_PR, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
-    ("(확인)", [GO_VERIFY, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
-    ('== "open"', [SHIP_PREP, RUNNER]),
-    ("unverified", [GO_VERIFY, SHIP_PREP, RUNNER, RUNNER_DOC, ORCHESTRATOR]),
-    # after a rebase or base merge on a high PR, pr-status compares patch ids and its next: line says whether to re-verify
-    ("git patch-id", [PR_STATUS, CONFLICTS, ORCHESTRATOR]),
-    ("pr-status script> patch", [CONFLICTS]),
-    ("nothing to re-verify", [PR_STATUS, CONFLICTS]),
-    ("one verifier", [PR_STATUS, CONFLICTS]),
-    # review marks a high finding a run proved, inside the finding cell, and keeps one no run could reach
-    ("references/proven.md", [skill("review")]),
-    ("실행으로 확인됨", [REVIEW_PROVEN]),
-    ("실행 증거 없음", [REVIEW_PROVEN]),
-    ("references/orchestrated.md", [skill("go")]),
-    # work hands go its surface verification so go doesn't run the behavior check twice
-    ("`behavior:`", [skill("work"), skill("go"), GO_VERIFY]),
-    ("--no-review", [skill("go"), skill("monitor")]),
-    ("--draft", [skill("go"), GO_DRAFT_MERGE, skill("monitor")]),
-    ("--merge", [skill("work"), skill("go"), GO_DRAFT_MERGE, GO_ORCH, skill("monitor")]),
-    ("gbase:verify", [skill("setup"), skill("go"), GO_VERIFY]),
-    ("verification:", [skill("go"), BRANCH_PR]),
-    ("risk:", [skill("go"), BRANCH_PR]),
-    ("deferred:", [skill("go"), BRANCH_PR]),
-    ("## review focus", [skill("go"), GO_DRAFT_MERGE, BRANCH_PR, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
-    ("intent:", [skill("pause"), skill("pickup"), skill("go"), BRANCH_PR]),
-    ("git reset --soft", [BRANCH_PR]),
-    # ship-prep does the reset; its marker is the same wip: + Intent: pair pause writes
-    ('"wip:"', [SHIP_PREP]),
-    ("refs/gbase/backup/", [BRANCH_PR, SHIP_PREP, RUNNER]),
-    (".claude/skills/verify-", [skill("create-verify"), GO_VERIFY]),
-    (".claude/skills/verify/", [skill("create-verify"), GO_VERIFY, skill("setup")]),
-    ("ship-owner: orchestrator", [GO_ORCH, BRANCH_PR]),
-    ("pr-body-file:", [GO_ORCH, BRANCH_PR]),
-    ("ship: local", [LOCAL_MODE, ORCHESTRATOR, SETTLE]),
-    ("ship: skip —", [HEADLESS, ORCHESTRATOR]),  # a shipping step the caller put out of scope, not a decision
-    ("pr 본문 초안:", [GO_ORCH, LOCAL_MODE, ORCHESTRATOR, RUNNER, SETTLE]),
-    ("--until-settled", [skill("monitor"), SETTLE, GO_ORCH, ORCHESTRATOR]),
-    # agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url
-    ("`pr: <url>`", [skill("go"), GO_ORCH, BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
-    ('print(f"pr: {', [SHIP_PREP]),  # the script prints the line the skill promises
-    ("pr_url", [RUNNER_DOC, RUNNER]),
-    # conventions.md holds the one setting > convention > default order; the runner reads its branch prefix key
-    ("gbase.branchprefix", [CONVENTIONS, RUNNER_DOC, RUNNER]),
-    ("references/conventions.md", [BRANCH_PR, MERGE]),
-    ("gbase.conventions", [CONVENTIONS, ENVIRONMENT, skill("work"), SHIP_PREP, SETUP_ENV]),
-    ("references/environment.md", [skill("work"), skill("setup"), SETUP_ENV]),
-    ("(environment.md)", [CONVENTIONS]),
-    ("references/explore-environment.md", [skill("setup")]),
-    ("`environment:` line", [ENVIRONMENT]), ('"environment: ', [SHIP_PREP]),
-    ("shipping it", [ENVIRONMENT, SHIP_PREP]),
-    ("## write-back", [ENVIRONMENT]),
-    ('"fetch the ticket"', [ENVIRONMENT]),
-    ("link the pr on the ticket", [ENVIRONMENT, SETUP_ENV]),
-    ("ticket: <key> → not read", [ENVIRONMENT]),
-    ("is not permission", [ENVIRONMENT]),
-    ("draft only", [SETUP_ENV]),
-    ("settle: 수렴", [SETTLE, PR_STATUS, ORCHESTRATOR]),
-    ("settle: 미확정", [SETTLE, PR_STATUS, ORCHESTRATOR]),
-    ("settle: 사람 필요", [SETTLE, PR_STATUS, ORCHESTRATOR]),
-    # monitor and branch-pr act on their scripts' output lines: a line a skill or reference names is one the script prints
-    ('"conflict — ', [PR_STATUS]), ("| `conflict` |", [skill("monitor")]),
-    ('"comments — ', [PR_STATUS]), ("| `comments` |", [skill("monitor")]),
-    ('"ci — ', [PR_STATUS]), ("| `ci` |", [skill("monitor")]),
-    ('"notes — ', [PR_STATUS]), ("| `notes` |", [skill("monitor")]),
-    ('"settled — ', [PR_STATUS]), ("| `settled` |", [skill("monitor")]),
-    ('"limit — ', [PR_STATUS]), ("`next: limit`", [SETTLE]),
-    ('"give up — ', [PR_STATUS]), ("`give up`", [skill("monitor"), SETTLE]),
-    ('"unstarted — ', [PR_STATUS]), ("`unstarted`", [skill("monitor")]),
-    ("merge: gate passed", [PR_STATUS, MERGE]),
-    ("merge: not now", [PR_STATUS, MERGE]),
-    ("merge: retarget stacked pr first", [PR_STATUS, MERGE]),
-    ("--handled", [PR_STATUS, SETTLE]),
-    ('"ask: ', [SHIP_PREP]), ("`ask:` lines", [BRANCH_PR]),
-    ("branch plan:", [SHIP_PREP, BRANCH_PR]),
-    ("--partial", [SHIP_PREP, BRANCH_PR]),
-    ("--remote", [SHIP_PREP, BRANCH_PR]),
-    ("ship-prep start --local", [LOCAL_MODE]), ("ship-prep check", [LOCAL_MODE]), ("ship-prep assets", [PR_BODY, LOCAL_MODE]),
-    ("scripts/pr-status", [skill("monitor")]),
-    ("references/settle.md", [skill("monitor")]),
-    ("references/merge.md", [skill("monitor")]),
-    ("references/comments.md", [skill("monitor"), PR_STATUS]),
-    ("references/conflicts.md", [skill("monitor"), PR_STATUS]),
-    ("verified-locally", [GO_DRAFT_MERGE, SETTLE, MERGE, PR_STATUS]),
-    ("scripts/ship-prep", [BRANCH_PR]),
-    ("references/pr-body.md", [BRANCH_PR]),
-    ("references/local-mode.md", [BRANCH_PR]),
-    ("compat: run", [BRANCH_PR, SHIP_PREP]),
-    ("compat: skip", [BRANCH_PR, SHIP_PREP]),
-    ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
-    # headless forbids wakeups in prose; the runner enforces it by denying the tools
-    ("schedulewakeup,croncreate", [HEADLESS, RUNNER_DOC, RUNNER]),
-    # bare task runs load no skill: the runner (and a bot's direct template, via harness.md) carries the forbid list
-    ("대표자·본인 확인 체크", [HEADLESS, ORCHESTRATOR, RUNNER, HARNESS]),
-    # the runner splits decision lines on these keys into recommend / options / human
-    ("(추천:", [HEADLESS, RUNNER]),
-    ("다른 선택지", [HEADLESS, RUNNER]),
-    ("사람이 할 일", [HEADLESS, RUNNER]),
-    # settle keeps fixes local and pushes only when the agent owns shipping
-    ("agent_ship_owner=orchestrator", [GO_ORCH, skill("monitor"), SETTLE, skill("review"), ORCHESTRATOR]),
-    ("푸시 대기:", [SETTLE, ORCHESTRATOR]),
-    ("agent_evidence_file", [GO_ORCH, skill("reproduce"), SETTLE, ORCHESTRATOR]),
-    ("gbase:reproduce", [skill("bug-fix"), skill("reproduce")]),
-    # the session hook routes to work and names the agent types work dispatches
-    ("`gbase:work`", [SESSION_HOOK]),
-    ("gbase:scout", [skill("work"), SESSION_HOOK]),
-    ("gbase:worker", [skill("work"), SESSION_HOOK]),
-    ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
-    ("a diagnosis from a trace or profile", [skill("work"), SESSION_HOOK]),
-    ("spans several prs", [skill("work"), SESSION_HOOK]),
-    # work is poteto-mode inside gbase: it routes to pstack's playbooks and reads their Cursor names through playbooks.md
-    ("../poteto-mode/playbooks/", [skill("work")]),
-    ("references/playbooks.md", [skill("work")]),
-    ("pstack-adapter.md", [WORK_PLAYBOOKS]),
-    ("benchmark-checklist", [skill("work")]),
-    ("root cause before smallest", [skill("work")]),
-    ("references/correction.md", [skill("work")]),
-    ("used_by", [PSTACK_SYNC, PSTACK_DOC]),
-    # polish's Pass 0 is pstack's no-comments: the script decides whether it runs, go passes the tier and carries what stays open
-    ("next: comment pass", [ADDED_COMMENTS, skill("polish"), POLISH_COMMENTS]),
-    ("next: skip", [ADDED_COMMENTS, skill("polish")]),
-    ("next: read the diff yourself", [ADDED_COMMENTS, skill("polish")]),
-    ("scripts/added-comments", [skill("polish")]),
-    ("references/comments.md", [skill("polish"), ADDED_COMMENTS]),
-    ("../../no-comments/skill.md", [POLISH_COMMENTS]),
-    ("gbase:comment-sicko", [POLISH_COMMENTS]),
-    ("risk: <tier>", [skill("go")]),
-    ("stays deleted", [skill("go")]),  # go's main session once restored a constraint comment polish had deleted
-    ("`comments:`", [skill("go"), GO_VERIFY, GO_DRAFT_MERGE, POLISH_COMMENTS]),
-    ("comments: skip —", [ADDED_COMMENTS, skill("polish")]),
-    ("don't encode", [POLISH_COMMENTS]),
-    ('"skills/polish/references/comments.md"', ["scripts/pstack/lock.json"]),
-    ("../../references/premise.md", [GO_VERIFY, skill("monitor"), PR_STATUS]),
-    ("principle-attack-the-premise/skill.md", [PREMISE]),
-    ("write the premise", [PREMISE]),
-    ("one observation", [PREMISE]),
-    ("no third fix", [PREMISE, PR_STATUS]),
-    ("a third fix included", [GO_VERIFY]),
-    ("결정 필요: <체크>가 수정 두 번 뒤에도 실패", [PREMISE]),
-    ('"references/premise.md"', ["scripts/pstack/lock.json"]),
-    ("references/tests.md", [skill("review")]),
-    ("principle-test-behavior-not-implementation/skill.md", [REVIEW_TESTS]),
-    ("break the behavior", [REVIEW_TESTS]),
-    ("change the internals", [REVIEW_TESTS]),
-    ("no agent is launched", [REVIEW_TESTS]),
-    ("never auto-fixed", [REVIEW_TESTS]),
-    ("no skeptic is launched for these alone", [REVIEW_TESTS]),
-    ('"skills/review/references/tests.md"', ["scripts/pstack/lock.json"]),
-    ("suspect how you looked", [GO_VERIFY]),
-    ("reruns the same comparison", [GO_VERIFY]),
-    ("../principle-explain-the-number/skill.md", [skill("work")]),
-    # content runs report lessons instead of editing the harness; the runner hands them to a work run
-    ("교훈:", [shorts("content-common"), shorts("shorts-common"), skill("design-taste"), ORCHESTRATOR, RUNNER, FACTORY]),
-    # mockup and gapp's design load the user's taste rules before drawing
-    # work loads the taste rules before screen work, and its workers do too (they don't inherit loaded skills)
-    ("gbase:design-taste", [skill("mockup"), "plugins/app/skills/design/SKILL.md", skill("work"),
-                            "plugins/base/skills/work/references/workers.md", "plugins/base/agents/worker.md"]),
-    # evidence records what a check ran on; a `differs:` input becomes a Review focus item
-    ("`input`", [ORCHESTRATOR, GO_VERIFY, GO_ORCH, skill("reproduce")]),
-    ("differs:", [ORCHESTRATOR, GO_VERIFY, skill("reproduce"), BRANCH_PR, PR_BODY]),
-    ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
-    ("conflict resolution unreviewed", [CONFLICTS]),
-    ("--exclusive", [RUNNER_DOC, RUNNER]),
-    # work's size gate reports the slices it left; the runner reads them into followups, and asks a capped run for them
-    ("남은 작업:", [skill("work"), ORCHESTRATOR, RUNNER, RUNNER_DOC]),
-    ("--max-turns", [RUNNER_DOC, RUNNER]),
-    # plan reports its file and slices; the runner reads them into plan_file and followups
-    ("`plan: <absolute path>`", [skill("plan"), ORCHESTRATOR]),
-    ("plan_file", [RUNNER_DOC, RUNNER]),
-    ("`gbase:plan`", [SESSION_HOOK, skill("work")]),
-    ("--max-budget-usd", [RUNNER_DOC, RUNNER]),
-    # bots start background runs with this one line, not a long nohup claude -p a permission classifier blocks
-    ("gbase-run start", [RUNNER_DOC, RUNNER, FACTORY, "README.md"]),
-    # settle's one rebase exception, so it stays one rule and not an open door
-    ("explicitly asks to rebase", [SETTLE, ORCHESTRATOR, FACTORY, "README.md"]),
-    # the runner reads mockup's report lines into result.json
-    ("mockup url:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
-    ("mockup shots:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
-    # mockup stays out of work/go runs (company repos included): explicit /gbase:mockup or --slot mockup only
-    ("disable-model-invocation: true", [skill("mockup")]),
-    # review2 runs review twice on one tree; report only keeps the two sessions from editing
-    ("report only", [skill("review"), FACTORY]),
-    # the runner merges review2 by parsing review's report table
-    ("# | severity | file:line | finding | action", [skill("review"), RUNNER]),
-    # pstack sync: the daily routine parses --check's fields; every followed skill links the adapter the script names
-    ("skills_changed", [PSTACK_SYNC, PSTACK_DOC]),
-    ("custom_changed", [PSTACK_SYNC, PSTACK_DOC]),
-    ("new_upstream", [PSTACK_SYNC, PSTACK_DOC]),
-    ("scripts_changed", [PSTACK_SYNC, PSTACK_DOC]),
-    ("references/pstack-adapter.md", [PSTACK_SYNC, PSTACK_DOC]),
-    # the adapter sends every shipping step of a pstack playbook through go, and questions through headless.md
-    ("gbase:go", [PSTACK_ADAPTER, WORK_PLAYBOOKS]),
-    ("headless.md", [PSTACK_ADAPTER]),
-    # gshorts format skills defer every-video rules to shorts-common; its feedback intake names the format skills
-    ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
-    ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
-    ("top3-compilation-short", [shorts("shorts-common")]),
-    # content-common holds rules for every piece of content; shorts-common, instagram-card-news, naver-blog, threads-voice, x-voice, and comment-guide defer to it
-    ("content-common", [shorts("shorts-common"), shorts("instagram-card-news"), shorts("naver-blog"),
-                        shorts("threads-voice"), shorts("x-voice"), shorts("comment-guide")]),
-    ("instagram-card-news", [shorts("content-common")]),
-    ("naver-blog", [shorts("content-common")]),
-    # hook-templates is read before every opening line; each content skill links it at its hook step
-    ("hook-templates", [shorts("content-common"), shorts("shorts-common"), shorts("instagram-card-news"),
-                         shorts("foreign-clip-short"), shorts("top3-compilation-short"), shorts("naver-blog"),
-                         shorts("threads-voice"), shorts("x-voice")]),
-    # every skill that writes Threads or X copy sends it through that platform's voice skill; the feedback intake names both
-    ("threads-voice", [shorts("content-common"), shorts("hook-templates"), shorts("instagram-card-news"),
-                       shorts("comment-guide")]),
-    ("x-voice", [shorts("content-common"), shorts("hook-templates"), shorts("comment-guide")]),
-    # comment rules live once in comment-guide; the skills that write posts point there instead of repeating them
-    ("comment-guide", [shorts("content-common"), shorts("threads-voice"), shorts("x-voice"),
-                       shorts("instagram-card-news")]),
+    Contract("compat-verdict", "branch-pr parses compat-check's verdict tokens", [
+        ("⚠️ requires ordered rollout", [skill("compat-check"), BRANCH_PR]),
+        ("- `✅ no special deploy ordering needed`", [skill("compat-check")],
+         "compat-check's output template itself, not just prose that mentions the tokens"),
+        ("- `⚠️ requires ordered rollout`", [skill("compat-check")],
+         "compat-check's output template itself, not just prose that mentions the tokens"),
+    ]),
+    Contract("review-under-go", "go and monitor start review with these words, and review recognizes its mode by the same wording", [
+        ("start at stage 2", [GO_REVIEW, skill("review")]),
+        ("defer, don't ask", [GO_REVIEW, skill("review"), skill("monitor")]),
+        ("one skeptic for low/medium", [skill("go"), GO_REVIEW, GO_ORCH, skill("review")]),
+    ]),
+    Contract("skills-in-subagents",
+             "polish, review, compat-check, and unslop run in subagents so their bodies stay out of the main session, and a subagent can't ask", [
+        ('skill(skill: "gbase:polish"', [skill("go")]),
+        (r'skill(skill: \"gbase:review\"', [GO_REVIEW],
+         "review.md writes the call inside a quoted prompt, so the backslash is part of the token"),
+        ('skill(skill: "gbase:review"', [skill("monitor")]),
+        ('skill(skill: "gbase:compat-check"', [BRANCH_PR]),
+        ('skill(skill: "gbase:unslop"', [BRANCH_PR, skill("work")]),
+        ("awaiting confirm", [skill("go"), skill("polish"), COMMENTS, CONFLICTS],
+         "every polish launch says what a subagent that can't ask does"),
+        ("subagent that can't ask", [skill("compat-check")]),
+    ]),
+    Contract("agent-env-probe", "go reads the orchestrator's AGENT_* variables with this one command", [
+        ("printenv | grep '^agent_'", [skill("go"), GO_ORCH],
+         "in go's Step 1 prose, runnable as written (a table cell needs the pipe escaped)"),
+    ]),
+    Contract("go-branch-references", "go's body names the reference each branch reads; the branch's tokens live in that file, not in the body", [
+        ("references/review.md", [skill("go")]),
+        ("references/verify.md", [skill("go")]),
+        ("references/draft-merge.md", [skill("go")]),
+        ("references/orchestrated.md", [skill("go")]),
+    ]),
+    Contract("high-verification",
+             "high adds its verification in one file: an agent that didn't write the code runs the behavior check, and an open check holds the merge", [
+        ("references/high.md", [skill("go")]),
+        ("high.md", [GO_VERIFY]),
+        ("risk line", [GO_HIGH, CONFLICTS], "monitor learns the tier from the PR body branch-pr wrote, not from a flag"),
+        ("statechart", [GO_HIGH]),
+        ("create-formal-verification-skill", [GO_HIGH]),
+    ]),
+    Contract("behavior-skip-unverified",
+             "a skipped behavior check is unverified, not passed: a (확인) item in the PR, `open` in the evidence file, `unverified` in result.json", [
+        ("behavior: skip", [skill("work"), GO_VERIFY, GO_HIGH, BRANCH_PR, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
+        ("(확인)", [GO_VERIFY, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
+        ('== "open"', [SHIP_PREP, RUNNER]),
+        ("unverified", [GO_VERIFY, SHIP_PREP, RUNNER, RUNNER_DOC, ORCHESTRATOR]),
+    ]),
+    Contract("patch-id-reverify",
+             "after a rebase or base merge on a high PR, pr-status compares patch ids and its next: line says whether to re-verify", [
+        ("git patch-id", [PR_STATUS, CONFLICTS, ORCHESTRATOR]),
+        ("pr-status script> patch", [CONFLICTS]),
+        ("nothing to re-verify", [PR_STATUS, CONFLICTS]),
+        ("one verifier", [PR_STATUS, CONFLICTS]),
+    ]),
+    Contract("review-proven-marks",
+             "review marks a high finding a run proved, inside the finding cell, and keeps one no run could reach; the runner reads the table's columns", [
+        ("references/proven.md", [skill("review")]),
+        ("실행으로 확인됨", [REVIEW_PROVEN]),
+        ("실행 증거 없음", [REVIEW_PROVEN]),
+    ]),
+    Contract("work-behavior-lines", "work hands go its surface verification so go doesn't run the behavior check twice", [
+        ("`behavior:`", [skill("work"), skill("go"), GO_VERIFY]),
+    ]),
+    Contract("monitor-flags", "go calls monitor with these flags, and work adds --merge only when asked; monitor reads them by name", [
+        ("--no-review", [skill("go"), skill("monitor")]),
+        ("--draft", [skill("go"), GO_DRAFT_MERGE, skill("monitor")]),
+        ("--merge", [skill("work"), skill("go"), GO_DRAFT_MERGE, GO_ORCH, skill("monitor")]),
+        ("verified-locally", [GO_DRAFT_MERGE, SETTLE, MERGE, PR_STATUS],
+         "go passes it with --merge when its checks passed in the run, and monitor hands it to pr-status's merge gate"),
+    ]),
+    Contract("verify-block", "setup writes the gbase:verify block in the target repo's CLAUDE.md that go's verification gate reads", [
+        ("gbase:verify", [skill("setup"), skill("go"), GO_VERIFY]),
+    ]),
+    Contract("go-to-branch-pr-lines",
+             "go hands branch-pr its risk tier, check results, and deferred findings as these lines; deferred findings land in the PR body's Review focus", [
+        ("verification:", [skill("go"), BRANCH_PR]),
+        ("risk:", [skill("go"), BRANCH_PR]),
+        ("deferred:", [skill("go"), BRANCH_PR]),
+        ("## review focus", [skill("go"), GO_DRAFT_MERGE, BRANCH_PR, PR_BODY, SHIP_PREP, ORCHESTRATOR]),
+    ]),
+    Contract("pause-commit-marker",
+             "pause leaves a wip: commit whose body starts with Intent:, the marker pickup, go, and branch-pr use to recognize it before it is soft-reset into real commits", [
+        ("intent:", [skill("pause"), skill("pickup"), skill("go"), BRANCH_PR]),
+        ("git reset --soft", [BRANCH_PR]),
+        ('"wip:"', [SHIP_PREP], "ship-prep does the reset; its marker is the same wip: + Intent: pair pause writes"),
+    ]),
+    Contract("backup-ref", "ship-prep backs the tree up under this ref on every branch-pr run, and the runner prunes old ones by the same prefix", [
+        ("refs/gbase/backup/", [BRANCH_PR, SHIP_PREP, RUNNER]),
+    ]),
+    Contract("verify-skills", "create-verify generates .claude/skills/verify-* that go runs for touched features; go also runs pstack's .claude/skills/verify/", [
+        (".claude/skills/verify-", [skill("create-verify"), GO_VERIFY]),
+        (".claude/skills/verify/", [skill("create-verify"), GO_VERIFY, skill("setup")]),
+    ]),
+    Contract("orchestrator-ship",
+             "when the orchestrator owns shipping, go passes branch-pr the owner and a PR body file, and both print the ship: / PR 본문 초안: lines the caller greps", [
+        ("ship-owner: orchestrator", [GO_ORCH, BRANCH_PR]),
+        ("pr-body-file:", [GO_ORCH, BRANCH_PR]),
+        ("ship: local", [LOCAL_MODE, ORCHESTRATOR, SETTLE]),
+        ("ship: skip —", [HEADLESS, ORCHESTRATOR], "a shipping step the caller put out of scope, not a decision"),
+        ("pr 본문 초안:", [GO_ORCH, LOCAL_MODE, ORCHESTRATOR, RUNNER, SETTLE]),
+    ]),
+    Contract("pr-url-line", "agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url", [
+        ("`pr: <url>`", [skill("go"), GO_ORCH, BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
+        ('print(f"pr: {', [SHIP_PREP], "the script prints the line the skill promises"),
+        ("pr_url", [RUNNER_DOC, RUNNER]),
+    ]),
+    Contract("conventions", "conventions.md holds the one setting > convention > default order; the runner reads its branch prefix key", [
+        ("gbase.branchprefix", [CONVENTIONS, RUNNER_DOC, RUNNER]),
+        ("references/conventions.md", [BRANCH_PR, MERGE]),
+    ]),
+    Contract("environment-file",
+             "the user's environment file says how a ticket is read and which write-backs are on; skills only say the verb, and ship-prep's environment: line sends branch-pr to its Shipping it section", [
+        ("gbase.conventions", [CONVENTIONS, ENVIRONMENT, skill("work"), SHIP_PREP, SETUP_ENV]),
+        ("references/environment.md", [skill("work"), skill("setup"), SETUP_ENV]),
+        ("(environment.md)", [CONVENTIONS]),
+        ("references/explore-environment.md", [skill("setup")]),
+        ("`environment:` line", [ENVIRONMENT]),
+        ('"environment: ', [SHIP_PREP]),
+        ("shipping it", [ENVIRONMENT, SHIP_PREP]),
+        ("## write-back", [ENVIRONMENT]),
+        ('"fetch the ticket"', [ENVIRONMENT]),
+        ("link the pr on the ticket", [ENVIRONMENT, SETUP_ENV]),
+        ("ticket: <key> → not read", [ENVIRONMENT]),
+        ("is not permission", [ENVIRONMENT]),
+        ("draft only", [SETUP_ENV]),
+    ]),
+    Contract("settle-line", "monitor --until-settled ends with a settle: line that pr-status prints and the orchestrator reads", [
+        ("--until-settled", [skill("monitor"), SETTLE, GO_ORCH, ORCHESTRATOR]),
+        ("settle: 수렴", [SETTLE, PR_STATUS, ORCHESTRATOR]),
+        ("settle: 미확정", [SETTLE, PR_STATUS, ORCHESTRATOR]),
+        ("settle: 사람 필요", [SETTLE, PR_STATUS, ORCHESTRATOR]),
+    ]),
+    Contract("pr-status-lines", "monitor acts on pr-status's output lines and flags: a line or flag the skill or a reference names is one the script prints or takes", [
+        ('"conflict — ', [PR_STATUS]),
+        ("| `conflict` |", [skill("monitor")]),
+        ('"comments — ', [PR_STATUS]),
+        ("| `comments` |", [skill("monitor")]),
+        ('"ci — ', [PR_STATUS]),
+        ("| `ci` |", [skill("monitor")]),
+        ('"notes — ', [PR_STATUS]),
+        ("| `notes` |", [skill("monitor")]),
+        ('"settled — ', [PR_STATUS]),
+        ("| `settled` |", [skill("monitor")]),
+        ('"limit — ', [PR_STATUS]),
+        ("`next: limit`", [SETTLE]),
+        ('"give up — ', [PR_STATUS]),
+        ("`give up`", [skill("monitor"), SETTLE]),
+        ('"unstarted — ', [PR_STATUS]),
+        ("`unstarted`", [skill("monitor")]),
+        ("merge: gate passed", [PR_STATUS, MERGE]),
+        ("merge: not now", [PR_STATUS, MERGE]),
+        ("merge: retarget stacked pr first", [PR_STATUS, MERGE]),
+        ("--handled", [PR_STATUS, SETTLE]),
+    ]),
+    Contract("ship-prep-lines", "branch-pr acts on ship-prep's output lines and flags: a line the skill or a reference names is one the script prints", [
+        ('"ask: ', [SHIP_PREP]),
+        ("`ask:` lines", [BRANCH_PR]),
+        ("branch plan:", [SHIP_PREP, BRANCH_PR]),
+        ("--partial", [SHIP_PREP, BRANCH_PR]),
+        ("--remote", [SHIP_PREP, BRANCH_PR]),
+        ("ship-prep start --local", [LOCAL_MODE]),
+        ("ship-prep check", [LOCAL_MODE]),
+        ("ship-prep assets", [PR_BODY, LOCAL_MODE]),
+        ("compat: run", [BRANCH_PR, SHIP_PREP]),
+        ("compat: skip", [BRANCH_PR, SHIP_PREP]),
+    ]),
+    Contract("split-out-branches",
+             "monitor's and branch-pr's bodies name the script and the reference each branch reads, and pr-status's next: lines name the same reference; "
+             "the branch's tokens live in that file, not in the body", [
+        ("scripts/pr-status", [skill("monitor")]),
+        ("references/settle.md", [skill("monitor")]),
+        ("references/merge.md", [skill("monitor")]),
+        ("references/comments.md", [skill("monitor"), PR_STATUS]),
+        ("references/conflicts.md", [skill("monitor"), PR_STATUS]),
+        ("scripts/ship-prep", [BRANCH_PR]),
+        ("references/pr-body.md", [BRANCH_PR]),
+        ("references/local-mode.md", [BRANCH_PR]),
+    ]),
+    Contract("decision-line", "headless runs report a question as a 결정 필요: line, and the runner splits it on these keys into recommend / options / human", [
+        ("결정 필요:", [HEADLESS, ORCHESTRATOR, RUNNER]),
+        ("(추천:", [HEADLESS, RUNNER]),
+        ("다른 선택지", [HEADLESS, RUNNER]),
+        ("사람이 할 일", [HEADLESS, RUNNER]),
+    ]),
+    Contract("no-wakeups", "headless forbids wakeups in prose; the runner enforces it by denying the tools", [
+        ("schedulewakeup,croncreate", [HEADLESS, RUNNER_DOC, RUNNER]),
+    ]),
+    Contract("bare-task-forbid-list",
+             "bare task runs load no skill: the runner (and a bot's direct template, via harness.md) carries the forbid list", [
+        ("대표자·본인 확인 체크", [HEADLESS, ORCHESTRATOR, RUNNER, HARNESS]),
+    ]),
+    Contract("settle-local-fixes", "settle keeps fixes local and pushes only when the agent owns shipping", [
+        ("agent_ship_owner=orchestrator", [GO_ORCH, skill("monitor"), SETTLE, skill("review"), ORCHESTRATOR]),
+        ("푸시 대기:", [SETTLE, ORCHESTRATOR]),
+    ]),
+    Contract("evidence-file",
+             "go and reproduce write the evidence file format; it records what a check ran on, and a `differs:` input becomes a Review focus item", [
+        ("agent_evidence_file", [GO_ORCH, skill("reproduce"), SETTLE, ORCHESTRATOR]),
+        ("`input`", [ORCHESTRATOR, GO_VERIFY, GO_ORCH, skill("reproduce")]),
+        ("differs:", [ORCHESTRATOR, GO_VERIFY, skill("reproduce"), BRANCH_PR, PR_BODY]),
+        ("input differs from report", [ORCHESTRATOR, skill("reproduce")]),
+    ]),
+    Contract("unreviewed-conflict-resolution",
+             "a conflict resolution that combined both sides and got no review is pushed only with this evidence line", [
+        ("conflict resolution unreviewed", [CONFLICTS]),
+    ]),
+    Contract("bug-fix-reproduce", "bug-fix starts with gbase:reproduce, which only writes the failing check; the fix stays in bug-fix", [
+        ("gbase:reproduce", [skill("bug-fix"), skill("reproduce")]),
+    ]),
+    Contract("session-hook-routing",
+             "the session hook routes to work (and plan) by the same criteria as work's description, and names the agent types work dispatches", [
+        ("`gbase:work`", [SESSION_HOOK]),
+        ("gbase:scout", [skill("work"), SESSION_HOOK]),
+        ("gbase:worker", [skill("work"), SESSION_HOOK]),
+        ("changes a signature other files call", [skill("work"), SESSION_HOOK]),
+        ("a diagnosis from a trace or profile", [skill("work"), SESSION_HOOK]),
+        ("spans several prs", [skill("work"), SESSION_HOOK]),
+        ("`gbase:plan`", [SESSION_HOOK, skill("work")]),
+    ]),
+    Contract("work-poteto-mode",
+             "work is poteto-mode inside gbase: it routes to pstack's playbooks and reads their Cursor names through playbooks.md", [
+        ("../poteto-mode/playbooks/", [skill("work")]),
+        ("references/playbooks.md", [skill("work")]),
+        ("pstack-adapter.md", [WORK_PLAYBOOKS]),
+        ("benchmark-checklist", [skill("work")]),
+        ("root cause before smallest", [skill("work")]),
+        ("references/correction.md", [skill("work")]),
+    ]),
+    Contract("polish-comment-pass",
+             "polish's Pass 0 is pstack's no-comments: the script decides whether it runs, go passes the tier and carries what stays open", [
+        ("next: comment pass", [ADDED_COMMENTS, skill("polish"), POLISH_COMMENTS]),
+        ("next: skip", [ADDED_COMMENTS, skill("polish")]),
+        ("next: read the diff yourself", [ADDED_COMMENTS, skill("polish")]),
+        ("scripts/added-comments", [skill("polish")]),
+        ("references/comments.md", [skill("polish"), ADDED_COMMENTS]),
+        ("../../no-comments/skill.md", [POLISH_COMMENTS]),
+        ("gbase:comment-sicko", [POLISH_COMMENTS]),
+        ("risk: <tier>", [skill("go")]),
+        ("stays deleted", [skill("go")], "go's main session once restored a constraint comment polish had deleted"),
+        ("`comments:`", [skill("go"), GO_VERIFY, GO_DRAFT_MERGE, POLISH_COMMENTS]),
+        ("comments: skip —", [ADDED_COMMENTS, skill("polish")]),
+        ("don't encode", [POLISH_COMMENTS]),
+        ('"skills/polish/references/comments.md"', ["scripts/pstack/lock.json"]),
+    ]),
+    Contract("premise-after-two-fixes",
+             "a check still failing after two fixes: verify.md, monitor's ci row, and pr-status's ci line all point at premise.md, which writes the premise, makes one observation, and stops with no third fix", [
+        ("../../references/premise.md", [GO_VERIFY, skill("monitor"), PR_STATUS]),
+        ("principle-attack-the-premise/skill.md", [PREMISE]),
+        ("write the premise", [PREMISE]),
+        ("one observation", [PREMISE]),
+        ("no third fix", [PREMISE, PR_STATUS]),
+        ("a third fix included", [GO_VERIFY]),
+        ("결정 필요: <체크>가 수정 두 번 뒤에도 실패", [PREMISE]),
+        ('"references/premise.md"', ["scripts/pstack/lock.json"]),
+    ]),
+    Contract("review-test-files",
+             "a test file the target adds or changes: review judges each test against the two imagined edits itself, and a test that fails one is never auto-fixed", [
+        ("references/tests.md", [skill("review")]),
+        ("principle-test-behavior-not-implementation/skill.md", [REVIEW_TESTS]),
+        ("break the behavior", [REVIEW_TESTS]),
+        ("change the internals", [REVIEW_TESTS]),
+        ("no agent is launched", [REVIEW_TESTS]),
+        ("never auto-fixed", [REVIEW_TESTS]),
+        ("no skeptic is launched for these alone", [REVIEW_TESTS]),
+        ('"skills/review/references/tests.md"', ["scripts/pstack/lock.json"]),
+    ]),
+    Contract("failed-check-suspects-the-look",
+             "a check that fails: verify.md suspects how it looked before the code, and its behavior check is a command that reruns the same comparison", [
+        ("suspect how you looked", [GO_VERIFY]),
+        ("reruns the same comparison", [GO_VERIFY]),
+    ]),
+    Contract("explain-the-number", "a number to measure: work's route sentence names this leaf ahead of benchmark-checklist", [
+        ("../principle-explain-the-number/skill.md", [skill("work")]),
+    ]),
+    Contract("lessons-line", "content runs report lessons instead of editing the harness; the runner hands them to a work run", [
+        ("교훈:", [shorts("content-common"), shorts("shorts-common"), skill("design-taste"), ORCHESTRATOR, RUNNER, FACTORY]),
+    ]),
+    Contract("design-taste",
+             "mockup and gapp's design load the user's taste rules before drawing; work loads them before screen work, and its workers do too (they don't inherit loaded skills)", [
+        ("gbase:design-taste", [skill("mockup"), "plugins/app/skills/design/SKILL.md", skill("work"),
+                                "plugins/base/skills/work/references/workers.md", "plugins/base/agents/worker.md"]),
+    ]),
+    Contract("runner-flags", "runner.md documents the flags gbase-run parses", [
+        ("--exclusive", [RUNNER_DOC, RUNNER]),
+        ("--max-turns", [RUNNER_DOC, RUNNER]),
+        ("--max-budget-usd", [RUNNER_DOC, RUNNER]),
+    ]),
+    Contract("followups-line",
+             "work's size gate reports the slices it left; the runner reads them into followups, and asks a capped run for them", [
+        ("남은 작업:", [skill("work"), ORCHESTRATOR, RUNNER, RUNNER_DOC]),
+    ]),
+    Contract("plan-report", "plan reports its file and slices; the runner reads them into plan_file and followups", [
+        ("`plan: <absolute path>`", [skill("plan"), ORCHESTRATOR]),
+        ("plan_file", [RUNNER_DOC, RUNNER]),
+    ]),
+    Contract("runner-start",
+             "bots start background runs with this one line, not a long nohup claude -p a permission classifier blocks", [
+        ("gbase-run start", [RUNNER_DOC, RUNNER, FACTORY, "README.md"]),
+    ]),
+    Contract("settle-rebase-exception", "settle's one rebase exception, so it stays one rule and not an open door", [
+        ("explicitly asks to rebase", [SETTLE, ORCHESTRATOR, FACTORY, "README.md"]),
+    ]),
+    Contract("mockup-report", "the runner reads mockup's report lines into result.json", [
+        ("mockup url:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
+        ("mockup shots:", [skill("mockup"), RUNNER, ORCHESTRATOR]),
+    ]),
+    Contract("mockup-explicit-only",
+             "mockup stays out of work/go runs (company repos included): explicit /gbase:mockup or --slot mockup only", [
+        ("disable-model-invocation: true", [skill("mockup")]),
+    ]),
+    Contract("review2-report-only", "review2 runs review twice on one tree; report only keeps the two sessions from editing", [
+        ("report only", [skill("review"), FACTORY]),
+    ]),
+    Contract("review-table", "the runner merges review2 by parsing review's report table", [
+        ("# | severity | file:line | finding | action", [skill("review"), RUNNER]),
+    ]),
+    Contract("pstack-sync",
+             "the daily routine parses --check's fields; every followed skill links the adapter the script names, and the lock's used_by names the gbase files to recheck", [
+        ("used_by", [PSTACK_SYNC, PSTACK_DOC]),
+        ("skills_changed", [PSTACK_SYNC, PSTACK_DOC]),
+        ("custom_changed", [PSTACK_SYNC, PSTACK_DOC]),
+        ("new_upstream", [PSTACK_SYNC, PSTACK_DOC]),
+        ("scripts_changed", [PSTACK_SYNC, PSTACK_DOC]),
+        ("references/pstack-adapter.md", [PSTACK_SYNC, PSTACK_DOC]),
+    ]),
+    Contract("pstack-adapter",
+             "the adapter sends every shipping step of a pstack playbook through go, and questions through headless.md", [
+        ("gbase:go", [PSTACK_ADAPTER, WORK_PLAYBOOKS]),
+        ("headless.md", [PSTACK_ADAPTER]),
+    ]),
+    Contract("gshorts-shorts-common",
+             "gshorts format skills defer every-video rules to shorts-common; its feedback intake names the format skills", [
+        ("shorts-common", [shorts("foreign-clip-short"), shorts("top3-compilation-short")]),
+        ("foreign-clip-short", [shorts("shorts-common"), shorts("top3-compilation-short")]),
+        ("top3-compilation-short", [shorts("shorts-common")]),
+    ]),
+    Contract("gshorts-content-common",
+             "content-common holds rules for every piece of content; shorts-common, instagram-card-news, naver-blog, threads-voice, x-voice, and comment-guide defer to it", [
+        ("content-common", [shorts("shorts-common"), shorts("instagram-card-news"), shorts("naver-blog"),
+                            shorts("threads-voice"), shorts("x-voice"), shorts("comment-guide")]),
+        ("instagram-card-news", [shorts("content-common")]),
+        ("naver-blog", [shorts("content-common")]),
+    ]),
+    Contract("gshorts-hook-templates", "hook-templates is read before every opening line; each content skill links it at its hook step", [
+        ("hook-templates", [shorts("content-common"), shorts("shorts-common"), shorts("instagram-card-news"),
+                             shorts("foreign-clip-short"), shorts("top3-compilation-short"), shorts("naver-blog"),
+                             shorts("threads-voice"), shorts("x-voice")]),
+    ]),
+    Contract("gshorts-voice",
+             "every skill that writes Threads or X copy sends it through that platform's voice skill; the feedback intake names both", [
+        ("threads-voice", [shorts("content-common"), shorts("hook-templates"), shorts("instagram-card-news"),
+                           shorts("comment-guide")]),
+        ("x-voice", [shorts("content-common"), shorts("hook-templates"), shorts("comment-guide")]),
+    ]),
+    Contract("gshorts-comment-guide",
+             "comment rules live once in comment-guide; the skills that write posts point there instead of repeating them", [
+        ("comment-guide", [shorts("content-common"), shorts("threads-voice"), shorts("x-voice"),
+                           shorts("instagram-card-news")]),
+    ]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
@@ -516,16 +647,18 @@ def check_factory(pdir):
 
 def check_contracts():
     texts = {}
-    for token, files in CONTRACTS:
-        for f in files:
-            path = ROOT / f
-            if not path.exists():
-                fail(f, f"contract file missing (token {token!r})")
-                continue
-            if f not in texts:
-                texts[f] = path.read_text(encoding="utf-8").lower()
-            if token not in texts[f]:
-                fail(f, f"contract token {token!r} missing — update both sides: {', '.join(files)}")
+    for contract in CONTRACTS:
+        for token, files, *note in contract.checks:
+            why = contract.why + "".join(f" ({n})" for n in note)
+            for f in files:
+                path = ROOT / f
+                if not path.exists():
+                    fail(f, f"contract file missing (token {token!r}) — {contract.name}: {why}")
+                    continue
+                if f not in texts:
+                    texts[f] = path.read_text(encoding="utf-8").lower()
+                if token.lower() not in texts[f]:
+                    fail(f, f"contract token {token!r} missing — {contract.name}: {why} — update both sides: {', '.join(files)}")
 
 
 def check_tracker_free():
