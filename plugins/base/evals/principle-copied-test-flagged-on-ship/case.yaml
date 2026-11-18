@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: principle-copied-test-flagged-on-ship
+context:
+  scaffold_script: fixture.sh
