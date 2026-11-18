@@ -42,7 +42,7 @@ What each `next:` line needs:
 |---|---|
 | `conflict` | Read [conflicts.md](references/conflicts.md). It comes first: CI keeps failing on the merge commit while it stands. |
 | `comments` | Read [comments.md](references/comments.md) before touching any of them. |
-| `ci` | Read the failing log (the command is on the `failed:` line). Fix what the diff caused, one commit per fix, and push. A failure the diff didn't cause is reported, not fixed. The same check failing twice after the same fix → stop and ask. |
+| `ci` | Read the failing log (the command is on the `failed:` line). Fix what the diff caused and push. A failure the diff didn't cause is reported, not fixed. A check still failing after two fixes → [premise.md](../../references/premise.md). |
 | `notes` | A bot's PR-level comment, shown once. Open it: a finding in it is handled like a review comment. |
 | `wait` | Nothing to do yet. |
 | `settled` | With `--draft` or `--merge`, read [merge.md](references/merge.md); otherwise keep watching for reviews. |

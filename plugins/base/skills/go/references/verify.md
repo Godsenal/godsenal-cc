@@ -10,18 +10,18 @@ Keep the gate to fast checks: lint, typecheck, unit tests. Native builds (`pod i
 
 ## A check fails
 
-Bias toward shipping:
+Bias toward shipping. Before any fix, suspect how you looked before the code: the command ran in the right directory, on the current tree, without a stale build or cache.
 
 - Diff-caused and mechanical (type error, lint, missing import) → fix and re-run, at most twice: the failing file or case first, then the scoped command once.
 - Pre-existing (files the diff didn't touch), flaky, or environment-dependent (no DB, no device, missing env) → note and proceed.
-- Diff-caused and still failing after two attempts → `AskUserQuestion` with the output: fix now / open the PR anyway / abort.
+- Diff-caused and still failing after two attempts, yours or ones the task says were already made → read [premise.md](../../../references/premise.md) before anything else, a third fix included. Its question ends in fix now / open the PR anyway / abort.
 
 ## Behavior check
 
 Required on `medium` and `high` when the diff changes what a user or caller observes. It runs once per change, not once per skill.
 
 - **Reuse the route's run**, except on `high`, where [high.md](high.md) has another agent run it. Take the passing `behavior:` lines `gbase:work` wrote for this task as they are, except for a feature whose files a review fix touched after that run: re-run that one. A route `skip` line is not reused; try the feature here.
-- **Otherwise run it here.** The repo's verify skill, `.claude/skills/verify-*/` (from `gbase:create-verify`) or `.claude/skills/verify/` (pstack's generator), at the root or in the touched package, for the features in its `features/` map that the diff touches. Without one, a CLI or script run that exercises the change and needs no build, device, or server start; don't build a harness for it.
+- **Otherwise run it here.** The repo's verify skill, `.claude/skills/verify-*/` (from `gbase:create-verify`) or `.claude/skills/verify/` (pstack's generator), at the root or in the touched package, for the features in its `features/` map that the diff touches. Without one, a CLI or script run that exercises the change and needs no build, device, or server start; don't build a harness for it. Make it a command that reruns the same comparison and name it in the evidence, so a later fix is checked the same way; a one-time look can't be repeated.
 - **Required means evidence or a reason.** An unreachable precondition (no simulator, no test account, no such run) is `behavior: skip — <reason>`. The PR still opens, but a skip is unverified, not a pass: it goes to `branch-pr` as written, where it becomes a `(확인)` item, and into the evidence file as `open`. A diff-caused failure goes through the fix-twice-then-ask rule above.
 - **Say what it ran on.** When a check ran on a chosen input (a fixture, sample files, a simulator) and the bug report or real use has a different kind (resolution, format, metadata, device), name both: 1024px messenger copies passed while the phone's full-size originals still failed, and the report never said the inputs differed.
 

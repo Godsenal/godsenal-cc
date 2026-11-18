@@ -175,7 +175,10 @@
     "principle-attack-the-premise": {
       "mode": "follow",
       "hash": "930e1c3faeec7631",
-      "out": "bc2866f714ee3511"
+      "out": "bc2866f714ee3511",
+      "used_by": [
+        "references/premise.md"
+      ]
     },
     "principle-boundary-discipline": {
       "mode": "follow",
@@ -205,7 +208,10 @@
     "principle-explain-the-number": {
       "mode": "follow",
       "hash": "f5ea03138d640f7c",
-      "out": "3c835ed5df590729"
+      "out": "3c835ed5df590729",
+      "used_by": [
+        "skills/work/SKILL.md"
+      ]
     },
     "principle-fix-root-causes": {
       "mode": "follow",
@@ -266,7 +272,10 @@
     "principle-prove-it-works": {
       "mode": "follow",
       "hash": "256beb3afe26fb2c",
-      "out": "3a28767b30ae59bd"
+      "out": "3a28767b30ae59bd",
+      "used_by": [
+        "skills/go/references/verify.md"
+      ]
     },
     "principle-redesign-from-first-principles": {
       "mode": "follow",
@@ -294,7 +303,10 @@
     "principle-test-behavior-not-implementation": {
       "mode": "follow",
       "hash": "c3b70f28c5e48573",
-      "out": "b61aa45ee8525844"
+      "out": "b61aa45ee8525844",
+      "used_by": [
+        "skills/review/references/tests.md"
+      ]
     },
     "principle-type-system-discipline": {
       "mode": "follow",

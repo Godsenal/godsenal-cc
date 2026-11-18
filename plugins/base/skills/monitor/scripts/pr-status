@@ -260,7 +260,7 @@ def decide(snap, first_seen, now, pushed=0, settle_rules=True):
         human += [f"{i['author']} {i['where']}" for i in snap["items"]]
     if failed:
         nxt.append("ci — " + ", ".join(c["name"] for c in failed) + "; read the failing log, fix what the diff caused (one commit per fix); "
-                   "the same check failing twice after the same fix is a question, not a third try")
+                   "a check still failing after two fixes: read ../../references/premise.md before stopping, no third fix")
         human += [f"실패한 체크 {c['name']}" for c in failed]
     if unstarted:
         human += [f"CI 미실행(계정) {c['name']}" for c in unstarted]
