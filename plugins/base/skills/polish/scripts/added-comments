@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""Whether gbase:polish runs its comment pass: the comments on a diff's added lines, counted.
+
+  added-comments                    uncommitted changes against HEAD, untracked files included
+  added-comments -- <paths>         the same, only for those paths
+  added-comments <git diff args>    that diff: `HEAD~1 HEAD`, `origin/main...HEAD`, `main -- src/a.ts`
+  added-comments -                  a unified diff on stdin
+
+Prints one `<file>: <line>, <line>` row per file with a comment on an added line, then
+
+  comments: <n> on added lines, in <m> files
+  next: comment pass — read references/comments.md
+or
+  comments: 0 on added lines
+  next: skip — report `Comments: skip — no comments on added lines`
+
+When git can't produce the diff it exits 1 with `next: read the diff yourself — …`: the same decision, made by reading.
+
+A marker is looked for outside string literals, by the file's extension. The match is textual, so a
+marker inside a multi-line string or a regex literal counts: that starts a pass that deletes nothing,
+which is the cheap way to be wrong. Prose and data files (Markdown, JSON, lockfiles) are never counted.
+"""
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+SLASH = set("html htm js jsx ts tsx mjs cjs mts cts java kt kts swift c h cc cpp cxx hpp m mm cs go rs scala dart "
+            "scss less proto groovy gradle zig jsonc json5 vue svelte php".split())
+BLOCK_ONLY = {"css", "sql"}
+HASH = set("py pyi rb sh bash zsh fish yaml yml toml pl pm r ex exs tf hcl ps1 cfg conf ini properties mk nix "
+           "graphql gql cmake php".split())
+HASH_NAMES = {"dockerfile", "makefile", "gemfile", "rakefile", "justfile", ".gitignore", ".dockerignore", "cmakelists.txt"}
+HASH_TXT = re.compile(r"requirements[\w.-]*\.txt")  # pip's files are `.txt` and hold `#` comments
+DASH = set("sql lua hs elm".split())
+MARKUP = set("html htm xml vue svelte svg xaml plist".split())
+PROSE = set("md mdx markdown txt rst adoc json lock csv tsv snap".split())
+
+# A `'` right after a word character is an apostrophe (`don't`), unless the word is a string prefix (`f'…'`).
+STRING = re.compile(r'"(?:\\.|[^"\\])*"|(?:(?<!\w)|(?<=\b[bfru])|(?<=\b[bfr]{2}))\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`', re.I)
+MAX_UNTRACKED_BYTES = 1_000_000
+
+
+def families(path):
+    """The comment syntaxes a file can hold; None for a file that is never counted."""
+    name = Path(path).name.lower()
+    ext = name.rsplit(".", 1)[1] if "." in name.lstrip(".") else ""
+    hash_name = name in HASH_NAMES or name.startswith(".env") or bool(HASH_TXT.fullmatch(name))
+    if ext in PROSE and not hash_name:
+        return None
+    found = set()
+    if ext in SLASH:
+        found |= {"slash", "block"}
+    if ext in BLOCK_ONLY:
+        found.add("block")
+    if ext in HASH or hash_name:
+        found.add("hash")
+    if ext in DASH:
+        found.add("dash")
+    if ext in MARKUP:
+        found.add("markup")
+    if ext in ("py", "pyi"):
+        found.add("docstring")
+    return found or {"unknown"}
+
+
+def has_comment(line, kinds, in_block):
+    """(a comment is on this line, a block comment is still open after it)."""
+    text = line.strip()
+    if not text:
+        return False, in_block
+    if in_block:
+        return True, "*/" not in text
+    if "unknown" in kinds:  # an extension not listed: only a marker that starts the line
+        return bool(re.match(r"//|/\*|<!--|#(?!!)(\s|$)", text)), False
+    if "docstring" in kinds and text[:3] in ('"""', "'''"):
+        return True, False
+    code = STRING.sub('""', text)
+    if "markup" in kinds and "<!--" in code:
+        return True, False
+    if "block" in kinds:
+        opened = code.find("/*")
+        if opened >= 0 and not ("slash" in kinds and re.search(r"(?<!:)//", code[:opened])):  # `// see /* x` opens nothing
+            return True, "*/" not in code[opened + 2:]
+        if re.match(r"\*(/|\s|$)", text):  # a continuation line of a block that opened above the hunk
+            return True, False
+    if "slash" in kinds and re.search(r"(?<!:)//", code):
+        return True, False
+    if "hash" in kinds and re.search(r"(^|\s)#(?!!)", code):
+        return True, False
+    if "dash" in kinds and re.search(r"(^|\s)--", code):
+        return True, False
+    return False, False
+
+
+def scan(diff):
+    """{file: [new-side line numbers of added lines that carry a comment]} for a unified diff."""
+    hits, path, kinds, line_no, in_block = {}, None, None, 0, False
+    old_left = new_left = 0  # lines the current hunk still holds: inside it, `+++ x` and `--- x` are content
+    for raw in diff.splitlines():
+        if old_left <= 0 and new_left <= 0:
+            if raw.startswith("+++ "):
+                target = raw[4:].split("\t")[0]
+                path = None if target == "/dev/null" else re.sub(r"^b/", "", target)
+                kinds = families(path) if path else None
+            elif raw.startswith("diff --git"):
+                path = None
+            elif raw.startswith("@@"):
+                match = re.match(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", raw)
+                if match:
+                    old_left = int(match.group(1) or 1)
+                    line_no, new_left, in_block = int(match.group(2)), int(match.group(3) or 1), False
+            continue
+        if raw.startswith("\\"):  # "\ No newline at end of file"
+            continue
+        if raw.startswith("+"):
+            if path and kinds:
+                found, in_block = has_comment(raw[1:], kinds, in_block)
+                if found:
+                    hits.setdefault(path, []).append(line_no)
+            line_no, new_left = line_no + 1, new_left - 1
+        elif raw.startswith("-"):
+            old_left -= 1
+        else:
+            line_no, old_left, new_left, in_block = line_no + 1, old_left - 1, new_left - 1, False
+    return hits
+
+
+def scan_file(path, text):
+    """An untracked file: every line is an added line."""
+    kinds, in_block, lines = families(path), False, []
+    if not kinds:
+        return lines
+    for number, line in enumerate(text.splitlines(), 1):
+        found, in_block = has_comment(line, kinds, in_block)
+        if found:
+            lines.append(number)
+    return lines
+
+
+def git(*args):
+    return subprocess.run(["git", "-c", "core.quotePath=false", *args], capture_output=True, text=True, errors="replace", check=True).stdout
+
+
+def collect(argv):
+    if argv == ["-"]:
+        return scan(sys.stdin.read())
+    worktree = not argv or argv[0] == "--"  # no revision named: the working tree against HEAD
+    hits = scan(git("diff", "--no-color", "--no-ext-diff", "--no-relative", "-U0", *(["HEAD", *argv] if worktree else argv)))
+    if not worktree:
+        return hits
+    # git diff names files from the repo root wherever it runs; `--full-name` makes ls-files do the same
+    root = Path(git("rev-parse", "--show-toplevel").rstrip("\n"))
+    for path in git("ls-files", "--others", "--exclude-standard", "--full-name", *(argv or ["--", ":/"])).splitlines():
+        file = root / path
+        if not file.is_file() or file.stat().st_size > MAX_UNTRACKED_BYTES:
+            continue
+        data = file.read_bytes()
+        if b"\0" in data:
+            continue
+        lines = scan_file(path, data.decode("utf-8", errors="replace"))
+        if lines:
+            hits[path] = lines
+    return hits
+
+
+def report(hits):
+    out = [f"{path}: {', '.join(map(str, lines))}" for path, lines in sorted(hits.items())]
+    total = sum(len(lines) for lines in hits.values())
+    if total:
+        files = len(hits)
+        out.append(f"comments: {total} on added lines, in {files} file{'s' if files != 1 else ''}")
+        out.append("next: comment pass — read references/comments.md")
+    else:
+        out.append("comments: 0 on added lines")
+        out.append("next: skip — report `Comments: skip — no comments on added lines`")
+    return "\n".join(out)
+
+
+def main(argv):
+    if argv and argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    try:
+        print(report(collect(argv)))
+    except (subprocess.CalledProcessError, OSError) as error:  # OSError: no git to run, or an unreadable file
+        print(f"added-comments: git failed: {(getattr(error, 'stderr', '') or str(error)).strip()}", file=sys.stderr)
+        print("next: read the diff yourself — comment pass only when an added line carries a comment, else `Comments: skip — no comments on added lines`")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

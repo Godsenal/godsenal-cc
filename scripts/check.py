@@ -52,6 +52,8 @@ HEADLESS = "plugins/base/references/headless.md"
 HARNESS = "plugins/base/references/harness.md"
 SESSION_HOOK = "plugins/base/hooks/session-start.md"
 FACTORY = "plugins/base/.claude-plugin/factory.json"
+POLISH_COMMENTS = "plugins/base/skills/polish/references/comments.md"  # polish's Pass 0: pstack's no-comments, read by path
+ADDED_COMMENTS = "plugins/base/skills/polish/scripts/added-comments"
 RUNNER = "scripts/gbase-run"
 CONVENTIONS = "plugins/base/references/conventions.md"
 PSTACK_SYNC = "scripts/pstack-sync.py"
@@ -191,6 +193,20 @@ CONTRACTS = [
     ("root cause before smallest", [skill("work")]),
     ("references/correction.md", [skill("work")]),
     ("used_by", [PSTACK_SYNC, PSTACK_DOC]),
+    # polish's Pass 0 is pstack's no-comments: the script decides whether it runs, go passes the tier and carries what stays open
+    ("next: comment pass", [ADDED_COMMENTS, skill("polish"), POLISH_COMMENTS]),
+    ("next: skip", [ADDED_COMMENTS, skill("polish")]),
+    ("next: read the diff yourself", [ADDED_COMMENTS, skill("polish")]),
+    ("scripts/added-comments", [skill("polish")]),
+    ("references/comments.md", [skill("polish"), ADDED_COMMENTS]),
+    ("../../no-comments/skill.md", [POLISH_COMMENTS]),
+    ("gbase:comment-sicko", [POLISH_COMMENTS]),
+    ("risk: <tier>", [skill("go")]),
+    ("stays deleted", [skill("go")]),  # go's main session once restored a constraint comment polish had deleted
+    ("`comments:`", [skill("go"), GO_VERIFY, GO_DRAFT_MERGE, POLISH_COMMENTS]),
+    ("comments: skip —", [ADDED_COMMENTS, skill("polish")]),
+    ("don't encode", [POLISH_COMMENTS]),
+    ('"skills/polish/references/comments.md"', ["scripts/pstack/lock.json"]),
     # content runs report lessons instead of editing the harness; the runner hands them to a work run
     ("교훈:", [shorts("content-common"), shorts("shorts-common"), skill("design-taste"), ORCHESTRATOR, RUNNER, FACTORY]),
     # mockup and gapp's design load the user's taste rules before drawing

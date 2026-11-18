@@ -1,12 +1,12 @@
 ---
 name: go
-description: "Ships a finished change end to end — reviews and polishes it in parallel, applies verified review fixes, runs the project's fast checks, opens the PR via gbase:branch-pr, and watches it to merge via gbase:monitor. Review happens before the PR so fixes land in the initial commits. Use when the user says a change is done and wants it shipped, or runs /gbase:go."
+description: "Ships a finished change end to end — reviews and polishes it in parallel, applies verified review fixes, runs the project's fast checks, opens the PR via gbase:branch-pr, and watches it to merge via gbase:monitor. Use when the user says a change is done and wants it shipped, or runs /gbase:go."
 allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Agent Edit Write
 ---
 
 # /gbase:go
 
-Takes a finished change to an open, watched PR: **polish ∥ review → verify → branch-pr → monitor**. `go` only sequences; each sub-skill keeps its own consent and safety rules. Invoking it is the go-ahead to reach a PR: only a diff-caused check failure that resists a mechanical fix and `branch-pr`'s own questions may stop it first. It merges only with `--merge`, never by default.
+Takes a finished change to an open, watched PR: **polish ∥ review → verify → branch-pr → monitor**. `go` only sequences; each sub-skill keeps its own consent and safety rules. Invoking it is the go-ahead to reach a PR: only a diff-caused check failure that resists a mechanical fix and `branch-pr`'s own questions may stop it first. It merges only with `--merge`.
 
 ## 출력 언어
 
@@ -19,7 +19,7 @@ Takes a finished change to an open, watched PR: **polish ∥ review → verify �
 | Step 1's check prints anything | [orchestrated.md](references/orchestrated.md). It changes every step, and under `AGENT_HEADLESS=1` nothing is asked ([headless.md](../../references/headless.md)). |
 | Risk `medium` or `high` | [review.md](references/review.md) before Step 2, [verify.md](references/verify.md) at Step 4; on `high` also [high.md](references/high.md) |
 | A check fails, or the repo has no verify block | [verify.md](references/verify.md) |
-| `--draft`, `--merge`, or a finding review deferred | [draft-merge.md](references/draft-merge.md), before Step 6 |
+| `--draft`, `--merge`, or a finding review deferred | [draft-merge.md](references/draft-merge.md), before Step 5 |
 
 ## Steps
 
@@ -37,7 +37,7 @@ Classify the risk the way `branch-pr` does: `high` if it touches a path `REVIEW.
 
 ### 2. Polish ∥ review
 
-Launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:polish", args: "<in-scope files>")` in this repo, to leave what polish would ask about unapplied under `awaiting confirm` (it can't ask the user), and to return the report verbatim. An `awaiting confirm` item goes in the final report as a suggestion. Polish fails → say so and go on. No `Agent` tool → call `gbase:polish` directly.
+Launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:polish", args: "<in-scope files>; risk: <tier>")`, to leave what polish would ask about unapplied under `awaiting confirm` (it can't ask the user), and to return the report verbatim. An `awaiting confirm` item goes in the final report as a suggestion; a `Comments:` `open` row goes into Step 5's `Deferred:` as `low`. A comment polish deleted stays deleted: that row is its record. Polish's `결정 필요:`/`남은 작업:` lines end the final report verbatim. Polish fails → say so and go on. No `Agent` tool → call `gbase:polish` directly.
 
 On `medium` and `high`, review.md's finder is launched in the same message. No finder on `low`, on `--no-review`, or on a scope review skips anyway (pure rename, dependency bump, generated code).
 
@@ -55,10 +55,9 @@ Report one line per check, `verify: <command> → pass`, and carry the `behavior
 
 ```
 Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <Step 4 lines>; Deferred: <severity · introduced|pre-existing · file:line · failure scenario, per finding joined by ' | ', or none>")
-# --draft → the args start with "--draft "
 ```
 
-`branch-pr` owns branching, commit grouping, push, and the PR body, where deferred findings become `## Review focus` items. Once the PR exists the report carries `pr: <url>` at column 0: `branch-pr`'s line, or `gh pr view --json url -q .url` when it pushed to a PR that already existed.
+`branch-pr` owns branching, commits, push, and the PR body, where deferred findings become `## Review focus` items. Once the PR exists the report carries `pr: <url>` at column 0: `branch-pr`'s line, or `gh pr view --json url -q .url` when it pushed to a PR that already existed.
 
 ### 6. Monitor
 
@@ -66,4 +65,4 @@ Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <S
 Skill(skill: "gbase:monitor", args: "--no-review")
 ```
 
-Drop `--no-review` when the pre-PR review didn't run (the `low` row, a finder that failed or never returned), so monitor's self-review covers the diff. `--draft`, `--merge`, and deferred findings: draft-merge.md.
+Drop `--no-review` when the pre-PR review didn't run (the `low` row, a finder that failed or never returned) or polish's `Comments:` line has a `fixed` row.

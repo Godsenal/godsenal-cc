@@ -26,7 +26,10 @@
     "agents/comment-sicko": {
       "mode": "follow",
       "hash": "7ef7f1f7a685c26b",
-      "out": "6fe2126bc60e4f2e"
+      "out": "6fe2126bc60e4f2e",
+      "used_by": [
+        "skills/polish/references/comments.md"
+      ]
     },
     "agents/poteto-agent": {
       "mode": "follow",
@@ -148,7 +151,11 @@
     "no-comments": {
       "mode": "follow",
       "hash": "a9d9071656f0c8a7",
-      "out": "6c23fb5bafcce69d"
+      "out": "6c23fb5bafcce69d",
+      "used_by": [
+        "skills/polish/SKILL.md",
+        "skills/polish/references/comments.md"
+      ]
     },
     "poteto-help": {
       "mode": "follow",
