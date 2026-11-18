@@ -52,6 +52,7 @@ MAX_FOCUS_ITEMS = 5
 UNVERIFIED = r"behavior: skip|differs:"
 CONFIRM_ITEM = r"^> \d+\. .*\((확인|verify)\)"  # a numbered Review focus item of the kind a person confirms
 LEAD_LINES = 45  # body lines before ## Change outline: one screen
+ENVIRONMENT_DOC = Path(__file__).resolve().parents[3] / "references" / "environment.md"
 
 
 class Stop(Exception):
@@ -216,6 +217,18 @@ def added_lines(entries, since="HEAD"):
     return lines
 
 
+def environment_file():
+    return git("config", "--get", "--type=path", "gbase.conventions", check=False)  # --type=path expands a leading ~
+
+
+def write_back_line(already_open=False):
+    conv = environment_file()
+    if conv:
+        print(f"environment: the PR is open — write back to the ticket only what {conv} marks `on` "
+              f"(\"Shipping it\" in {ENVIRONMENT_DOC}); no ticket, nothing to write"
+              + ("; it was already open, so read the ticket first and skip a write it already shows" if already_open else ""))
+
+
 def cmd_start(args):
     local = "--local" in args
     out, ask = [], []
@@ -275,12 +288,15 @@ def cmd_start(args):
         elif "origin" not in remotes:
             ask.append(f"ask: no `origin` among remotes ({', '.join(remotes)}) — which one? (then `open --remote <name>`)")
 
-    conv = git("config", "--get", "gbase.conventions", check=False)
+    conv = environment_file()
     files = [f for f in git("ls-files").split("\n") if re.search(CONVENTION_FILES, f, re.I)]
     if conv or files:
         out.append("conventions — read before naming the branch, commits, or PR: " + ", ".join(([conv] if conv else []) + files))
     else:
         out.append("conventions: none written down — follow recent history, then the gbase defaults (conventions.md)")
+    if conv:
+        out.append(f"environment: {conv} — when this change came from a ticket (the request or the branch names one), "
+                   f"read \"Shipping it\" in {ENVIRONMENT_DOC} before the PR draft")
     out.append(compat_line(paths, base or "<base>"))
     out.append(risk_hint(paths))
     out += ask
@@ -416,6 +432,7 @@ def cmd_open(args):
     if existing.get("state") == "OPEN":
         print("note: the PR was already open — the push updated it; its body is unchanged (`gh pr edit --body-file` to change it)")
         print(f"pr: {existing['url']}")
+        write_back_line(already_open=True)
         return 0
     create = run(["gh", "pr", "create", "--title", lines[0].strip(), "--body-file", "-"] + (["--draft"] if draft else []),
                  check=False, input="\n".join(lines[2:]))
@@ -423,6 +440,7 @@ def cmd_open(args):
         raise Stop(1, ["error: gh pr create failed (the branch is pushed)", create.stderr.strip()])
     url = next((l.strip() for l in reversed(create.stdout.splitlines()) if l.strip().startswith("http")), create.stdout.strip())
     print(f"pr: {url}")
+    write_back_line()
     print("next: put the `pr:` line in the final report at column 0")
     return 0
 

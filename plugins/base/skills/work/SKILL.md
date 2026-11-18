@@ -6,7 +6,7 @@ allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent Skill
 
 # /gbase:work
 
-Pick a route, read its steps, hand the result to `go`. This is pstack's `poteto-mode` (MIT) inside gbase, its playbooks read only when a task takes one. It keeps applying after the first task.
+Pick a route, read its steps, hand the result to `go`. This is pstack's `poteto-mode` (MIT) inside gbase. It keeps applying after the first task.
 
 ## 출력 언어
 
@@ -19,8 +19,9 @@ Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1
 ## 0. Before the route
 
 - Unpushed `gbase:pause` commits on this branch (`wip:` subject, `Intent:` body) → `gbase:pickup` first, then route what's left.
-- No `<!-- gbase:verify:start -->` block in `CLAUDE.md`/`AGENTS.md` → say once that `/gbase:setup` would make the verify step reliable.
+- No `<!-- gbase:verify:start -->` block in `CLAUDE.md`/`AGENTS.md` → say once that `/gbase:setup` adds one.
 - Behind the upstream → fast-forward first.
+- **A ticket reference** in the request or the branch name (`ABC-123`, `#123`, a tracker URL) and `git config --get gbase.conventions` prints a path → read [environment.md](../../references/environment.md) before the route.
 - **Skills the repo names** in `CLAUDE.md`/`AGENTS.md` for this kind of work are loaded before the first edit, as todo items. After that, load only what the todo list or this file names.
 - **The task touches what a user sees** — a screen, component, on-screen copy, onboarding, an empty/loading/completion state, an icon, a store screenshot. Judge by the files it will touch (`.tsx`, `.swift`, styles, views), not by its wording. First check the two skips, and when one applies do not call the skill at all:
   - the task hands over a design to match (a Figma file or link, a mockup the user picked) → `skip: design given`. Build to that design.
@@ -48,11 +49,11 @@ A file name below is a playbook in `../poteto-mode/playbooks/`. Once its row is 
 | "Until X passes", "keep going", unattended | `autonomous-run.md` |
 | Phased work spread over several PRs | `multi-phase-plan.md` for the plan file. A task that also asks for the first phase builds that PR by its own row; the rest are `남은 작업:` lines. |
 
-No row fits → say so and plan the steps yourself under the principles below. On any route, a measured number (a baseline, a speedup, a regression) is reported only after the seven questions of [benchmark-checklist](../benchmark-checklist/SKILL.md).
+No row fits → say so and plan the steps under the principles below. On any route, a measured number (a baseline, a speedup, a regression) is reported only after the seven questions of [benchmark-checklist](../benchmark-checklist/SKILL.md).
 
 ## 2. Ship
 
-A route that changed files ends with `Skill(skill: "gbase:go")`: polish, review, verify, PR, monitor, scaled by the change's risk tier (`low` / `medium` / `high`). An answer, a diagnosis, a plan file, or a prototype doesn't ship.
+A route that changed files ends with `Skill(skill: "gbase:go")`: polish, review, verify, PR, monitor, scaled by the change's risk tier. An answer, a diagnosis, a plan file, or a prototype doesn't ship.
 
 **Nothing ships by hand.** No `git commit`, `git push`, `gh pr create`, or `gh pr merge` of your own, however small: a version bump, a one-line chore, a conflict fix, or a follow-up on a branch that already has a PR all go through `go`. In one week 9 of 51 PR runs shipped by hand and left no review, evidence, or settle record.
 
@@ -76,7 +77,7 @@ Most are pstack leaves, `../principle-*/SKILL.md`. Read one when a call hinges o
 
 ## Subagents
 
-Bulk goes out, conclusions come back: sweeping many files, long logs, CI output, transcripts, or a large capture goes to `subagent_type: "gbase:scout"`. Two or more independent code units go to one `subagent_type: "gbase:worker"` each, launched together; a single unit, a design call, or units that write the same files stay here. Read [references/workers.md](references/workers.md) before launching either, and read what comes back yourself: never relay "done" unchecked.
+Sweeping many files, long logs, CI output, transcripts, or a large capture goes to `subagent_type: "gbase:scout"`. Two or more independent code units go to one `subagent_type: "gbase:worker"` each, launched together; a single unit, a design call, or units that write the same files stay here. Read [references/workers.md](references/workers.md) before launching either, and read what comes back yourself.
 
 ## Reply
 

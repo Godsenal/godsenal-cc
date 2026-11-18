@@ -1,6 +1,7 @@
 """branch-pr's ship-prep against real throwaway git repos and a fake `gh` — no network."""
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -264,6 +265,19 @@ class Start(Repo):
         _, out = self.run_prep("start", "--local")
         self.assertIn("conventions — read before naming the branch, commits, or PR: /x/conv.md, .github/pull_request_template.md, CONTRIBUTING.md", out)
 
+    def test_environment_file_adds_the_ticket_line_and_no_file_adds_none(self):
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        _, out = self.run_prep("start", "--local")
+        self.assertNotIn("environment:", out)
+        self.git("config", "gbase.conventions", "/x/env.md")
+        _, out = self.run_prep("start", "--local")
+        line = next(l for l in out.splitlines() if l.startswith("environment: "))
+        self.assertIn("/x/env.md — when this change came from a ticket", line)
+        doc = Path(re.search(r'in (\S+environment\.md)', line).group(1))
+        self.assertTrue(doc.is_file(), doc)
+        self.assertIn("## Shipping it", doc.read_text(encoding="utf-8"))
+
     def compat(self, files):
         self.branch()
         for f in files:
@@ -401,6 +415,23 @@ class Open(Repo):
         self.assertIn("\npr: https://github.com/o/r/pull/9\n", out)
         self.assertEqual(self.git("rev-parse", "origin/feat/x"), self.git("rev-parse", "HEAD"))
         self.assertRegex(self.gh_log(), r"pr create --title 제목 한 줄 --body-file - --draft")
+
+    def test_open_pr_names_the_write_back_rule_only_with_an_environment_file(self):
+        self.commit_change()
+        self.fake_gh('case "$1 $2" in "pr view") exit 1;; "pr create") echo "https://github.com/o/r/pull/9";; esac')
+        self.git("config", "gbase.conventions", "/x/env.md")
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertIn("\npr: https://github.com/o/r/pull/9\nenvironment: the PR is open — write back to the ticket only what /x/env.md marks `on`", out)
+        self.assertNotIn("already open", out)
+        self.fake_gh('case "$1 $2" in "pr view") echo \'{"url":"https://github.com/o/r/pull/9","state":"OPEN"}\';; esac')
+        code, out = self.run_prep("open", self.draft())
+        self.assertIn("\npr: https://github.com/o/r/pull/9\nenvironment: the PR is open", out)
+        self.assertIn("it was already open, so read the ticket first and skip a write it already shows", out)
+        self.git("config", "--unset", "gbase.conventions")
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("environment:", out)
 
     def test_bad_draft_stops_before_the_push(self):
         self.commit_change()

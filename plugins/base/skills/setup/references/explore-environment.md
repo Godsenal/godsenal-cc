@@ -1,0 +1,56 @@
+# Setup: the environment file
+
+Read at setup's "5. Environment file". It finds out how work is done around this repo and records it once in the user's environment file, whose format and rules are in [environment.md](../../../references/environment.md). Explore, show what was found, confirm, then write. Nothing here is written into the repo.
+
+## 1. Explore
+
+Read-only. Ask nothing that one of these answers.
+
+| Look at | It tells you |
+|---|---|
+| `git remote -v` | the forge and the owner; a self-hosted host or an organization is a work environment |
+| `git config --show-origin --get gbase.conventions` | a file already set. Update it in place, don't make a second one |
+| instruction files, PR template, `CONTRIBUTING`, commitlint config, git hooks, a branch or title check in CI | rules the repo already enforces. They come before the environment file ([conventions.md](../../../references/conventions.md)), so the draft doesn't repeat them |
+| the last 20 merged PRs (title, head branch, body), `git log --format=%s -30`, remote branch names | the formats that agree, a ticket key pattern (`ABC-123`, `#123`, `Closes #123`), tracker links in PR bodies |
+| the session's tools: MCP servers and their tool names, issue-tracker CLIs on `PATH` (`command -v gh glab acli` and whatever the history's links point to) | how a ticket can be read from here |
+| `docs/adr`, `docs/rfcs`, `docs/specs`, wiki links in the instruction files and PR bodies | where the team keeps specs and decisions |
+
+Then decide where tasks come from:
+
+- **Keys like `ABC-123` in the history** → an external tracker. Name it from the links in PR bodies and instruction files, or from the tool that resolves a key. When nothing names it, ask in the preview which tracker it is and how the user opens a ticket, and record the answer as prose.
+- **Only `#123` or `Closes #123`**, and the forge has issues turned on → the forge's own issues.
+- **Neither** → no tracker. When the formats also match the gbase defaults, there is nothing to record: say so and write no file.
+
+**Run the read method once** on a real key from the history before recording it, as the verify block does with its commands. Take the command's shape from the tool's own `--help` or the MCP tool's schema, not from memory, because a CLI's flags change between versions. Record `(ran <date>: ok)` or `(not run: <reason>)`, for example when the server needs a login only the user can do. Never run a write (comment, transition, assign, create) during setup.
+
+**No tool here reads the tracker** → the method line says that and what the user has to connect, and stops there. Write no example command for a tool this session doesn't have, because an unrun line in the file gets run later as if it had been checked.
+
+## 2. Draft
+
+Fill environment.md's format with what was found.
+
+- A line needs evidence: a file, a count of PRs that agree, a command that ran. The evidence goes in the preview, not in the file.
+- `## Write-back` is `off` for every kind unless the user turns one on in the preview. A write method is recorded only for a kind that is `on` or `ask`, marked `(not run)`.
+- Put no token, cookie, or password in the file. Name the environment variable or the login command.
+- The tracker is described the way the user would say it. gbase carries no template for any tracker, so a section is prose plus the commands that ran here.
+
+## 3. Preview and ask once
+
+Show the findings (one line each, with evidence), the whole draft, the path it will be written to, and the exact `git config` change. Then one `AskUserQuestion` call, recommended answer first, holding only the questions exploration left open:
+
+- **Write-back**, when a tracker was found: read only (recommended) / link the PR on the ticket / link the PR and ask before moving the ticket.
+- **Scope**, when the repo sits in a folder beside other repos of the same owner: that folder (recommended) / this repo only.
+- **Apply**: write it / let me edit first / skip.
+
+*headless:* no environment file is written and no git config changes. Print the draft in the report, since a worktree's git dir goes away with it, and also save it to `$(git rev-parse --absolute-git-dir)/gbase/environment-draft.md`. Add a `결정 필요:` line naming that path and the `git config` command.
+
+## 4. Write
+
+- **The file.** A path already set → edit it in place and keep the user's own lines. Otherwise, folder scope → `<folder>/gbase-environment.md`; this repo only → `${XDG_CONFIG_HOME:-$HOME/.config}/gbase/<owner>-<repo>.md`. Never inside a repo. A team that wants shared rules writes them in the repo's instruction files, which already come first.
+- **This repo only:** `git config --local gbase.conventions <absolute path>`. It reaches every worktree of the repo.
+- **A folder:** `<folder>/.gitconfig` gets `[gbase] conventions = <absolute path>`, and the global config needs `[includeIf "gitdir:<folder>/"] path = <folder>/.gitconfig`. If `git config --global --get-regexp '^includeif\.'` already has it, nothing more. If not, don't edit `~/.gitconfig` when a dotfiles tool owns it (it is a symlink, or chezmoi, stow, yadm, or home-manager manages it). In that case write the lines into a machine-local file it already includes (`git config --global --get-all include.path`), or print them for the user to add. A plain, unmanaged `~/.gitconfig` is edited only when the preview said so.
+- **Check it:** `git config --get gbase.conventions` in this repo prints the path. When the `includeIf` lines are still the user's to add, say that the file has no effect until they are.
+
+## 5. Report
+
+`environment file: created <path> | updated | no change | nothing to record | draft only`, `git config: local | folder (<file>) | pending — <the lines to add>`, `ticket read: ran ok | not run — <reason>`, and `write-back: <the kinds turned on, or none>`.

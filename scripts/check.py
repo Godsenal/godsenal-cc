@@ -56,6 +56,11 @@ POLISH_COMMENTS = "plugins/base/skills/polish/references/comments.md"  # polish'
 ADDED_COMMENTS = "plugins/base/skills/polish/scripts/added-comments"
 RUNNER = "scripts/gbase-run"
 CONVENTIONS = "plugins/base/references/conventions.md"
+ENVIRONMENT = "plugins/base/references/environment.md"
+SETUP_ENV = "plugins/base/skills/setup/references/explore-environment.md"
+TRACKER_FREE = [skill("work"), skill("go"), BRANCH_PR, skill("monitor"), PR_BODY, LOCAL_MODE, SHIP_PREP, GO_REVIEW, GO_VERIFY, GO_HIGH,
+                GO_DRAFT_MERGE, GO_ORCH, SETTLE, MERGE, CONFLICTS, COMMENTS, PR_STATUS]
+TRACKER_NAMES = r"\b(jira|acli|atlassian|linear|asana|trello|youtrack)\b"
 PSTACK_SYNC = "scripts/pstack-sync.py"
 PSTACK_DOC = "plugins/base/references/pstack-sync.md"
 PSTACK_ADAPTER = "plugins/base/references/pstack-adapter.md"
@@ -132,6 +137,18 @@ CONTRACTS = [
     # conventions.md holds the one setting > convention > default order; the runner reads its branch prefix key
     ("gbase.branchprefix", [CONVENTIONS, RUNNER_DOC, RUNNER]),
     ("references/conventions.md", [BRANCH_PR, MERGE]),
+    ("gbase.conventions", [CONVENTIONS, ENVIRONMENT, skill("work"), SHIP_PREP, SETUP_ENV]),
+    ("references/environment.md", [skill("work"), skill("setup"), SETUP_ENV]),
+    ("(environment.md)", [CONVENTIONS]),
+    ("references/explore-environment.md", [skill("setup")]),
+    ("`environment:` line", [ENVIRONMENT]), ('"environment: ', [SHIP_PREP]),
+    ("shipping it", [ENVIRONMENT, SHIP_PREP]),
+    ("## write-back", [ENVIRONMENT]),
+    ('"fetch the ticket"', [ENVIRONMENT]),
+    ("link the pr on the ticket", [ENVIRONMENT, SETUP_ENV]),
+    ("ticket: <key> → not read", [ENVIRONMENT]),
+    ("is not permission", [ENVIRONMENT]),
+    ("draft only", [SETUP_ENV]),
     ("settle: 수렴", [SETTLE, PR_STATUS, ORCHESTRATOR]),
     ("settle: 미확정", [SETTLE, PR_STATUS, ORCHESTRATOR]),
     ("settle: 사람 필요", [SETTLE, PR_STATUS, ORCHESTRATOR]),
@@ -490,6 +507,14 @@ def check_contracts():
                 fail(f, f"contract token {token!r} missing — update both sides: {', '.join(files)}")
 
 
+def check_tracker_free():
+    for f in TRACKER_FREE:
+        for n, line in enumerate((ROOT / f).read_text(encoding="utf-8").split("\n"), 1):
+            m = re.search(TRACKER_NAMES, line, re.I)
+            if m:
+                fail(f, f"line {n} names a tracker ({m.group(0)}) — say the verb and let the environment file say how (references/environment.md)")
+
+
 def load_script(rel):
     """A script of this repo as a module (their names have dashes, so they can't be imported)."""
     spec = importlib.util.spec_from_file_location(Path(rel).stem.replace("-", "_"), ROOT / rel)
@@ -553,6 +578,7 @@ def main():
     base = args[args.index("--base") + 1] if "--base" in args else None
     versions = check_plugins()
     check_contracts()
+    check_tracker_free()
     check_pstack()
     check_playbooks()
     check_read_budget()

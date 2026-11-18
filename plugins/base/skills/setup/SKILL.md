@@ -1,6 +1,6 @@
 ---
 name: setup
-description: "Prepares a repo for the gbase ship loop — records the project's own verify commands in CLAUDE.md or AGENTS.md (after running each once on current code), seeds a short REVIEW.md that gbase:review follows, adds a formatter hook, and offers a project-local verification skill. Idempotent; writes only after one confirmation. Use when starting to use gbase in a repo, when gbase:go couldn't find the project's checks, or on /gbase:setup."
+description: "Prepares a repo, and the environment it belongs to, for the gbase ship loop — records the project's own verify commands in CLAUDE.md or AGENTS.md (after running each once on current code), seeds a short REVIEW.md that gbase:review follows, adds a formatter hook, offers a project-local verification skill, and explores how work is done there (issue tracker and how a ticket is read, branch/commit/PR format, what may be written back to a ticket) to draft the user's environment file outside the repo. Idempotent; writes only after a preview. Use when starting to use gbase in a repo or at a new company or client, when gbase:go couldn't find the project's checks, when tasks come from tickets gbase should read, or on /gbase:setup."
 allowed-tools: Bash Read Write Edit Glob Grep AskUserQuestion Skill
 ---
 
@@ -22,7 +22,7 @@ Before any `AskUserQuestion`, check `printenv AGENT_HEADLESS`; when it prints `1
 
 ## What it writes
 
-All four are optional. Ask at most two questions: one before detecting, only if a prerequisite is missing (a checkout behind its upstream, uninstalled dependencies), and one preview to confirm before writing (`AskUserQuestion`: apply all / choose / cancel). *headless:* fast-forward when it is one, install from the lockfile, and apply all — every write stays uncommitted. Never touch content outside the managed markers. On a re-run, update blocks in place and report "no change" when current.
+All are optional. The environment file (5) has its own preview; for the rest ask at most two questions: one before detecting, only if a prerequisite is missing (a checkout behind its upstream, uninstalled dependencies), and one preview to confirm before writing (`AskUserQuestion`: apply all / choose / cancel). *headless:* fast-forward when it is one, install from the lockfile, and apply all — every write stays uncommitted. Never touch content outside the managed markers. On a re-run, update blocks in place and report "no change" when current.
 
 **Detect on current code.** `git fetch` first; if the branch is behind its upstream, offer to fast-forward before detecting — a stale checkout reports stale CI and commands (it has: a repo "with no CI" whose workflows were seven commits ahead). If dependencies aren't installed, offer to install them in the same question; if declined, record the commands as unverified.
 
@@ -78,6 +78,10 @@ Restrict the formatter to the file types it handles (`--ignore-unknown` for pret
 - No `.claude/skills/verify-*` or `.claude/skills/verify/` and the repo has a runnable surface (an app, CLI, or service — not a library or docs-only repo) → offer `gbase:create-verify` so `go` can prove behavior, not just types.
 - The target file is `CLAUDE.md` and has no Karpathy block → offer `gbase:karpathy` (it writes `CLAUDE.md`, so skip the offer in an `AGENTS.md`-only repo).
 
+### 5. Environment file
+
+Where this repo's tasks come from, how a ticket is read, what may be written back to it, and the branch, commit, and PR format go into the user's environment file, outside the repo: [environment.md](../../references/environment.md). `gbase:work` and `gbase:branch-pr` follow that file and name no tracker themselves; without one they work as before. Read [references/explore-environment.md](references/explore-environment.md) and follow it: explore, preview, write only what the preview confirmed. `/gbase:setup env` runs this part alone.
+
 ## Report
 
-One line per item: `<CLAUDE.md | AGENTS.md> verify block: added | updated | no change`, `REVIEW.md: created | additions proposed | skipped`, `hook: added (<formatter>) | skipped (<reason>)`, plus each command's run result. The files are left uncommitted — say so; `/gbase:go` ships them.
+One line per item: `<CLAUDE.md | AGENTS.md> verify block: added | updated | no change`, `REVIEW.md: created | additions proposed | skipped`, `hook: added (<formatter>) | skipped (<reason>)`, the environment lines explore-environment.md lists, plus each command's run result. The files are left uncommitted — say so; `/gbase:go` ships them.

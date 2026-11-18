@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: no-environment-file-no-ticket-step
+context:
+  scaffold_script: fixture.sh
