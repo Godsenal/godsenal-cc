@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: comments-headless-keeps-constraint-open
+context:
+  scaffold_script: fixture.sh

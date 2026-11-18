@@ -1,12 +1,12 @@
 ---
 name: polish
-description: "Polishes the current diff without changing behavior, in two passes — a three-lens cleanup (AI cruft & dead code, reuse & duplication, clarity & efficiency) run by parallel sub-agents, then a structural pass that collapses needless helpers and abstractions. Use after writing a non-trivial change, when a diff feels bloated, or when asked to polish / clean up / deslop / simplify. Also the polish step inside gbase:go and gbase:monitor. Unlike the built-in simplify, it is aggressive on reusing existing code but conservative on new abstractions, never auto-applies edits outside the diff, and reverts its own failed edits without touching the user's uncommitted work."
+description: "Polishes the current diff in two behavior-preserving passes — a three-lens cleanup (AI cruft & dead code, reuse & duplication, clarity & efficiency) run by parallel sub-agents, then a structural pass that collapses needless helpers and abstractions — after a comment pass that audits every comment the diff added (pstack's no-comments) when it added any; on a medium- or high-risk change that pass may replace a workaround with its root-cause fix. Use after writing a non-trivial change, when a diff feels bloated, or when asked to polish / clean up / deslop / simplify. Also the polish step inside gbase:go and gbase:monitor. Unlike the built-in simplify, it is aggressive on reusing existing code but conservative on new abstractions, never auto-applies edits outside the diff, and reverts its own failed edits without touching the user's uncommitted work."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent
 ---
 
 # /gbase:polish
 
-Two behavior-preserving passes over the current diff. No bug fixes, contract changes, or API tweaks — if you find a real bug, report it instead of patching it.
+A comment pass, then two behavior-preserving passes over the current diff. No bug fixes, contract changes, or API tweaks — if you find a real bug, report it instead of patching it. The one exception is Pass 0 under `risk: medium` or `high`, which may replace a workaround with its root-cause fix.
 
 ## 출력 언어
 
@@ -29,11 +29,19 @@ Uncommitted changes if any; otherwise the latest commit; explicit paths from the
 
 Skip entirely: pure renames/moves, dependency bumps, generated code, reverts, intentionally instrumented debug diffs, and anything the user called a prototype or "ship as-is".
 
+## Pass 0 — comments
+
+Run `"${CLAUDE_SKILL_DIR}/scripts/added-comments"` on the scope (no argument: uncommitted changes and untracked files; paths from the caller: `-- <paths>`, the same for those paths; a commit scope: its `git diff` arguments, e.g. `HEAD~1 HEAD`) and do what its `next:` line says.
+
+- `next: skip` → launch no agent for comments; the report line is `Comments: skip — no comments on added lines`.
+- `next: read the diff yourself` (git failed) → decide the same thing by reading the changed lines.
+- `next: comment pass` → `Read` [references/comments.md](references/comments.md) and finish it before Pass 1. It runs pstack's `no-comments` (one comment-only agent judges every comment on the added lines), scaled by the `risk:` the caller passed.
+
 ## Pass 1 — three lenses in parallel
 
 Spawn three `general-purpose` sub-agents at once with `model: "sonnet"` (they only propose — the resolution step below is the gate; a model the user names wins), each given the full diff and one lens. They return proposals (`file, line_range, before, after, rationale`) and edit nothing.
 
-- **A — AI cruft & dead code:** comments that narrate the code or the task, defensive checks on trusted paths, `any`/`ignore` casts hiding type errors, handling for impossible cases, leftover scaffolding, compat shims with no callers.
+- **A — AI cruft & dead code:** (comments are Pass 0's; a lens proposes no comment edit) defensive checks on trusted paths, `any`/`ignore` casts hiding type errors, handling for impossible cases, leftover scaffolding, compat shims with no callers.
 - **B — reuse & duplication:** unused imports/declarations, single-use variables, near-duplicate blocks (grep the repo and count every copy before proposing), logic that already exists in shared utils/hooks (search by behavior keyword, not just name), repeated literals, repeated computation.
 - **C — clarity & efficiency:** deep nesting, convoluted conditionals, stale names, hot-path waste (work in loops, sequential `await` that could be `Promise.all`), avoidable re-renders (unstable inline props/callbacks into memoized components or list rows, unstable list keys), closures that keep large scopes alive.
 
@@ -59,6 +67,7 @@ If a check fails, revert the offending edit by applying its `after → before` w
 ## Report
 
 ```
+Comments: skip — <reason> | audited N, deleted D, kept K, fixed F, open O (+ one row per `fixed` and `open` item, as comments.md writes them)
 Pass 1 — Lens A/B/C: proposed N, filtered Y, applied Z (each)
 Pass 2 — applied: …; awaiting confirm: … (⚠ out-of-diff)
 Rejected: <proposal — why>

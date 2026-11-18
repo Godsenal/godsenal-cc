@@ -65,6 +65,15 @@ Three more followed items carry `used_by` for the verification `high` adds (gbas
 | `statechart`, `create-formal-verification-skill` | `skills/go/references/high.md` has the `high` behavior agent run the repo's formal verification skill, or model the changed transitions with `statechart` | How each is invoked and what it installs; whether the generated skill is still project-local and names its area |
 | `interrogate` | `skills/review/references/proven.md` takes its "prove it with a run" brief but keeps a finding no run could reach | Whether the brief still asks for the command and its output |
 
+`gbase:polish` runs `no-comments` as its Pass 0 (gbase 1.58.0), so two more carry `used_by`:
+
+| Followed item | gbase file | When it changes, check |
+| --- | --- | --- |
+| `no-comments` | `skills/polish/references/comments.md` names its steps by number: 1–2 audit, 3–4 root-cause fix (`medium` and `high` only), 5 constraint encoding (never without a person), 6 report | Whether the numbers still mean that; whether Step 5 still says to delete the comment and report the constraint open when nobody approved; a new step |
+| `agents/comment-sicko` | The same file scopes the agent to the diff's added lines and falls back to reading the agent file when the session has no `Agent` tool | Whether the agent still only deletes comments and flags code (`MUST KILL`) without editing it; its keep-list, which `skills/polish/scripts/added-comments` does not model |
+
+After changing polish's Pass 0, run the three comment evals (`--case 'comments-*'`, see `evals/README.md`).
+
 After changing `work` or its references, run the two playbook evals (`claude plugin eval` from `plugins/base`, `--case trace-artifact-reads-forensics` and `--case phased-work-reads-multi-phase-plan`) and `small-fix-skips-playbooks`, and `python3 scripts/read-budget.py`.
 
 What was decided when `work` took poteto-mode in (gbase 1.56.0, upstream `3fa33bb`). "Merged" means `work` or a file it reads now says it:
@@ -78,7 +87,8 @@ What was decided when `work` took poteto-mode in (gbase 1.56.0, upstream `3fa33b
 | Playbook authoring-a-skill | Not merged: it starts with Cursor's built-in `create-skill`, and a repo's own skill rules (this repo's `CLAUDE.md`) cover the rest |
 | Non-negotiable: a measured number → benchmark-checklist | Merged: `work` § 1, on every route |
 | Non-negotiables: prototype a fork instead of asking; bot comments judged on merits; unslop for prose; `control-ui` / `control-cli` on the shipped surface | Already there: `work`'s "Don't block on reversible work", `monitor`'s `comments.md`, `work`'s Reply and `branch-pr`, the repo's verify skill |
-| Non-negotiables: restate the goal in the first message; `worker.md` as the first line of every kickoff; `/deslop` and `no-comments` before commit; `show-me-your-work` | Not merged: `work`'s Reply leads with the outcome; `gbase:worker` carries its rules in the agent definition; `gbase:polish` runs inside `go`; `show-me-your-work` is read when `autonomous-run.md` names it |
+| Non-negotiables: restate the goal in the first message; `worker.md` as the first line of every kickoff; `/deslop` before commit; `show-me-your-work` | Not merged: `work`'s Reply leads with the outcome; `gbase:worker` carries its rules in the agent definition; `gbase:polish` runs inside `go`; `show-me-your-work` is read when `autonomous-run.md` names it |
+| Non-negotiable: `no-comments` before commit | Merged (gbase 1.58.0; 1.56.0 had it as covered by `gbase:polish`, whose lens A only deleted narrating comments): polish's Pass 0 reads `skills/no-comments/SKILL.md` when the diff added a comment, with the changes in `skills/polish/references/comments.md` — root-cause fixes on `medium` and `high` only, no constraint encoding without a person. The skill stays a followed copy with `disable-model-invocation: true` |
 | Principles (24 leaves) | Merged as a pointer: `work` names the leaf path and reads one when a call hinges on it. Nine stay stated in `work` (prove it works, smallest change, fix root causes, a correction becomes a check, verify in small units, model the domain, test behavior, explain the number, don't block on reversible work), plus the priority sentence |
 | Autonomy: just do it, always pause for irreversible writes, "No is an acceptable answer" | Already there: "Don't block on reversible work" and Reply. Not merged: team chat and ticket updates without asking (messages to people need the user) |
 | Subagents: per-role models, Cursor slugs, `/setup-pstack`, `poteto-agent` for every delegate | Not merged: the session's model, `gbase:scout` / `gbase:worker` |
