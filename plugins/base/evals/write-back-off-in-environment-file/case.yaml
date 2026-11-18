@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: write-back-off-in-environment-file
+context:
+  scaffold_script: fixture.sh
