@@ -146,6 +146,8 @@ CONTRACTS = [
         ("--no-review", [skill("go"), skill("monitor")]),
         ("--draft", [skill("go"), GO_DRAFT_MERGE, skill("monitor")]),
         ("--merge", [skill("work"), skill("go"), GO_DRAFT_MERGE, GO_ORCH, skill("monitor")]),
+        ("verified-locally", [GO_DRAFT_MERGE, SETTLE, MERGE, PR_STATUS],
+         "go passes it with --merge when its checks passed in the run, and monitor hands it to pr-status's merge gate"),
     ]),
     Contract("verify-block", "setup writes the gbase:verify block in the target repo's CLAUDE.md that go's verification gate reads", [
         ("gbase:verify", [skill("setup"), skill("go"), GO_VERIFY]),
@@ -230,7 +232,6 @@ CONTRACTS = [
         ("merge: not now", [PR_STATUS, MERGE]),
         ("merge: retarget stacked pr first", [PR_STATUS, MERGE]),
         ("--handled", [PR_STATUS, SETTLE]),
-        ("verified-locally", [GO_DRAFT_MERGE, SETTLE, MERGE, PR_STATUS]),
     ]),
     Contract("ship-prep-lines", "branch-pr acts on ship-prep's output lines and flags: a line the skill or a reference names is one the script prints", [
         ('"ask: ', [SHIP_PREP]),
