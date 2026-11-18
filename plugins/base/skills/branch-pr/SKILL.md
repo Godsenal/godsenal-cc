@@ -29,9 +29,9 @@ The mechanical parts are one script, `ship-prep` (`scripts/ship-prep` in this sk
 It unwraps unpushed `gbase:pause` commits (`wip:` subject and an `Intent:` body, via `git reset --soft`; their notes feed the PR's Why) and backs the tree up under `refs/gbase/backup/`. Exit 3 means nothing to ship: say so and stop.
 
 - **`ask:` lines** are questions (a secret in the diff is never committed). Three more are yours to notice: a secret-looking value the script didn't flag, WIP clearly unrelated to the change, and changes that are clearly separate features. Under `AGENT_HEADLESS=1` (check `printenv AGENT_HEADLESS` before asking) nothing is asked: follow [headless.md](../../references/headless.md). A secret is left out and recorded (then `open --partial`).
-- **Read every file on the `conventions` line** before naming anything: they decide the branch name, commit format, PR title, ticket reference, labels, and draft state, in the order [conventions.md](../../references/conventions.md) gives.
+- **Read every file on the `conventions` line** before naming anything (they also set the ticket reference, labels, and draft state), in the order [conventions.md](../../references/conventions.md) gives.
 
-**2. Branch and commits.** Follow the `branch plan:` line (a new branch only when it says so; gbase default `feat/` `fix/` `refactor/` `docs/` `chore/` + slug). Group the files into logical commits (by layer or feature), each with the repo's commit format and the attribution trailer the session specifies.
+**2. Branch and commits.** Follow the `branch plan:` line (a new branch only when it says so; gbase default `feat/` `fix/` `refactor/` `docs/` `chore/` + slug). Group the files into logical commits, each with the repo's commit format and the attribution trailer the session specifies.
 
 **3. Compat and risk.** On `compat: run`, launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:compat-check", args: "<the range on that line>")` in this repo and return its verdict line verbatim, with its `## Rollout / Deploy order` block and one-line summary on ⚠️. Do it even for an additive-looking change: it is the PR's only deploy-order review. `⚠️ Requires ordered rollout` → the block goes into the body, the summary to the user, and the risk is `high`. `✅`, or `compat: skip` → no section, nothing said.
 
