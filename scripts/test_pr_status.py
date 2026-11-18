@@ -267,6 +267,11 @@ class Verdict(unittest.TestCase):
         self.assertNotIn("수렴", v["settle"])
         self.assertTrue(v["next"][0].startswith("ci — check"))
 
+    def test_ci_line_names_what_to_read_on_a_second_failure(self):
+        ci = decide(snap(checks=[run(conclusion="FAILURE")]))["next"][0]
+        self.assertIn("../../references/premise.md", ci)
+        self.assertTrue((PATH.parents[1] / "../../references/premise.md").is_file())
+
     def test_after_three_pushed_heads_no_more_fixes(self):
         s = snap(checks=[run(conclusion="FAILURE")])
         self.assertFalse(decide(s, pushed=2)["next"][0].startswith("limit"))

@@ -34,6 +34,10 @@ The caller's stated mode wins. Without one, a dirty tree means pre-PR even if a 
 
 If the repo has a `REVIEW.md` (root or nearest ancestor of the changed files), it governs every stage: hand it to the finder and each skeptic, drop findings on its skip paths, apply its severity overrides and nit cap. Also flag code that breaks a convention `CLAUDE.md` states, and note when `CLAUDE.md` itself contradicts the code.
 
+## Tests in the target
+
+When the target adds or changes a test file, read [tests.md](references/tests.md) before Stage 2, also when the caller starts you at Stage 2: each of those tests is judged against two imagined edits, and one that fails either joins the candidates. Started at Stage 2 with no scope named, the target is what the caller's findings were found on: the uncommitted changes, else every commit the branch has that its base lacks, not only the latest one. No test file in the target → skip this; nothing is read and no agent is added.
+
 ## Stage 1 — Find
 
 If the caller handed in findings (`gbase:go` passes `candidates already found — start at Stage 2`), skip to Stage 2. Otherwise:

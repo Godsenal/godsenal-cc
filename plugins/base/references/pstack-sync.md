@@ -72,6 +72,17 @@ Three more followed items carry `used_by` for the verification `high` adds (gbas
 | `no-comments` | `skills/polish/references/comments.md` names its steps by number: 1–2 audit, 3–4 root-cause fix (`medium` and `high` only), 5 constraint encoding (never without a person), 6 report | Whether the numbers still mean that; whether Step 5 still says to delete the comment and report the constraint open when nobody approved; a new step |
 | `agents/comment-sicko` | The same file scopes the agent to the diff's added lines and falls back to reading the agent file when the session has no `Agent` tool | Whether the agent still only deletes comments and flags code (`MUST KILL`) without editing it; its keep-list, which `skills/polish/scripts/added-comments` does not model |
 
+Four verification leaves run where their condition holds (gbase 1.60.0), so each carries `used_by`:
+
+| Followed item | gbase file | When it changes, check |
+| --- | --- | --- |
+| `principle-prove-it-works` | `skills/go/references/verify.md` has a failed check suspect the observation first, and the behavior check run as a command that can be rerun | Whether the leaf still says both |
+| `principle-test-behavior-not-implementation` | `skills/review/references/tests.md` judges each test a diff adds against the two imagined edits | The two edits, and the causes listed under each |
+| `principle-explain-the-number` | `skills/work/SKILL.md` starts any measured number at the leaf, before the run | Whether "write the decision before you run" and the noise floor are still in it, and whether it still sends a performance number to `benchmark-checklist` |
+| `principle-attack-the-premise` | `references/premise.md` has `go`'s gate and monitor's `ci` branch write the premise and make one observation before they stop when two fixes have left a check failing | Whether the trigger is still two failed fixes on one gate; gbase stops after the observation, where the leaf goes on to the next fix |
+
+After changing `tests.md` or `premise.md`, run their three evals (`principle-copied-test-flagged-on-ship`, `principle-twice-failed-check-writes-premise`, `principle-no-test-change-adds-no-step`; see `evals/README.md`).
+
 After changing polish's Pass 0, run the three comment evals (`--case 'comments-*'`, see `evals/README.md`).
 
 After changing `work` or its references, run the two playbook evals (`claude plugin eval` from `plugins/base`, `--case trace-artifact-reads-forensics` and `--case phased-work-reads-multi-phase-plan`) and `small-fix-skips-playbooks`, and `python3 scripts/read-budget.py`.

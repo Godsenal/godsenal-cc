@@ -54,6 +54,8 @@ SESSION_HOOK = "plugins/base/hooks/session-start.md"
 FACTORY = "plugins/base/.claude-plugin/factory.json"
 POLISH_COMMENTS = "plugins/base/skills/polish/references/comments.md"  # polish's Pass 0: pstack's no-comments, read by path
 ADDED_COMMENTS = "plugins/base/skills/polish/scripts/added-comments"
+PREMISE = "plugins/base/references/premise.md"
+REVIEW_TESTS = "plugins/base/skills/review/references/tests.md"
 RUNNER = "scripts/gbase-run"
 CONVENTIONS = "plugins/base/references/conventions.md"
 ENVIRONMENT = "plugins/base/references/environment.md"
@@ -224,6 +226,25 @@ CONTRACTS = [
     ("comments: skip —", [ADDED_COMMENTS, skill("polish")]),
     ("don't encode", [POLISH_COMMENTS]),
     ('"skills/polish/references/comments.md"', ["scripts/pstack/lock.json"]),
+    ("../../references/premise.md", [GO_VERIFY, skill("monitor"), PR_STATUS]),
+    ("principle-attack-the-premise/skill.md", [PREMISE]),
+    ("write the premise", [PREMISE]),
+    ("one observation", [PREMISE]),
+    ("no third fix", [PREMISE, PR_STATUS]),
+    ("a third fix included", [GO_VERIFY]),
+    ("결정 필요: <체크>가 수정 두 번 뒤에도 실패", [PREMISE]),
+    ('"references/premise.md"', ["scripts/pstack/lock.json"]),
+    ("references/tests.md", [skill("review")]),
+    ("principle-test-behavior-not-implementation/skill.md", [REVIEW_TESTS]),
+    ("break the behavior", [REVIEW_TESTS]),
+    ("change the internals", [REVIEW_TESTS]),
+    ("no agent is launched", [REVIEW_TESTS]),
+    ("never auto-fixed", [REVIEW_TESTS]),
+    ("no skeptic is launched for these alone", [REVIEW_TESTS]),
+    ('"skills/review/references/tests.md"', ["scripts/pstack/lock.json"]),
+    ("suspect how you looked", [GO_VERIFY]),
+    ("reruns the same comparison", [GO_VERIFY]),
+    ("../principle-explain-the-number/skill.md", [skill("work")]),
     # content runs report lessons instead of editing the harness; the runner hands them to a work run
     ("교훈:", [shorts("content-common"), shorts("shorts-common"), skill("design-taste"), ORCHESTRATOR, RUNNER, FACTORY]),
     # mockup and gapp's design load the user's taste rules before drawing

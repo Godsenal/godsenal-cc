@@ -49,7 +49,7 @@ A file name below is a playbook in `../poteto-mode/playbooks/`. Once its row is 
 | "Until X passes", "keep going", unattended | `autonomous-run.md` |
 | Phased work spread over several PRs | `multi-phase-plan.md` for the plan file. A task that also asks for the first phase builds that PR by its own row; the rest are `남은 작업:` lines. |
 
-No row fits → say so and plan the steps under the principles below. On any route, a measured number (a baseline, a speedup, a regression) is reported only after the seven questions of [benchmark-checklist](../benchmark-checklist/SKILL.md).
+No row fits → say so and plan the steps under the principles below. On any route, a number (a baseline, a speedup, a regression) starts at `../principle-explain-the-number/SKILL.md` and is reported only after the seven questions of [benchmark-checklist](../benchmark-checklist/SKILL.md).
 
 ## 2. Ship
 
@@ -72,7 +72,7 @@ Most are pstack leaves, `../principle-*/SKILL.md`. Read one when a call hinges o
 - **Fix root causes.** Fix the first place the system went wrong, not where it surfaced; a guard is a fix only when the state it handles is legitimate.
 - **Root cause before smallest.** When those two disagree, the root-cause fix wins and "smallest" only picks among changes that fix it: a guard, retry, or shorter cache time over a state that should never exist solves nothing, a fix bigger than one PR ships its first slice with the rest as `남은 작업:` lines, and a stopgap the task itself prescribes ships with the root-cause fix on a `남은 작업:` line.
 - **A correction becomes a check, not another line.** When the task corrects a mistake an agent made (the user says it happened again, or hands over `교훈:` lines), read [references/correction.md](references/correction.md) before the fix.
-- **Verify in small units**, each checked before the next. **Model the domain**: a state machine, typed model, or table, not the same conditionals across files. **Test behavior, not implementation. Explain the number** before trusting it.
+- **Verify in small units**, each checked before the next. **Model the domain**: a state machine, typed model, or table, not the same conditionals across files. **Test behavior, not implementation.**
 - **Don't block on reversible work.** Do it and report it. Stop only for irreversible actions — deploys (including a merge that triggers one), store submits, data deletion, force-push to shared branches, messages to people — and for product calls no experiment can settle. If running something can answer the question, run it.
 
 ## Subagents
