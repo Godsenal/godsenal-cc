@@ -51,7 +51,7 @@ A pstack skill names others as "the **name** skill", `/name`, or a `principle-<t
 
 ## Models
 
-gbase has no per-role model rule. The session's model is already chosen: by the user, or by the slot in `.claude-plugin/factory.json` for a headless run. Treat every `pstack-models` line as missing and every Cursor slug (`claude-opus-5-5-xhigh-fast`, `gemini-4-carbon-high`) as unusable.
+gbase has no per-role model rule. The session's model is already chosen: by the user, or by the slot in `.claude-plugin/factory.json` for a headless run. Treat every `pstack-models` line as missing and every Cursor slug (`claude-opus-5-5-xhigh-fast`, `gemini-4-neon-high`) as unusable.
 
 | pstack role | In gbase |
 | --- | --- |
