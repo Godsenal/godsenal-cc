@@ -5,8 +5,8 @@
     "ref": "main",
     "tree": "harness/pstack/claude-code",
     "license": "MIT, Copyright (c) 2026 Lauren Tan",
-    "sha": "50b3a3234bf2e0293849a48784d72030948e44ee",
-    "version": "0.15.44"
+    "sha": "aaeb0ea3a0584995aa8f55ce44c6c5259414b896",
+    "version": "0.15.46"
   },
   "exclude": [
     {
@@ -43,8 +43,8 @@
     },
     "arena": {
       "mode": "follow",
-      "hash": "b3dbab5fb9d7bc3e",
-      "out": "6767252262ae52b9"
+      "hash": "6aaa240915bb7af0",
+      "out": "028408a70707dbcb"
     },
     "automate-me": {
       "mode": "follow",
@@ -99,7 +99,7 @@
     "docs/harness": {
       "mode": "merge",
       "into": "references/pstack-adapter.md",
-      "hash": "8f7bf87fae8db9c5"
+      "hash": "617f413a1269c1b9"
     },
     "figure-it-out": {
       "mode": "follow",
@@ -164,8 +164,8 @@
     },
     "poteto-mode": {
       "mode": "follow",
-      "hash": "7ff2d6f6e61c7d4e",
-      "out": "045e36333b02c513",
+      "hash": "64922ead8a7029c9",
+      "out": "eab8928d3960c032",
       "used_by": [
         "skills/work/SKILL.md",
         "skills/work/references/playbooks.md",
@@ -356,8 +356,8 @@
     },
     "statechart": {
       "mode": "follow",
-      "hash": "3d4742b468212287",
-      "out": "b7f4610e054d7d74",
+      "hash": "7f19eca7abcca8e5",
+      "out": "1cca2d875ef64937",
       "used_by": [
         "skills/go/references/high.md"
       ]
