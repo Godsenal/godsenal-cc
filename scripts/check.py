@@ -42,6 +42,7 @@ PLAYBOOK_DIR = "plugins/base/skills/poteto-mode/playbooks"
 # the parts of branch-pr and monitor that only some runs read; a token lives where that branch is written
 PR_BODY = "plugins/base/skills/branch-pr/references/pr-body.md"
 LOCAL_MODE = "plugins/base/skills/branch-pr/references/local-mode.md"
+PREVIEW = "plugins/base/skills/branch-pr/references/preview.md"
 SHIP_PREP = "plugins/base/skills/branch-pr/scripts/ship-prep"
 SETTLE = "plugins/base/skills/monitor/references/settle.md"
 MERGE = "plugins/base/skills/monitor/references/merge.md"
@@ -61,7 +62,7 @@ RUNNER = "scripts/gbase-run"
 CONVENTIONS = "plugins/base/references/conventions.md"
 ENVIRONMENT = "plugins/base/references/environment.md"
 SETUP_ENV = "plugins/base/skills/setup/references/explore-environment.md"
-TRACKER_FREE = [skill("work"), skill("go"), BRANCH_PR, skill("monitor"), PR_BODY, LOCAL_MODE, SHIP_PREP, GO_REVIEW, GO_VERIFY, GO_HIGH,
+TRACKER_FREE = [skill("work"), skill("go"), BRANCH_PR, skill("monitor"), PR_BODY, LOCAL_MODE, PREVIEW, SHIP_PREP, GO_REVIEW, GO_VERIFY, GO_HIGH,
                 GO_DRAFT_MERGE, GO_ORCH, SETTLE, MERGE, CONFLICTS, COMMENTS, PR_STATUS]
 TRACKER_NAMES = r"\b(jira|acli|atlassian|linear|asana|trello|youtrack)\b"
 PSTACK_SYNC = "scripts/pstack-sync.py"
@@ -179,6 +180,36 @@ CONTRACTS = [
         ("ship: local", [LOCAL_MODE, ORCHESTRATOR, SETTLE]),
         ("ship: skip —", [HEADLESS, ORCHESTRATOR], "a shipping step the caller put out of scope, not a decision"),
         ("pr 본문 초안:", [GO_ORCH, LOCAL_MODE, ORCHESTRATOR, RUNNER, SETTLE]),
+    ]),
+    Contract("pr-preview",
+             "where the owner reads a change before its PR, ship-prep finds the setting, records the commit that was shown, and refuses to push "
+             "another one; branch-pr writes the preview and asks, go resumes at a recorded commit, and the runner takes the stop for the run's end", [
+        ("before the pr: preview", [ENVIRONMENT, CONVENTIONS, SETUP_ENV, ORCHESTRATOR, SHIP_PREP]),
+        ("## shipping", [ENVIRONMENT, SETUP_ENV]),
+        ("references/preview.md", [BRANCH_PR, ENVIRONMENT]),
+        ("`preview:` line", [skill("go"), BRANCH_PR, PREVIEW]),
+        ("preview: on —", [SHIP_PREP], "start's line for the setting; preview.md routes on the three states by name"),
+        ("`preview: on`", [PREVIEW]),
+        ("preview: prepared", [SHIP_PREP, PREVIEW]),
+        ("preview: changed", [SHIP_PREP, PREVIEW]),
+        ("ship-prep preview", [SHIP_PREP, PREVIEW]),
+        ("--write", [SHIP_PREP, PREVIEW], "the script saves the preview file, so no tool permission decides whether it exists"),
+        ("--reviewed", [SHIP_PREP, PREVIEW], "only a commit go reviewed is recorded as one a later go may skip its review for"),
+        ('`"reviewed": true`', [skill("go")], "the key ship-prep writes with json.dumps, read by go's Step 1"),
+        ('"reviewed": "--reviewed" in args', [SHIP_PREP]),
+        ("`--preview`", [skill("go"), GO_DRAFT_MERGE, BRANCH_PR, PREVIEW], "a one-off request travels go → branch-pr's args → preview.md"),
+        ("--no-preview", [SHIP_PREP, PREVIEW]),
+        ('gbase/preview-$(git rev-parse head).json', [skill("go")],
+         "go's Step 1 reads the state file by the commit's sha, so only the commit that was shown skips the review"),
+        ('f"preview-{head}.json"', [SHIP_PREP], "the name go's Step 1 reads"),
+        ('print(f"ship: local ', [SHIP_PREP], "the stop reports the same lines local mode does"),
+        ("ship: local", [PREVIEW]),
+        ("pr 본문 초안:", [PREVIEW, SHIP_PREP]),
+        ("여기서 멈춤", [PREVIEW]),
+        ("→ 열지 않음", [PREVIEW], "headless: the stop is a 결정 필요: line, not a recommendation applied"),
+        ("`preview: <absolute path>`", [ORCHESTRATOR]),
+        ("preview_file", [RUNNER, RUNNER_DOC]),
+        ("and preview.search(text)", [RUNNER], "unshipped(): a run that stopped at the preview is not resumed to push"),
     ]),
     Contract("pr-url-line", "agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url", [
         ("`pr: <url>`", [skill("go"), GO_ORCH, BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),

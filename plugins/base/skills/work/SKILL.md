@@ -53,7 +53,7 @@ No row fits → say so and plan the steps under the principles below. On any rou
 
 ## 2. Ship
 
-A route that changed files ends with `Skill(skill: "gbase:go")`: polish, review, verify, PR, monitor, scaled by the change's risk tier. An answer, a diagnosis, a plan file, or a prototype doesn't ship.
+A route that changed files ends with `Skill(skill: "gbase:go")`: polish, review, verify, PR, monitor, scaled by risk. An answer, a diagnosis, a plan file, or a prototype doesn't ship.
 
 **Nothing ships by hand.** No `git commit`, `git push`, `gh pr create`, or `gh pr merge` of your own, however small: a version bump, a one-line chore, a conflict fix, or a follow-up on a branch that already has a PR all go through `go`. In one week 9 of 51 PR runs shipped by hand and left no review, evidence, or settle record.
 

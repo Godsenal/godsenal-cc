@@ -24,6 +24,9 @@ gbase names no tracker. A skill says a verb ("fetch the ticket") and the file sa
 - move the ticket: ask
 - anything else (comment, assignee, fields): off
 
+## Shipping
+- before the PR: preview
+
 ## When a skill says
 - **"fetch the ticket"**: `acli jira workitem view <KEY> --fields summary,description,comment` (ran 2026-11-18: ok)
 - **"link the PR on the ticket"**: `acli jira workitem comment create --key <KEY> --body "PR: <url>"`
@@ -34,6 +37,7 @@ gbase names no tracker. A skill says a verb ("fetch the ticket") and the file sa
 - `## Conventions` holds the values of conventions.md's table.
 - `## Tickets` and `## When a skill says` are prose and commands. A method can be a CLI line, an MCP tool by its full name, a URL to open, or a folder of markdown files.
 - `## Write-back` lists each kind of write as `on`, `ask`, or `off`. A kind the file doesn't list is `off`.
+- `## Shipping` holds one line, `before the PR: preview`. With it, `ship-prep` stops `branch-pr` before the push: the change is committed and drafted locally, the user reads a preview, and the PR opens when they say so ([preview.md](../skills/branch-pr/references/preview.md)). Without the line, or with any other value, the PR opens as it always has. Words in the request that ask for the PR or the merge win over the line. A file that is set but can't be read (moved, or not UTF-8) holds the PR back too, since the line may be in it. It decides whether a PR opens yet; draft or ready is conventions.md's own row.
 
 ## A task that names a ticket
 

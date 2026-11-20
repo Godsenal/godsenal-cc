@@ -6,7 +6,7 @@ allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Agent
 
 # /gbase:branch-pr
 
-Invoking it is the go-ahead to branch, commit, push, and open the PR; decide the branch name, the grouping, and the body yourself and report them as you go. It stops only for an `ask:` line from the script below.
+Invoking it is the go-ahead to branch, commit, push, and open the PR; decide the branch name, the grouping, and the body yourself and report them as you go. It stops only for an `ask:` line from the script below, and before the push for its `preview:` line or a request to see it first (`--preview`): [preview.md](references/preview.md).
 
 ## 출력 언어
 
@@ -26,18 +26,18 @@ The mechanical parts are one script, `ship-prep` (`scripts/ship-prep` in this sk
 "${CLAUDE_SKILL_DIR}/scripts/ship-prep" start
 ```
 
-It unwraps unpushed `gbase:pause` commits (`wip:` subject and an `Intent:` body, via `git reset --soft`; their notes feed the PR's Why) and backs the tree up under `refs/gbase/backup/`. Exit 3 means nothing to ship: say so and stop.
+It unwraps unpushed `gbase:pause` commits (`wip:` subject and an `Intent:` body, via `git reset --soft`; their notes feed the PR's Why) and backs the tree up under `refs/gbase/backup/`. Exit 3: nothing to ship; say so and stop.
 
 - **`ask:` lines** are questions (a secret in the diff is never committed). Three more are yours to notice: a secret-looking value the script didn't flag, WIP clearly unrelated to the change, and changes that are clearly separate features. Under `AGENT_HEADLESS=1` (check `printenv AGENT_HEADLESS` before asking) nothing is asked: follow [headless.md](../../references/headless.md). A secret is left out and recorded (then `open --partial`).
 - **Read every file on the `conventions` line** before naming anything (they also set the ticket reference, labels, and draft state), in the order [conventions.md](../../references/conventions.md) gives.
 
-**2. Branch and commits.** Follow the `branch plan:` line (a new branch only when it says so; gbase default `feat/` `fix/` `refactor/` `docs/` `chore/` + slug). Group the files into logical commits, each with the repo's commit format and the attribution trailer the session specifies.
+**2. Branch and commits.** Follow the `branch plan:` line (a new branch only when it says so). Group the files into logical commits, each with the repo's commit format and the attribution trailer the session specifies.
 
 **3. Compat and risk.** On `compat: run`, launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:compat-check", args: "<the range on that line>")` in this repo and return its verdict line verbatim, with its `## Rollout / Deploy order` block and one-line summary on ⚠️. Do it even for an additive-looking change: it is the PR's only deploy-order review. `⚠️ Requires ordered rollout` → the block goes into the body, the summary to the user, and the risk is `high`. `✅`, or `compat: skip` → no section, nothing said.
 
 Risk is the caller's `Risk:` line. Without one, classify it by [pr-body.md](references/pr-body.md#risk-tier).
 
-**4. Draft the PR** in a file (`$(git rev-parse --absolute-git-dir)/gbase/pr-body.md`, or the caller's `PR-body-file`): the title on line 1, an empty line 2, the body from line 3. A repo with its own PR template uses that (pr-body.md says how). Otherwise:
+**4. Draft the PR** in a file (`$(git rev-parse --absolute-git-dir)/gbase/pr-body.md`, or the caller's `PR-body-file`): the title on line 1, an empty line 2, the body from line 3. A repo's own PR template wins (pr-body.md). Otherwise:
 
 ```markdown
 ## Why
@@ -72,9 +72,9 @@ The body before `## Change outline` fits on one screen; every cell and bullet is
 **5. Open.**
 
 ```bash
-"${CLAUDE_SKILL_DIR}/scripts/ship-prep" open <draft>     # add --draft when the user or gbase:go passed it
+"${CLAUDE_SKILL_DIR}/scripts/ship-prep" open <draft>     # --draft when the user or gbase:go passed it
 ```
 
-It checks the draft (fix what it reports and rerun), pushes the branch, opens the PR, and prints `pr: <url>`. `--partial` when tracked files were left uncommitted on purpose; `--remote <name>` when the push doesn't go to `origin`. Put that line in the final report at column 0 ([format](../../references/orchestrator.md#report-lines)): `gbase:go` carries it up and a headless caller greps it.
+It checks the draft (fix what it reports, rerun), pushes the branch, opens the PR, and prints `pr: <url>`. `--partial` and `--remote <name>` are for the cases its `ask:` and `error:` lines name. Put that line in the final report at column 0 ([format](../../references/orchestrator.md#report-lines)): a headless caller greps it.
 
-Leave the backup ref in place and say so in one line, with its `git update-ref -d` command (`gbase-run gc` removes it after 14 days).
+Leave the backup ref in place and say so in one line, with the script's `remove:` command.

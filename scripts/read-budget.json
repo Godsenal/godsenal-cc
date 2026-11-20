@@ -56,6 +56,11 @@
         "plugins/base/skills/poteto-mode/playbooks/feature.md"
       ]
     },
+    "preview": {
+      "note": "the owner reads a preview before the PR: the environment file's `before the PR: preview`, or --preview; a run without either reads nothing more",
+      "limit": null,
+      "reads": ["plugins/base/skills/branch-pr/references/preview.md"]
+    },
     "ticket": {
       "note": "a ticket reference in the request or branch, in a repo whose owner set an environment file (git config gbase.conventions); the file itself is the user's and is not counted",
       "limit": null,

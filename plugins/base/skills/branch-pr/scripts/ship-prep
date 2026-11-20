@@ -3,14 +3,20 @@
 
   ship-prep start [--local]             unwrap pause commits, back up the tree, report branch/files/conventions/compat
   ship-prep check <draft> [--local]     check a PR draft (line 1 title, line 2 empty, line 3 on the body)
-  ship-prep open <draft> [--draft] [--partial] [--remote <name>]
+  ship-prep preview <draft> [--partial] [--write [--reviewed]]
+                                        print what a preview of the committed, unpushed change needs
+                                        --write: save the preview text on stdin and record HEAD as the commit that was shown
+                                        --reviewed: gbase:go's review and checks ran for it, so a later go skips them
+  ship-prep open <draft> [--draft] [--partial] [--remote <name>] [--no-preview]
                                         check, push the branch, open the PR, print `pr: <url>`
                                         --partial: tracked files were left uncommitted on purpose (a secret, unrelated WIP)
+                                        --no-preview: the request itself asked for the PR, so the preview setting yields
   ship-prep assets <file>...            upload images to the gbase-assets branch, print their embed lines
 
 Exit codes: 0 ok, 1 error, 2 a person has to decide (the `ask:` lines say what), 3 nothing to ship.
 """
 import base64
+import hashlib
 import fnmatch
 import json
 import os
@@ -53,6 +59,8 @@ UNVERIFIED = r"behavior: skip|differs:"
 CONFIRM_ITEM = r"^> \d+\. .*\((확인|verify)\)"  # a numbered Review focus item of the kind a person confirms
 LEAD_LINES = 45  # body lines before ## Change outline: one screen
 ENVIRONMENT_DOC = Path(__file__).resolve().parents[3] / "references" / "environment.md"
+PREVIEW_DOC = Path(__file__).resolve().parents[1] / "references" / "preview.md"
+PREVIEW_SETTING = r"^[\s>*_-]*`?before the PR[`*_]*\s*[:：][\s`*_]*preview\b"
 
 
 class Stop(Exception):
@@ -221,6 +229,98 @@ def environment_file():
     return git("config", "--get", "--type=path", "gbase.conventions", check=False)  # --type=path expands a leading ~
 
 
+def preview_setting():
+    """(the environment file's path when it asks for a preview before the PR, else ''; the path when it is set but unreadable)."""
+    conv = environment_file()
+    if not conv:
+        return "", ""
+    try:
+        text = Path(conv).expanduser().read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return "", conv
+    return (conv if re.search(PREVIEW_SETTING, text, re.I | re.M) else ""), ""
+
+
+def gbase_dir():
+    return Path(git("rev-parse", "--absolute-git-dir")) / "gbase"
+
+
+def preview_file(branch):
+    """Where the preview a person reads is kept: outside every repo and git dir, so it outlives a worktree. Named by
+    the repo's main checkout (with a hash of its path: two repos may share a folder name) and the branch."""
+    home = Path(os.environ.get("GBASE_HOME") or "~/.gbase").expanduser()
+    common = Path(git("rev-parse", "--git-common-dir")).resolve()  # cwd is the toplevel (main())
+    key = hashlib.sha1(f"{common}\n{branch}".encode()).hexdigest()[:6]
+    return home / "previews" / f"{common.parent.name}-{re.sub(r'[^A-Za-z0-9._-]+', '-', branch)}-{key}.md"
+
+
+def draft_digest(path):
+    """A hash of the PR draft that survives the one edit made between the preview and the PR: uploaded screenshots
+    replace their local paths. None when the draft can't be read."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    return hashlib.sha256(re.sub(r"(!\[[^\]]*\]\()[^)\n]*\)", r"\1)", text).encode()).hexdigest()
+
+
+def recorded_preview(branch):
+    """(state file, state) of the preview `ship-prep preview --write` recorded for this branch, or (None, None). The
+    file is named by the previewed commit's sha, so a session that only knows HEAD can tell whether HEAD was shown."""
+    for path in sorted(gbase_dir().glob("preview-*.json")):
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(state, dict) and state.get("branch") == branch and state.get("head"):
+            return path, state
+    return None, None
+
+
+def forget_preview(branch):
+    path, _ = recorded_preview(branch)
+    while path:  # an interrupted run may have left more than one
+        path.unlink()
+        path, _ = recorded_preview(branch)
+
+
+def changed_since(state, entries, draft=None):
+    """What differs from what the person was shown; [] means a PR opened now is the one they read. The one rule
+    `start` and `open` both use: the commit, the tree (but for what was left out or untracked then), the draft,
+    and that the preview file is still there."""
+    shown, head = state["head"], git("rev-parse", "HEAD")
+    changed = []
+    if shown != head:
+        if git_ok("cat-file", "-e", f"{shown}^{{commit}}"):
+            changed += [p for p in git("diff", "--name-only", shown, head).split("\n") if p] or [f"the commit itself (@{shown[:7]} → @{head[:7]})"]
+        else:
+            changed.append(f"the previewed commit @{shown[:7]} is gone")
+    known = set(state.get("left_out") or []) | set(state.get("untracked") or [])
+    changed += [path for _, path in entries if path not in known and path not in changed]
+    if draft_digest(draft or state.get("draft") or "") != state.get("draft_digest"):
+        changed.append(f"the PR draft ({draft or state.get('draft')})")
+    if not Path(state.get("preview") or "").is_file():
+        changed.append("the preview file is missing")
+    return changed
+
+
+def preview_line(branch, entries):
+    """(state, line) `start` prints about the preview: (None, None) when neither the setting nor a recorded preview asks for one."""
+    _, state = recorded_preview(branch)
+    if state:
+        shown, draft, file = state["head"], state.get("draft"), state.get("preview")
+        changed = changed_since(state, entries)
+        if not changed:
+            return "prepared", (f"preview: prepared — {branch} @{shown[:7]} is what {file} describes (draft {draft}) and nothing changed since: "
+                                f"run no review or check again, show that preview again and ask (\"Asking\" in {PREVIEW_DOC})")
+        return "changed", (f"preview: changed — since the preview of @{shown[:7]}: {', '.join(changed[:20])}; re-check only these, commit them, "
+                           f"update the draft {draft}, and run `ship-prep preview` again (\"After a change\" in {PREVIEW_DOC})")
+    conv, _ = preview_setting()
+    if conv:
+        return "on", f'preview: on — {conv} says "before the PR: preview": push nothing and open no PR; read {PREVIEW_DOC} before the first commit'
+    return None, None
+
+
 def write_back_line(already_open=False):
     conv = environment_file()
     if conv:
@@ -250,7 +350,7 @@ def cmd_start(args):
     if entries:
         ref, stat = backup()
         out.append(f"backup: {ref} — {stat}")
-        out.append(f"  restore: git restore --source={ref} --worktree -- .   remove: git update-ref -d {ref}")
+        out.append(f"  restore: git restore --source={ref} --worktree -- .   remove: git update-ref -d {ref}  (`gbase-run gc` prunes it after 14 days)")
         out.append(f"changed: {len(entries)} files in the tree" + (f", {len(committed)} already committed" if committed else ""))
         out += [f"  {code} {path}" for code, path in entries[:60]]
         if len(entries) > 60:
@@ -272,10 +372,11 @@ def cmd_start(args):
     if branch == "(detached)":
         ask.append("ask: detached HEAD — which branch should carry this change?")
     elif branch == default:
-        out.append("branch plan: on the default branch — create one, named by the repo's rule (conventions.md)")
+        out.append("branch plan: on the default branch — create one, named by the repo's rule (conventions.md); "
+                   "with no rule, `feat/` `fix/` `refactor/` `docs/` `chore/` + slug")
     elif open_pr:
         out.append(f"branch plan: commit here; pushing updates the open PR {open_pr['url']}")
-    elif ahead and entries and not local:
+    elif ahead and entries and not local and not recorded_preview(branch)[1]:
         ask.append(f"ask: {branch} already has {ahead} commits of its own and no open PR — new branch off {default}, or keep committing here?")
     else:
         out.append("branch plan: commit on this branch")
@@ -299,13 +400,25 @@ def cmd_start(args):
                    f"read \"Shipping it\" in {ENVIRONMENT_DOC} before the PR draft")
     out.append(compat_line(paths, base or "<base>"))
     out.append(risk_hint(paths))
+    state = preview = None
+    if open_pr:
+        forget_preview(branch)
+    elif not local and branch != "(detached)":
+        state, preview = preview_line(branch, entries)
+        unreadable = preview_setting()[1]
+        if unreadable:
+            out.append(f"note: the environment file {unreadable} can't be read — its conventions are not applied, and `ship-prep open` "
+                       "will refuse, because whether its owner reads a preview before the PR is unknown; say so in the report")
+    if preview:
+        out.append(preview)
     out += ask
     if ask:
         out.append("next: settle every `ask:` line first (headless: headless.md), then commit")
-    elif entries:
-        out.append("next: group the files into commits, then write the PR draft")
+    elif state == "prepared":
+        out.append("next: show the preview again and ask; `ship-prep open` takes it from there")
     else:
-        out.append("next: write the PR draft")
+        steps = ("group the files into commits, then " if entries else "") + "write the PR draft"
+        out.append(f"next: {steps}" + (", then `ship-prep preview <draft>` instead of `open`" if preview else ""))
     print("\n".join(out))
     return 2 if ask else 0
 
@@ -393,6 +506,71 @@ def cmd_check(args):
     return 1 if errors else 0
 
 
+def uncommitted(entries, args, what):
+    """Tracked files with uncommitted changes stop a preview or a PR unless --partial says they were left out on purpose."""
+    tracked = [path for code, path in entries if code != "??"]
+    if tracked and "--partial" not in args:
+        raise Stop(1, [f"error: uncommitted changes to tracked files — {what} without them: " + ", ".join(tracked[:10]),
+                       "next: commit what belongs in the PR; if they were left out on purpose (a secret, unrelated WIP), rerun with --partial"])
+    if tracked:
+        print("note: left out on purpose (--partial) — say so in the report: " + ", ".join(tracked[:10]))
+
+
+def cmd_preview(args):
+    paths = [a for a in args if not a.startswith("--")]
+    if len(paths) != 1:
+        raise Stop(1, "usage: ship-prep preview <draft> [--partial] [--write [--reviewed] < preview text]")
+    text = sys.stdin.read() if "--write" in args else None
+    if text is not None and not text.strip():
+        raise Stop(1, "error: --write saves the preview text it reads on stdin, and stdin was empty")
+    lines = read_draft(paths[0])
+    errors, _ = draft_problems(lines, local=True)  # nothing is uploaded before the PR, so a local image path is fine here
+    if errors:
+        raise Stop(1, [f"error: {e}" for e in errors] + ["next: fix the draft and run preview again"])
+    entries = status_paths()
+    uncommitted(entries, args, "the preview would describe a PR")
+    branch = git("branch", "--show-current")
+    default, base = default_base()
+    if not base:
+        raise Stop(1, ["error: can't tell which branch the PR goes to — no origin/HEAD, main, or master here",
+                       "next: `git remote set-head origin -a` (or fetch the default branch), then run preview again"])
+    if not branch or branch == default:
+        raise Stop(1, f"error: on {branch or 'a detached HEAD'} — the change needs its own branch before it is previewed")
+    ahead = int(git("rev-list", "--count", f"{base}..HEAD"))
+    if not ahead:
+        raise Stop(3, "nothing to ship: no commits ahead of the base — commit the change first")
+    head = git("rev-parse", "HEAD")
+    file = preview_file(branch)
+    on_remote = git_ok("merge-base", "--is-ancestor", "HEAD", f"origin/{branch}")  # pushed by hand: only the PR is held back
+    print(f"ship: local {branch} @{head[:7]} — {ahead} commits, " + (f"already on origin/{branch}, no PR" if on_remote else "not pushed"))
+    print(f"PR 본문 초안: {paths[0]}")
+    print(f"preview: {file}")
+    if text is not None:
+        # recorded only now: until the text exists nobody can have read it, and `open` goes by this record
+        folder = gbase_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+        forget_preview(branch)
+        state = {"reviewed": "--reviewed" in args, "preview": str(file), "branch": branch, "head": head, "draft": paths[0],
+                 "draft_digest": draft_digest(paths[0]),
+                 "left_out": [path for code, path in entries if code != "??"], "untracked": [path for code, path in entries if code == "??"]}
+        (folder / f"preview-{head}.json").write_text(json.dumps(state, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"saved: {len(text.splitlines())} lines, and @{head[:7]} recorded as the commit that was shown — print the same text "
+              "in the reply, then ask; headless, report the three lines above and stop")
+        return 0
+    print(f"title: {lines[0].strip()}")
+    print(f"commits ({base}..HEAD):")
+    print("\n".join(f"  {l}" for l in git("log", "--reverse", "--format=%h %s", f"{base}..HEAD").splitlines()))
+    print(f"files ({base}...HEAD, added/removed lines):")
+    for row in git("diff", "--numstat", f"{base}...HEAD").splitlines():
+        added, removed, path = row.split("\t", 2)
+        print(f"  +{added} -{removed}  {path}")
+    print(f"next: nothing is recorded yet. Write the preview (the format is in {PREVIEW_DOC}) and run this command again with "
+          "`--write` and the text on stdin (`--reviewed` too when gbase:go's review and checks ran for this commit)")
+    return 0
+
+
 def cmd_open(args):
     args = list(args)
     remote = "origin"
@@ -405,24 +583,20 @@ def cmd_open(args):
     draft = "--draft" in args
     paths = [a for a in args if not a.startswith("--")]
     if len(paths) != 1:
-        raise Stop(1, "usage: ship-prep open <draft> [--draft] [--partial] [--remote <name>]")
+        raise Stop(1, "usage: ship-prep open <draft> [--draft] [--partial] [--remote <name>] [--no-preview]")
     lines = read_draft(paths[0])
     errors, _ = draft_problems(lines)
     if errors:
         raise Stop(1, [f"error: {e}" for e in errors] + ["next: fix the draft and run open again"])
     entries = status_paths()
-    tracked = [path for code, path in entries if code != "??"]
-    if tracked and "--partial" not in args:
-        raise Stop(1, ["error: uncommitted changes to tracked files — the PR would ship without them: " + ", ".join(tracked[:10]),
-                       "next: commit what belongs in the PR; if they were left out on purpose (a secret, unrelated WIP), rerun with --partial"])
-    if tracked:
-        print("note: left out on purpose (--partial) — say so in the report: " + ", ".join(tracked[:10]))
+    uncommitted(entries, args, "the PR would ship")
     if entries:  # untracked leftovers (caches, scratch files) don't block; deleting them to get past a gate would be worse
         print("note: untracked files stay out of the PR — say so in the report: " + ", ".join(path for _, path in entries[:10]))
     branch = git("branch", "--show-current")
     default, _ = default_base()
     if not branch or branch == default:
         raise Stop(1, f"error: on {branch or 'a detached HEAD'} — a PR needs its own branch")
+    preview_gate(branch, entries, paths[0], args)
     push = run(["git", "push", "-u", remote, "HEAD"], check=False)
     if push.returncode:
         raise Stop(1, ["error: push failed — not retried, nothing forced", push.stderr.strip(), "next: git status; say what blocked the push"])
@@ -432,6 +606,7 @@ def cmd_open(args):
     if existing.get("state") == "OPEN":
         print("note: the PR was already open — the push updated it; its body is unchanged (`gh pr edit --body-file` to change it)")
         print(f"pr: {existing['url']}")
+        forget_preview(branch)
         write_back_line(already_open=True)
         return 0
     create = run(["gh", "pr", "create", "--title", lines[0].strip(), "--body-file", "-"] + (["--draft"] if draft else []),
@@ -440,9 +615,39 @@ def cmd_open(args):
         raise Stop(1, ["error: gh pr create failed (the branch is pushed)", create.stderr.strip()])
     url = next((l.strip() for l in reversed(create.stdout.splitlines()) if l.strip().startswith("http")), create.stdout.strip())
     print(f"pr: {url}")
+    forget_preview(branch)
     write_back_line()
     print("next: put the `pr:` line in the final report at column 0")
     return 0
+
+
+def preview_gate(branch, entries, draft, args):
+    """Where a preview is asked for (the environment file's line, or one already recorded for this branch), the PR
+    opens only as the person was shown it. The request can waive that (--no-preview); an open PR already has."""
+    if "--no-preview" in args:
+        return
+    conv, unreadable = preview_setting()
+    _, state = recorded_preview(branch)
+    if not (conv or unreadable or state):
+        return
+    changed = changed_since(state, entries, draft) if state else None
+    if state and not changed:
+        return
+    view = run(["gh", "pr", "view", "--json", "state"], check=False)
+    if view.returncode == 0 and json.loads(view.stdout).get("state") == "OPEN":
+        return
+    if state:
+        raise Stop(1, [f"error: what would open is not what the preview of @{state['head'][:7]} showed — changed since: "
+                       f"{', '.join(changed[:10])}; nothing pushed",
+                       f"next: run `ship-prep preview <draft>` again and show the new preview before opening ({PREVIEW_DOC})"])
+    if unreadable:
+        raise Stop(1, [f"error: the environment file {unreadable} can't be read, so whether its owner reads a preview before the PR "
+                       "is unknown — nothing pushed",
+                       "next: fix the path (`git config gbase.conventions`) or the file's encoding (UTF-8) and run open again; "
+                       "add --no-preview only when the request itself asked for the PR or the merge in words"])
+    raise Stop(1, [f'error: {conv} says "before the PR: preview" and no preview was recorded — nothing pushed',
+                   f"next: read {PREVIEW_DOC}: run `ship-prep preview <draft>`, show the preview, and ask; "
+                   "add --no-preview only when the request itself asked for the PR or the merge in words"])
 
 
 def cmd_assets(args):
@@ -470,7 +675,7 @@ def cmd_assets(args):
     return 0
 
 
-COMMANDS = {"start": cmd_start, "check": cmd_check, "open": cmd_open, "assets": cmd_assets}
+COMMANDS = {"start": cmd_start, "check": cmd_check, "preview": cmd_preview, "open": cmd_open, "assets": cmd_assets}
 
 
 def main(argv):

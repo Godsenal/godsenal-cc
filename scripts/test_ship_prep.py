@@ -47,6 +47,7 @@ class Repo(unittest.TestCase):
         self.env = {**os.environ, **GIT_ENV, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}"}
         self.env.pop("GIT_INDEX_FILE", None)
         self.env.pop("AGENT_EVIDENCE_FILE", None)  # a run that sets it would hand its own evidence to every draft here
+        self.env["GBASE_HOME"] = str(self.tmp / "gbase-home")
         self.git("init", "-q", "--bare", "-b", "main", str(self.origin), cwd=self.tmp)
         self.git("clone", "-q", str(self.origin), str(self.repo), cwd=self.tmp)
         self.write("README.md", "# app\n")
@@ -81,8 +82,15 @@ class Repo(unittest.TestCase):
     def branch(self, name="feat/x"):
         self.git("checkout", "-q", "-b", name)
 
+    def commit_change(self, text="x = 1\n", message="feat: a"):
+        if self.git("branch", "--show-current") == "main":
+            self.branch()
+        self.write("a.py", text)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
     def draft(self, text=BODY):
-        return str(self.write("../draft.md", text))
+        return str(self.write("../draft.md", text).resolve())
 
 
 class Start(Repo):
@@ -120,6 +128,7 @@ class Start(Repo):
         self.write("a.py", "x = 1\n")
         _, out = self.run_prep("start")
         self.assertIn("branch plan: on the default branch — create one", out)
+        self.assertIn("with no rule, `feat/` `fix/` `refactor/` `docs/` `chore/` + slug", out)
 
     def test_fresh_feature_branch_is_used_as_is(self):
         self.branch("gbase/task")
@@ -401,12 +410,6 @@ class Check(Repo):
 
 
 class Open(Repo):
-    def commit_change(self):
-        self.branch()
-        self.write("a.py", "x = 1\n")
-        self.git("add", "-A")
-        self.git("commit", "-q", "-m", "feat: a")
-
     def test_pushes_opens_and_prints_the_pr_line(self):
         self.commit_change()
         self.fake_gh('case "$1 $2" in "pr view") exit 1;; "pr create") echo "https://github.com/o/r/pull/9";; esac')
@@ -419,10 +422,12 @@ class Open(Repo):
     def test_open_pr_names_the_write_back_rule_only_with_an_environment_file(self):
         self.commit_change()
         self.fake_gh('case "$1 $2" in "pr view") exit 1;; "pr create") echo "https://github.com/o/r/pull/9";; esac')
-        self.git("config", "gbase.conventions", "/x/env.md")
+        env = self.tmp / "env.md"
+        env.write_text("# Environment\n\n## Write-back\n- link the PR on the ticket: on\n", encoding="utf-8")
+        self.git("config", "gbase.conventions", str(env))
         code, out = self.run_prep("open", self.draft())
         self.assertEqual(code, 0, out)
-        self.assertIn("\npr: https://github.com/o/r/pull/9\nenvironment: the PR is open — write back to the ticket only what /x/env.md marks `on`", out)
+        self.assertIn(f"\npr: https://github.com/o/r/pull/9\nenvironment: the PR is open — write back to the ticket only what {env} marks `on`", out)
         self.assertNotIn("already open", out)
         self.fake_gh('case "$1 $2" in "pr view") echo \'{"url":"https://github.com/o/r/pull/9","state":"OPEN"}\';; esac')
         code, out = self.run_prep("open", self.draft())
@@ -496,6 +501,359 @@ class Open(Repo):
         self.assertIn("push failed — not retried, nothing forced", out)
         self.assertNotIn("pr create", self.gh_log())
 
+
+class Preview(Repo):
+    """The stop before the PR: the environment file's `before the PR: preview` line, or a preview recorded on request."""
+    CREATED = 'case "$1 $2" in "pr view") exit 1;; "pr create") echo "https://github.com/o/r/pull/9";; esac'
+
+    def setting(self, text="# Environment: acme\n\n## Shipping\n- before the PR: preview\n"):
+        env = self.tmp / "env.md"
+        env.write_text(text, encoding="utf-8")
+        self.git("config", "gbase.conventions", str(env))
+        return env
+
+    def line(self, out):
+        return next((l for l in out.splitlines() if l.startswith("preview: ")), None)
+
+    def pushed(self):
+        return "feat/x" in self.git("ls-remote", "--heads", "origin")
+
+    def test_no_setting_and_no_flag_says_nothing_about_a_preview(self):
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        for env_text in (None, "# Environment\n\n## Shipping\n- before the PR: open\n", "# Environment\n\n## Conventions\n- Branch: `feat/<slug>`\n"):
+            if env_text:
+                self.setting(env_text)
+            code, out = self.run_prep("start")
+            self.assertEqual(code, 0, out)
+            self.assertNotIn("preview:", out)
+
+    def test_the_environment_line_turns_it_on_and_names_the_reference(self):
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        env = self.setting()
+        for text in ("## Shipping\n- before the PR: preview\n", "## Shipping\n* **Before the PR**: `preview` (신규 입사 기간)\n",
+                     "## Shipping\nbefore the pr : Preview\n"):
+            env.write_text(text, encoding="utf-8")
+            _, out = self.run_prep("start")
+            line = self.line(out)
+            self.assertIn(f'preview: on — {env} says "before the PR: preview": push nothing and open no PR', line, text)
+            doc = Path(re.search(r"read (\S+preview\.md)", line).group(1))
+            self.assertTrue(doc.is_file(), doc)
+            self.assertIn("next: group the files into commits, then write the PR draft, then `ship-prep preview <draft>` instead of `open`", out)
+        self.assertNotIn("preview:", self.run_prep("start", "--local")[1])
+
+    def test_an_open_pr_is_not_held_back(self):
+        self.setting()
+        self.commit_change()
+        self.write("a.py", "x = 2\n")
+        self.fake_gh('case "$1 $2" in "pr view") echo \'{"number":5,"url":"https://github.com/o/r/pull/5","state":"OPEN"}\';; esac')
+        _, out = self.run_prep("start")
+        self.assertIn("pushing updates the open PR", out)
+        self.assertNotIn("preview:", out)
+        self.git("commit", "-q", "-am", "fix: b")
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.pushed())
+
+    def test_open_is_refused_until_a_preview_is_recorded_for_head(self):
+        self.setting()
+        self.commit_change()
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 1)
+        self.assertIn('says "before the PR: preview" and no preview was recorded', out)
+        self.assertIn("nothing pushed", out)
+        self.assertFalse(self.pushed())
+        self.assertNotIn("pr create", self.gh_log())
+
+    def test_the_request_can_waive_the_setting(self):
+        self.setting()
+        self.commit_change()
+        self.fake_gh(self.CREATED)
+        code, out = self.run_prep("open", self.draft(), "--no-preview")
+        self.assertEqual(code, 0, out)
+        self.assertIn("pr: https://github.com/o/r/pull/9", out)
+        self.assertTrue(self.pushed())
+
+    def record(self, draft, *flags, text="# PR 미리보기: 제목\n\n## 이대로 열릴 PR\n| 브랜치 |\n"):
+        """`ship-prep preview <draft> --write` with the preview text on stdin: the call that records the commit as shown."""
+        p = subprocess.run([sys.executable, str(SCRIPT), "preview", draft, "--write", *flags], cwd=self.repo, env=self.env,
+                           input=text, capture_output=True, text=True)
+        return p.returncode, p.stdout + p.stderr
+
+    def states(self):
+        return [json.loads(f.read_text(encoding="utf-8")) for f in (self.repo / ".git" / "gbase").glob("preview-*.json")]
+
+    def test_the_first_call_prints_what_would_open_and_records_nothing(self):
+        self.setting()
+        self.commit_change()
+        self.write("b.py", "y = 1\ny = 2\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: b")
+        draft = self.draft(BODY + "\n![after](/Users/me/shots/after.png)\n")  # not uploaded before the PR: a local path is fine here
+        code, out = self.run_prep("preview", draft)
+        self.assertEqual(code, 0, out)
+        head = self.git("rev-parse", "HEAD")
+        self.assertIn(f"ship: local feat/x @{head[:7]} — 2 commits, not pushed\nPR 본문 초안: {draft}\npreview: ", out)
+        self.assertIn("title: 제목 한 줄", out)
+        self.assertRegex(out, r"commits \(origin/main\.\.HEAD\):\n  \w{7} feat: a\n  \w{7} feat: b\n")
+        self.assertIn("  +1 -0  a.py\n  +2 -0  b.py\n", out)
+        self.assertIn("next: nothing is recorded yet", out)
+        self.assertEqual(self.states(), [])
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        # nobody has read anything yet, so the PR stays closed
+        self.fake_gh(self.CREATED)
+        self.assertEqual(self.run_prep("open", draft)[0], 1)
+        self.assertFalse(self.pushed())
+        self.assertNotIn("pr create", self.gh_log())
+
+    def test_write_saves_the_text_and_records_the_commit_as_shown(self):
+        self.commit_change()
+        self.write("scratch.log", "x\n")
+        draft = self.draft()
+        text = "# PR 미리보기: 제목\n\n## 이대로 열릴 PR\n| 브랜치 |\n"
+        code, out = self.record(draft, text=text)
+        self.assertEqual(code, 0, out)
+        head = self.git("rev-parse", "HEAD")
+        file = Path(self.line(out)[len("preview: "):])
+        self.assertEqual(file.parent, self.tmp / "gbase-home" / "previews")  # outside the repo and its git dir
+        self.assertRegex(file.name, r"^repo-feat-x-[0-9a-f]{6}\.md$")
+        self.assertEqual(file.read_text(encoding="utf-8"), text)
+        self.assertIn(f"saved: 4 lines, and @{head[:7]} recorded as the commit that was shown", out)
+        state = json.loads((self.repo / ".git" / "gbase" / f"preview-{head}.json").read_text(encoding="utf-8"))  # the name go's Step 1 reads
+        self.assertEqual((state["reviewed"], state["branch"], state["head"], state["draft"], state["preview"], state["untracked"], state["left_out"]),
+                         (False, "feat/x", head, draft, str(file), ["scratch.log"], []))
+        self.assertEqual(self.record(draft, "--reviewed")[0], 0)
+        self.assertEqual([s["reviewed"] for s in self.states()], [True])  # one record per branch
+        code, out = self.record(draft, text=" \n")
+        self.assertEqual(code, 1)
+        self.assertIn("stdin was empty", out)
+        self.assertEqual(file.read_text(encoding="utf-8"), text)  # the saved preview is not blanked
+
+    def test_two_repos_of_the_same_folder_name_keep_separate_preview_files(self):
+        self.commit_change()
+        first = self.line(self.record(self.draft())[1])
+        other = self.tmp / "other" / "repo"
+        other.parent.mkdir()
+        self.git("clone", "-q", str(self.origin), str(other), cwd=self.tmp)
+        self.git("checkout", "-q", "-b", "feat/x", cwd=other)
+        (other / "a.py").write_text("x = 1\n")
+        self.git("add", "-A", cwd=other)
+        self.git("commit", "-q", "-m", "feat: a", cwd=other)
+        p = subprocess.run([sys.executable, str(SCRIPT), "preview", self.draft()], cwd=other, env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(self.line(p.stdout), first)
+
+    def test_preview_needs_a_branch_commits_a_good_draft_a_committed_tree_and_a_base(self):
+        code, out = self.run_prep("preview", self.draft())
+        self.assertEqual(code, 1)
+        self.assertIn("needs its own branch", out)
+        self.branch()
+        self.assertEqual(self.run_prep("preview", self.draft())[0], 3)
+        self.commit_change()
+        code, out = self.run_prep("preview", self.draft(BODY.replace("## Evidence", "## Proof")))
+        self.assertEqual(code, 1)
+        self.assertIn("missing `## Evidence`", out)
+        self.write("a.py", "x = 2\n")
+        code, out = self.record(self.draft())
+        self.assertEqual(code, 1)
+        self.assertIn("the preview would describe a PR without them: a.py", out)
+        self.assertEqual(self.states(), [])
+        self.git("checkout", "-q", "a.py")
+        # no default branch to be found: say so, instead of "nothing to ship" while `open` waits for a preview
+        self.git("remote", "remove", "origin")
+        self.git("branch", "-q", "-D", "main")
+        code, out = self.record(self.draft())
+        self.assertEqual(code, 1)
+        self.assertIn("can't tell which branch the PR goes to", out)
+
+    def test_open_continues_from_the_prepared_commits_and_draft(self):
+        self.setting()
+        self.commit_change()
+        draft = self.draft(BODY + "\n![after](/Users/me/shots/after.png)\n")
+        self.assertEqual(self.record(draft)[0], 0)
+        head = self.git("rev-parse", "HEAD")
+        # the one edit between the preview and the PR: the screenshot is uploaded and its link rewritten
+        Path(draft).write_text(Path(draft).read_text(encoding="utf-8").replace("/Users/me/shots/after.png", "https://github.com/o/r/raw/gbase-assets/feat/x/after.png"),
+                               encoding="utf-8")
+        self.fake_gh(self.CREATED)
+        code, out = self.run_prep("open", draft, "--draft")
+        self.assertEqual(code, 0, out)
+        self.assertIn("pr: https://github.com/o/r/pull/9", out)
+        self.assertEqual(self.git("rev-parse", "origin/feat/x"), head)  # the commits made before the preview, unchanged
+        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+        self.assertRegex(self.gh_log(), r"pr create --title 제목 한 줄 --body-file - --draft")
+        self.assertEqual(self.states(), [])  # used up: the next change is previewed anew
+
+    def test_a_later_session_finds_the_prepared_preview_and_is_told_to_ask_again(self):
+        self.setting()
+        self.commit_change()
+        self.write("scratch.log", "x\n")  # there when the preview was made: not a change
+        draft = self.draft()
+        self.record(draft)
+        code, out = self.run_prep("start")
+        self.assertEqual(code, 0, out)  # no question about "commits of its own and no open PR"
+        line = self.line(out)
+        self.assertIn(f"preview: prepared — feat/x @{self.git('rev-parse', '--short=7', 'HEAD')} is what", line)
+        self.assertIn(f"(draft {draft}) and nothing changed since: run no review or check again", line)
+        self.assertIn("next: show the preview again and ask", out)
+        self.assertNotIn("preview: on", out)
+        # also when the stop was asked for once and no setting is written anywhere
+        self.git("config", "--unset", "gbase.conventions")
+        self.assertIn("preview: prepared — ", self.run_prep("start")[1])
+
+    def test_a_change_after_the_preview_is_named_and_blocks_open_until_previewed_again(self):
+        self.setting()
+        self.commit_change()
+        draft = self.draft()
+        self.record(draft)
+        shown = self.git("rev-parse", "--short=7", "HEAD")
+        self.fake_gh(self.CREATED)
+        self.write("c.py", "z = 1\n")  # a new file alone: it would stay out of the PR without a word
+        self.assertIn(f"preview: changed — since the preview of @{shown}: c.py; re-check only these", self.line(self.run_prep("start")[1]))
+        self.assertEqual(self.run_prep("open", draft)[0], 1)
+        self.write("a.py", "x = 2\n")
+        code, out = self.run_prep("start")
+        self.assertEqual(code, 0, out)  # the prepared commits are not "a branch with its own history": no question
+        self.assertIn(f"preview: changed — since the preview of @{shown}: a.py, c.py; re-check only these", self.line(out))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "fix: review")
+        self.assertIn(f"preview: changed — since the preview of @{shown}: a.py, c.py", self.run_prep("start")[1])
+        code, out = self.run_prep("open", draft)
+        self.assertEqual(code, 1)
+        self.assertIn(f"what would open is not what the preview of @{shown} showed — changed since: a.py, c.py; nothing pushed", out)
+        self.assertFalse(self.pushed())
+        self.assertEqual(self.record(draft)[0], 0)
+        self.assertEqual(len(self.states()), 1)
+        self.assertEqual(self.run_prep("open", draft)[0], 0)
+        self.assertTrue(self.pushed())
+
+    def test_an_amended_commit_is_not_the_one_that_was_shown(self):
+        self.setting()
+        self.commit_change()
+        draft = self.draft()
+        self.record(draft)
+        self.write("a.py", "x = 9\n")
+        self.git("commit", "-q", "-a", "--amend", "-m", "feat: a")
+        self.assertIn("preview: changed — since the preview of @", self.run_prep("start")[1])
+        self.assertIn(": a.py; re-check only these", self.run_prep("start")[1])
+        self.fake_gh(self.CREATED)
+        self.assertEqual(self.run_prep("open", draft)[0], 1)
+        self.assertFalse(self.pushed())
+
+    def test_files_left_out_on_purpose_are_not_a_change(self):
+        self.setting()
+        self.commit_change()
+        self.write("README.md", "# app\nunrelated wip\n")
+        draft = self.draft()
+        code, out = self.record(draft, "--partial")
+        self.assertEqual(code, 0, out)
+        self.assertIn("preview: prepared — ", self.run_prep("start")[1])
+        self.fake_gh(self.CREATED)
+        code, out = self.run_prep("open", draft, "--partial")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.git("show", "origin/feat/x:README.md"), "# app")
+
+    def test_a_draft_or_preview_file_that_is_no_longer_the_one_shown_is_a_change(self):
+        self.setting()
+        self.commit_change()
+        draft = self.draft()
+        self.record(draft)
+        shown = Path(draft).read_text(encoding="utf-8")
+        # another branch of the same checkout wrote its own PR over the shared draft path
+        Path(draft).write_text(shown.replace("제목 한 줄", "다른 브랜치의 제목"), encoding="utf-8")
+        self.assertIn(f"preview: changed — since the preview of @{self.git('rev-parse', '--short=7', 'HEAD')}: the PR draft ({draft})", self.run_prep("start")[1])
+        self.fake_gh(self.CREATED)
+        code, out = self.run_prep("open", draft)
+        self.assertEqual(code, 1)
+        self.assertIn("changed since: the PR draft", out)
+        self.assertNotIn("pr create", self.gh_log())
+        Path(draft).unlink()
+        self.assertIn("preview: changed — ", self.run_prep("start")[1])
+        Path(draft).write_text(shown, encoding="utf-8")
+        self.assertIn("preview: prepared — ", self.run_prep("start")[1])
+        Path(self.states()[0]["preview"]).unlink()
+        self.assertIn("the preview file is missing", self.run_prep("start")[1])
+
+    def test_only_an_image_link_on_one_line_is_left_out_of_the_draft_comparison(self):
+        self.commit_change()
+        unclosed = BODY + "\n![after](https://example.invalid/a.png\n검증: 통과 (로컬)\n"
+        draft = self.draft(unclosed)
+        self.record(draft)
+        Path(draft).write_text(unclosed.replace("검증: 통과", "검증: 건너뜀"), encoding="utf-8")
+        self.assertIn("preview: changed — ", self.run_prep("start")[1])
+        self.assertIn("the PR draft", self.run_prep("start")[1])
+
+    def test_a_one_off_preview_holds_open_to_the_shown_commit_too(self):
+        self.commit_change()
+        draft = self.draft()
+        self.record(draft)  # no environment file: the user asked to see it first
+        self.commit_change("x = 3\n", "fix: late")
+        self.fake_gh(self.CREATED)
+        self.assertEqual(self.run_prep("open", draft)[0], 1)
+        self.assertFalse(self.pushed())
+
+    def test_a_preview_of_another_branch_is_not_this_branchs(self):
+        self.commit_change()
+        self.record(self.draft())
+        self.git("checkout", "-q", "main")
+        self.git("checkout", "-q", "-b", "feat/y")
+        self.write("b.py", "y = 1\n")
+        self.assertNotIn("preview:", self.run_prep("start")[1])
+
+    def test_an_open_pr_drops_the_record(self):
+        self.commit_change()
+        self.record(self.draft())
+        self.fake_gh('case "$1 $2" in "pr view") echo \'{"number":5,"url":"https://github.com/o/r/pull/5","state":"OPEN"}\';; esac')
+        self.assertNotIn("preview:", self.run_prep("start")[1])
+        self.assertEqual(self.states(), [])
+
+    def test_an_unreadable_environment_file_holds_the_pr_back_and_says_why(self):
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        missing = self.tmp / "moved-away.md"
+        self.git("config", "gbase.conventions", str(missing))
+        _, out = self.run_prep("start")
+        self.assertIn(f"note: the environment file {missing} can't be read", out)
+        self.assertNotIn("preview:", out)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: a")
+        self.fake_gh(self.CREATED)
+        # the file may hold `before the PR: preview`: saved in another encoding, it must not read as "no setting"
+        env = self.tmp / "env.md"
+        env.write_bytes("## Shipping\n- before the PR: preview (신규 입사 기간)\n".encode("cp949"))
+        for path in (missing, env):
+            self.git("config", "gbase.conventions", str(path))
+            code, out = self.run_prep("open", self.draft())
+            self.assertEqual(code, 1, path)
+            self.assertIn(f"the environment file {path} can't be read", out)
+            self.assertIn("nothing pushed", out)
+            self.assertFalse(self.pushed())
+        self.assertEqual(self.run_prep("open", self.draft(), "--no-preview")[0], 0)
+        self.setting("# Environment\n")
+        self.assertNotIn("can't be read", self.run_prep("start")[1])
+
+    def test_a_reworded_or_lost_commit_is_not_the_one_that_was_shown(self):
+        self.commit_change()
+        draft = self.draft()
+        self.record(draft)
+        shown = self.git("rev-parse", "--short=7", "HEAD")
+        self.git("commit", "-q", "--amend", "-m", "feat: a, reworded")  # same files, another commit: its message is part of the PR
+        head = self.git("rev-parse", "--short=7", "HEAD")
+        self.assertIn(f"preview: changed — since the preview of @{shown}: the commit itself (@{shown} → @{head})", self.run_prep("start")[1])
+        # the previewed commit was pruned (gc after a rebuild): nothing to compare with, so nothing is taken as unchanged
+        state_file = next((self.repo / ".git" / "gbase").glob("preview-*.json"))
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        state_file.write_text(json.dumps({**state, "head": "0" * 40}), encoding="utf-8")
+        self.assertIn("preview: changed — since the preview of @0000000: the previewed commit @0000000 is gone", self.run_prep("start")[1])
+        self.fake_gh(self.CREATED)
+        self.assertEqual(self.run_prep("open", draft)[0], 1)
+        self.assertFalse(self.pushed())
+
+    def test_a_branch_pushed_by_hand_is_not_called_unpushed(self):
+        self.commit_change()
+        self.git("push", "-q", "origin", "feat/x")
+        _, out = self.run_prep("preview", self.draft())
+        self.assertRegex(out, r"ship: local feat/x @\w{7} — 1 commits, already on origin/feat/x, no PR\n")
 
 if __name__ == "__main__":
     unittest.main()
