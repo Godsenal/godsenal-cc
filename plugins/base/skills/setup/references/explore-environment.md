@@ -32,7 +32,7 @@ Fill environment.md's format with what was found.
 - A line needs evidence: a file, a count of PRs that agree, a command that ran. The evidence goes in the preview, not in the file.
 - `## Write-back` is `off` for every kind unless the user turns one on in the preview. A write method is recorded only for a kind that is `on` or `ask`, marked `(not run)`.
 - Put no token, cookie, or password in the file. Name the environment variable or the login command.
-- `## Shipping` and its `before the PR: preview` line are written only when the user picks the preview in step 3. Nothing in a repo shows whether its owner wants to read a change before the team sees it, so it is never inferred.
+- `## Shipping` and its lines (`before the PR: preview`, `review replies: draft`) are written only when the user picks them in step 3. Nothing in a repo shows whether its owner wants to read a change before the team sees it, or to write their own replies to reviewers, so neither is ever inferred.
 - The tracker is described the way the user would say it. gbase carries no template for any tracker, so a section is prose plus the commands that ran here.
 
 ## 3. Preview and ask once
@@ -40,11 +40,11 @@ Fill environment.md's format with what was found.
 Show the findings (one line each, with evidence), the whole draft, the path it will be written to, and the exact `git config` change. Then one `AskUserQuestion` call, recommended answer first, holding only the questions exploration left open:
 
 - **Write-back**, when a tracker was found: read only (recommended) / link the PR on the ticket / link the PR and ask before moving the ticket.
-- **Before the PR**, when the environment is a company's or a client's (a self-hosted host, an organization's repos): open it as now (recommended) / show me a preview first and open it when I say so.
+- **What the team sees**, when the environment is a company's or a client's (a self-hosted host, an organization's repos): open the PR and reply to reviews as now (recommended) / show me a preview before the PR / draft the replies to review comments and let me post them / both.
 - **Scope**, when the repo sits in a folder beside other repos of the same owner: that folder (recommended) / this repo only.
 - **Apply**: write it / let me edit first / skip.
 
-*headless:* no environment file is written and no git config changes. Print the draft in the report, since a worktree's git dir goes away with it, and also save it to `$(git rev-parse --absolute-git-dir)/gbase/environment-draft.md`. Add a `결정 필요:` line naming that path and the `git config` command. The draft carries no `## Shipping` section; where "Before the PR" would have been asked, the report names the line the user can add.
+*headless:* no environment file is written and no git config changes. Print the draft in the report, since a worktree's git dir goes away with it, and also save it to `$(git rev-parse --absolute-git-dir)/gbase/environment-draft.md`. Add a `결정 필요:` line naming that path and the `git config` command. The draft carries no `## Shipping` section; where "What the team sees" would have been asked, the report names the two lines the user can add.
 
 ## 4. Write
 
@@ -55,4 +55,4 @@ Show the findings (one line each, with evidence), the whole draft, the path it w
 
 ## 5. Report
 
-`environment file: created <path> | updated | no change | nothing to record | draft only`, `git config: local | folder (<file>) | pending — <the lines to add>`, `ticket read: ran ok | not run — <reason>`, `write-back: <the kinds turned on, or none>`, and `before the PR: preview | open`.
+`environment file: created <path> | updated | no change | nothing to record | draft only`, `git config: local | folder (<file>) | pending — <the lines to add>`, `ticket read: ran ok | not run — <reason>`, `write-back: <the kinds turned on, or none>`, `before the PR: preview | open`, and `review replies: draft | post`.

@@ -5,21 +5,32 @@
   pr-status wait [--timeout 270] [--interval 30] [--handled] [...]   --until-settled: poll until something needs action, then the snapshot
   pr-status watch [--interval 30] [...]                          for the Monitor tool: one line per state change, until merge/close
   pr-status patch [--base <ref>] [--was <rev>]                   after a rebase or a base merge, before the push: is the change still the one that was verified?
+  pr-status drafted [--pr N] < drafts.jsonl                      replies held as drafts: record them (one JSON object per line), print the table to show
 
   --start             begin a watch: forget earlier heads and timers for this PR
   --merge             also judge the merge gate and print the merge command
   --verified-locally  the caller's local checks passed this run (lets a merge past checks that never started)
   --handled           wait only: what was open at the first poll is already dealt with locally; return on something new or when all concludes
+  --hold-replies      post nothing on the PR this watch: replies are drafted for the user (also the environment file's `review replies: draft`)
+  --post-replies      post replies this watch even though the environment file says to draft them
 
   --base              patch only: the ref the branch was rebased onto (default: the PR's base on origin, else origin/HEAD)
   --was               patch only: the head that was verified (default: the pushed head, @{upstream})
 
+A `drafted` line: {"id": <the number in [thread <id>]>, "verdict": "fixed|declined|answered|undecided|out-of-scope",
+"reply": "<the reply as it would be posted>", "commit": "<the fix, for fixed>", "why": "<reason and file:line, for declined>",
+"gist": "<the comment in one line>"}. With nothing on stdin it prints the table of what is held.
+
 `next:` lines are in the order to handle them. A `settle:` line is the verdict to report when nothing more can be fixed.
-State (first-seen time per head, links already shown) is kept in <git-dir>/gbase/pr-status-<n>.json.
+State (first-seen time per head, links already shown) is kept in <git-dir>/gbase/pr-status-<n>.json; held reply drafts in
+$GBASE_HOME/replies/ (default ~/.gbase/replies/), outside every repo, so a later watch or another worktree doesn't draft them again.
 """
 import calendar
+import contextlib
+import fcntl
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -39,6 +50,10 @@ PUSH_TRIGGER = re.compile(r"^\s*push:|^(on|'on'|\"on\"):\s*\[?[^\n#]*\bpush\b|^\
 LINK_HOSTS = re.compile(
     r"https?://[^\s)\]>\"'|]*(?:expo\.dev|exp\.host|vercel\.app|netlify\.app|pages\.dev|web\.app|testflight\.apple\.com|"
     r"appdistribution\.firebase\.(?:dev|google\.com)|chromatic\.com|play\.google\.com/apps/(?:internaltest|testing))[^\s)\]>\"'|]*", re.I)
+
+REPLIES_SETTING = r"^[\s>*_-]*`?review replies[`*_]*\s*[:：][\s`*_]*draft\b"
+HELD_DOC = "references/held-replies.md"
+VERDICTS = {"fixed": "고침", "declined": "거절", "answered": "답변", "undecided": "질문", "out-of-scope": "범위 밖"}
 
 QUERY = """
 query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){
@@ -153,7 +168,7 @@ def normalize(data, me, annotations=lambda check_id: (), polls=()):
         if t["isResolved"] or not cs or login(cs[-1]["author"]) == me:
             continue  # resolved, or already answered by us
         last = cs[-1]
-        items.append({"type": "thread", "id": cs[0]["databaseId"], "author": login(last["author"]), "assoc": last.get("authorAssociation"),
+        items.append({"type": "thread", "id": cs[0]["databaseId"], "last": last["databaseId"], "author": login(last["author"]), "assoc": last.get("authorAssociation"),
                       "bot": is_bot(last["author"]), "trusted": trusted(last["author"], last.get("authorAssociation")),
                       "where": f"{t.get('path')}:{t.get('line') or '?'}" + (" (outdated)" if t.get("isOutdated") else ""),
                       "quote": first_line(last["body"]), "url": last.get("url"), "suggestion": "```suggestion" in (last["body"] or "")})
@@ -163,7 +178,7 @@ def normalize(data, me, annotations=lambda check_id: (), polls=()):
             latest_review[login(r["author"])] = r
     for who, r in latest_review.items():
         if r["state"] == "CHANGES_REQUESTED" and who != me:
-            items.append({"type": "changes-requested", "id": r["databaseId"], "author": who, "assoc": r.get("authorAssociation"),
+            items.append({"type": "changes-requested", "id": r["databaseId"], "last": r["databaseId"], "author": who, "assoc": r.get("authorAssociation"),
                           "bot": is_bot(r["author"]), "trusted": trusted(r["author"], r.get("authorAssociation")), "where": "review",
                           "quote": first_line(r["body"]) or "(no summary — see its inline comments)", "url": r.get("url"), "suggestion": False})
     mine = [epoch(c["createdAt"]) for c in comments if login(c["author"]) == me]
@@ -181,13 +196,13 @@ def normalize(data, me, annotations=lambda check_id: (), polls=()):
     for c in comments:  # a person's PR-level comment is open until we comment after it
         if login(c["author"]) == me or is_bot(c["author"]) or epoch(c["createdAt"]) <= answered_until:
             continue
-        items.append({"type": "comment", "id": c["databaseId"], "author": login(c["author"]), "assoc": c.get("authorAssociation"), "bot": False,
+        items.append({"type": "comment", "id": c["databaseId"], "last": c["databaseId"], "author": login(c["author"]), "assoc": c.get("authorAssociation"), "bot": False,
                       "trusted": trusted(c["author"], c.get("authorAssociation")), "where": "conversation",
                       "quote": first_line(c["body"]), "url": c.get("url"), "suggestion": False})
     for r in reviews:
         if r["state"] == "COMMENTED" and (r["body"] or "").strip() and login(r["author"]) != me and not is_bot(r["author"]) \
                 and epoch(r["submittedAt"]) > answered_until:
-            items.append({"type": "review", "id": r["databaseId"], "author": login(r["author"]), "assoc": r.get("authorAssociation"), "bot": False,
+            items.append({"type": "review", "id": r["databaseId"], "last": r["databaseId"], "author": login(r["author"]), "assoc": r.get("authorAssociation"), "bot": False,
                           "trusted": trusted(r["author"], r.get("authorAssociation")), "where": "review",
                           "quote": first_line(r["body"]), "url": r.get("url"), "suggestion": False})
 
@@ -221,7 +236,7 @@ def normalize(data, me, annotations=lambda check_id: (), polls=()):
             "base": pr["baseRefName"], "branch": pr["headRefName"], "pushed": pushed, "notes": notes,
             "head_is_mine": login(((commit.get("author") or {}).get("user"))) == me,
             "checks": checks, "items": items, "expected": sorted(expected), "activity": activity,
-            "concluded_apps": sorted(concluded_apps), "links": links}
+            "concluded_apps": sorted(concluded_apps), "links": links, "my_comments": [c["body"] or "" for c in comments if login(c["author"]) == me]}
 
 
 def waiting_bots(snap, since):
@@ -233,10 +248,36 @@ def by_kind(snap, kind):
     return [c for c in snap["checks"] if c["kind"] == kind]
 
 
-def decide(snap, first_seen, now, pushed=0, settle_rules=True):
+def replies_mode(flag, conv, text):
+    """('draft' | 'post', why). `flag`: 'hold' or 'post' from this watch's arguments, which win over the file.
+    `conv`: the environment file's path, `text`: what it holds (None when it is set but can't be read)."""
+    if flag:
+        return ("draft", "--hold-replies") if flag == "hold" else ("post", "--post-replies")
+    if conv and text is None:  # the line may be in it, and a posted reply can't be taken back
+        return "draft", f"the environment file {conv} can't be read, so whether its owner posts their own replies is unknown"
+    if conv and re.search(REPLIES_SETTING, text, re.I | re.M):
+        return "draft", f'{conv} says "review replies: draft"'
+    return "post", ""
+
+
+def draft_key(item):
+    return f"{item['type']}:{item['id']}"
+
+
+def mark_held(items, drafts):
+    """Marks each open item a reply was drafted for: `held` while nothing was said after the draft, `redraft` once the
+    thread got a new comment. (The user's own reply takes the item off the list before this is asked.)"""
+    for i in items:
+        d = drafts.get(draft_key(i))
+        if d:
+            i["held" if d.get("last") == i["last"] else "redraft"] = d
+
+
+def decide(snap, first_seen, now, pushed=0, settle_rules=True, replies="post", post_held=False):
     """What the snapshot means: `next` steps in order, the settle verdict, and whether the head has settled.
 
-    `pushed`: heads of ours that arrived during this watch. `settle_rules`: the --until-settled limits (30 minutes a head, three pushed fixes)."""
+    `pushed`: heads of ours that arrived during this watch. `settle_rules`: the --until-settled limits (30 minutes a head, three pushed fixes).
+    `replies`: 'draft' when nothing is posted on this PR. `post_held`: the request asked to post what was held."""
     sha = snap["head"][:7]
     if snap["state"] != "OPEN":
         return {"next": [f"done — the PR is {snap['state'].lower()}; print a one-line summary and stop"], "settled": True, "settle": None,
@@ -255,16 +296,27 @@ def decide(snap, first_seen, now, pushed=0, settle_rules=True):
     if conflict:
         nxt.append("conflict — read references/conflicts.md (CI keeps failing on the merge commit while it stands)")
         human.append(f"병합 충돌(base: {snap['base']})")
-    if snap["items"]:
-        nxt.append(f"comments — {len(snap['items'])} open; classify each by references/comments.md and reply once")
-        human += [f"{i['author']} {i['where']}" for i in snap["items"]]
+    open_items = [i for i in snap["items"] if not i.get("held")]
+    held = [i for i in snap["items"] if i.get("held")]
+    comments_at = len(nxt)
+    if open_items:
+        how = f"draft each reply, post nothing, push no fix made for one ({HELD_DOC})" if replies == "draft" else "reply once"
+        nxt.append(f"comments — {len(open_items)} open; classify each by references/comments.md and {how}")
+        human += [f"{i['author']} {i['where']}" for i in open_items]
+    postable = [i for i in held if i["held"].get("reply") and not i["held"].get("posted")]
+    if postable and post_held:
+        nxt.append(f"post — {len(postable)} held draft(s): push their commits, then post each `reply:` above as it is written "
+                   "(a JSON string: decode it, change nothing), one reply each (references/comments.md)")
+    human += [f"{i['author']} {i['where']} (답글 초안)" for i in held]
     if failed:
         nxt.append("ci — " + ", ".join(c["name"] for c in failed) + "; read the failing log, fix what the diff caused (one commit per fix); "
                    "a check still failing after two fixes: read ../../references/premise.md before stopping, no third fix")
         human += [f"실패한 체크 {c['name']}" for c in failed]
+        if replies == "draft" and open_items:  # a CI fix is pushed, a comment's fix is not: the one that can be pushed goes first
+            nxt.append(nxt.pop(comments_at))
     if unstarted:
         human += [f"CI 미실행(계정) {c['name']}" for c in unstarted]
-    if settle_rules and pushed >= MAX_PUSHED_HEADS and (conflict or snap["items"] or failed):
+    if settle_rules and pushed >= MAX_PUSHED_HEADS and (conflict or open_items or failed):
         nxt.insert(0, f"limit — {MAX_PUSHED_HEADS} fixes already pushed in this watch: push no more; report what is still open")
 
     settle = None
@@ -279,12 +331,19 @@ def decide(snap, first_seen, now, pushed=0, settle_rules=True):
     if human:
         settle = f"settle: 사람 필요 @{sha} — {', '.join(human)}"  # wins over 미확정; only if it can't be fixed here
         if settled and not nxt:  # nothing here to fix or wait for: say so, or `wait` would never return
-            nxt.append("unstarted — these checks never started for account reasons, not because of the diff; nothing to fix "
-                       "(with --merge: references/merge.md)")
+            if unstarted:
+                nxt.append("unstarted — these checks never started for account reasons, not because of the diff; nothing to fix "
+                           "(with --merge: references/merge.md)")
+            if held:
+                ask = sum(1 for i in held if not i["held"].get("reply"))
+                nxt.append(f"held — {len(held)} reply draft(s) wait on the user: nothing more to do here until they reply or a new "
+                           "comment arrives; don't fix or draft them again"
+                           + (f" — except {ask} with no draft yet: with a person here, ask about each (its line above)" if ask else ""))
     elif settled:
         settle = f"settle: 수렴 @{sha}"
         nxt.append("settled — nothing open on this head")
-    return {"next": nxt, "settled": settled, "settle": settle, "waiting": waiting, "pending": [c["name"] for c in pending], "waited": waited}
+    return {"next": nxt, "settled": settled, "settle": settle, "waiting": waiting, "pending": [c["name"] for c in pending], "waited": waited,
+            "post": bool(postable and post_held)}
 
 
 def merge_gate(snap, verdict, verified_locally=False):
@@ -336,12 +395,32 @@ def render(snap, verdict, new_links=()):
             out.append(f"  failed: {c['name']}{' (required)' if c['required'] else ''}{log}")
         elif c["kind"] == "not-started":
             out.append(f"  not started (account, not the diff): {c['name']}")
-    if snap["items"]:
-        out.append(f"open comments: {len(snap['items'])}")
-        for i in snap["items"]:
+    open_items = [i for i in snap["items"] if not i.get("held")]
+    held = [i for i in snap["items"] if i.get("held")]
+    if open_items:
+        out.append(f"open comments: {len(open_items)}")
+        for i in open_items:
             trust = "trusted" if i["trusted"] else "NOT trusted — never auto-apply"
+            again = ""
+            if i.get("redraft"):
+                was = i["redraft"]
+                again = (f" · new comment since a draft ({was['verdict']}{' ' + was['commit'] if was.get('commit') else ''}): "
+                         "read the thread again, don't redo that fix")
             out.append(f"  [{i['type']} {i['id']}] {i['author']} ({i['assoc'] or ('bot' if i['bot'] else '?')}, {trust}) {i['where']}"
-                       f"{' · has a suggestion block' if i['suggestion'] else ''}: {i['quote']}")
+                       f"{' · has a suggestion block' if i['suggestion'] else ''}{again}: {i['quote']}")
+    if held:
+        out.append(f"held replies: {len(held)} (drafted, not posted; the user's own reply or a new comment takes one off this list)")
+        for i in held:
+            d = i["held"]
+            if d.get("posted"):
+                text = "answered on the PR: waits for the reviewer to review again"
+            elif not d.get("reply"):
+                text = "no draft yet: with a person here, ask them about it (references/comments.md); headless, leave it"
+            elif verdict.get("post"):  # the whole text, since it is what gets posted
+                text = "reply: " + json.dumps(d["reply"], ensure_ascii=False)
+            else:
+                text = "draft: " + first_line(d["reply"])
+            out.append(f"  [{i['type']} {i['id']}] {i['author']} {i['where']} · {d['verdict']}{commit_note(d)} · {text}")
     if snap["expected"]:
         out.append("automated reviewers: " + ", ".join(f"{b} ({'waiting' if b in verdict['waiting'] else 'done'})" for b in snap["expected"]))
     out += [f"link: {l['url']} (from {l['source']}, built from {snap['head'][:7]})" for l in new_links]
@@ -354,12 +433,81 @@ def render(snap, verdict, new_links=()):
     return out
 
 
+def commit_note(draft):
+    if not draft.get("commit"):
+        return ""
+    where = {"rewritten": "rewritten since (a rebase or an amend): find its new sha and record the comment with `drafted` again"}
+    state = draft.get("pushed")
+    return f" {draft['commit']}" + (f" ({where.get(state, state)})" if state else "")
+
+
+def draft_table(drafts):
+    """The table a person reads: one row per held reply, the reply as it would be posted, and the reason behind a decline."""
+    def cell(text):
+        return " ".join((text or "").replace("|", "\\|").split()) or "—"
+
+    rows = ["| # | 댓글 | 판단 | 수정 커밋 | 답글 초안 |", "|---|---|---|---|---|"]
+    reasons = []
+    for n, d in enumerate(drafts, 1):
+        where = f"[`{d['where']}`]({d['url']})" if d.get("url") else f"`{d['where']}`"
+        pushed = {"pushed": " (푸시됨)", "not pushed": " (푸시 안 함)", "rewritten": " (다시 쓰인 커밋)"}.get(d.get("pushed"), "")
+        commit = f"`{d['commit']}`{pushed}" if d.get("commit") else "—"
+        reply = (d.get("reply") or "").strip().replace("|", "\\|").replace("\n", "<br>")
+        rows.append(f"| {n} | {d['author']} · {where} · {cell(d.get('gist') or d.get('quote'))} | {VERDICTS[d['verdict']]} | {commit} | "
+                    f"{reply or '—'} |")
+        if d.get("why"):
+            reasons.append(f"- #{n} 근거: {cell(d['why'])}")
+    return rows + ([""] + reasons if reasons else [])
+
+
+def parse_drafts(text, items, short_sha=lambda rev: rev):
+    """(entries by key, errors) from `drafted`'s stdin. Nothing is recorded unless every line is good."""
+    by_id = {}
+    for i in items:
+        by_id.setdefault(str(i["id"]), []).append(i)
+    entries, errors = {}, []
+    for n, line in enumerate(filter(None, (l.strip() for l in text.splitlines())), 1):
+        try:
+            d = json.loads(line)
+        except ValueError:
+            d = None
+        if not isinstance(d, dict):
+            errors.append(f"line {n} is not one JSON object")
+            continue
+        if any(not isinstance(d.get(k) or "", str) for k in ("reply", "why", "gist", "commit", "verdict")):
+            errors.append(f"line {n}: reply, why, gist, commit, and verdict are strings (a reply of several lines is one string with \\n)")
+            continue
+        found = [i for i in by_id.get(str(d.get("id")), []) if d.get("type") in (None, i["type"])]
+        verdict = d.get("verdict")
+        if not found:
+            errors.append(f"line {n}: {d.get('id')} is not an open comment on this PR (open: "
+                          f"{', '.join(str(i['id']) for i in items) or 'none'})")
+        elif verdict not in VERDICTS:
+            errors.append(f"line {n}: verdict is one of {', '.join(VERDICTS)}")
+        elif verdict == "fixed" and not d.get("commit"):
+            errors.append(f"line {n}: a fixed comment names its commit")
+        elif verdict != "undecided" and not (d.get("reply") or "").strip():
+            errors.append(f"line {n}: no reply text (only an undecided comment has none yet)")
+        elif verdict == "declined" and not (d.get("why") or "").strip():
+            errors.append(f"line {n}: a declined comment carries why, with the file:line that shows it")
+        else:
+            i = found[0]
+            commit = short_sha(d["commit"]) if d.get("commit") else None
+            if d.get("commit") and not commit:
+                errors.append(f"line {n}: no commit {d['commit']} in this repo")
+                continue
+            entries[draft_key(i)] = {**{k: i[k] for k in ("type", "id", "last", "author", "where", "quote", "url")}, "verdict": verdict,
+                                     "commit": commit, "reply": (d.get("reply") or "").strip(), "why": (d.get("why") or "").strip(),
+                                     "gist": (d.get("gist") or "").strip()}
+    return entries, errors
+
+
 # --- gh and state ----------------------------------------------------------
 
 def resolve(pr_arg):
     view = json.loads(sh(["gh", "pr", "view", *([pr_arg] if pr_arg else []), "--json", "number,url"]))
-    m = re.match(r"https://[^/]+/([^/]+)/([^/]+)/pull/(\d+)", view["url"])
-    return m.group(1), m.group(2), int(m.group(3))
+    m = re.match(r"https://([^/]+)/([^/]+)/([^/]+)/pull/(\d+)", view["url"])
+    return m.group(1), m.group(2), m.group(3), int(m.group(4))
 
 
 def fetch(owner, repo, number, me, polls=()):
@@ -382,6 +530,154 @@ def state_path(number):
     base = Path(git_dir) / "gbase" if git_dir else Path.home() / ".cache" / "gbase"
     base.mkdir(parents=True, exist_ok=True)
     return base / f"pr-status-{number}.json"
+
+
+def replies_file(host, owner, repo, number):
+    """Outside every repo and git dir: a worktree goes away with its git dir, and the drafts are the user's to read.
+    One folder per host, owner, and repo: joined into one name, `acme/web-app` and `acme-web/app` would share a file."""
+    home = Path(os.environ.get("GBASE_HOME") or "~/.gbase").expanduser().resolve()  # absolute: the runner reads the path from the report
+    return home.joinpath("replies", *(re.sub(r"[^A-Za-z0-9._-]+", "-", part) for part in (host, owner, repo)), f"pr-{number}.json")
+
+
+@contextlib.contextmanager
+def locked(path):
+    """One process at a time through a file's read-modify-write: a watch prunes the drafts every poll while `drafted` adds to
+    them, and writes its state while another call records a request in it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def load_drafts(path):
+    try:
+        drafts = json.loads(path.read_text(encoding="utf-8"))
+        return drafts if isinstance(drafts, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_drafts(path, drafts, title):
+    """The record and, beside it, the table as a file a person can open. `pushed` is this clone's view, so it isn't recorded."""
+    table = path.with_suffix(".md")
+    if not drafts:
+        for f in (path, table):
+            f.unlink(missing_ok=True)
+        return None
+    record = json.dumps({k: {f: v for f, v in d.items() if f != "pushed"} for k, d in drafts.items()}, ensure_ascii=False)
+    for f, text in ((path, record), (table, "\n".join([f"# {title}", "", *draft_table(drafts.values())]) + "\n")):
+        tmp = f.with_name(f.name + ".tmp")  # a reader never sees half a file
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, f)
+    return table
+
+
+def same_text(text):
+    return " ".join(text.split())
+
+
+def still_held(drafts, snap):
+    """The drafts whose comment still waits: not answered, resolved, or superseded."""
+    open_keys = {draft_key(i) for i in snap["items"]}
+    return {k: d for k, d in drafts.items() if k in open_keys}
+
+
+def sync_drafts(path, snap, title):
+    """Drops the drafts that no longer wait (all of them once the PR is merged or closed), marks the rest on the snapshot,
+    and says where each fix commit is."""
+    if not path.exists():
+        return {}
+    with locked(path):
+        kept = still_held(load_drafts(path), snap) if snap["state"] == "OPEN" else {}
+        for d in kept.values():
+            d["pushed"] = commit_state(d.get("commit"), snap["head"], snap["branch"])
+            # a `changes-requested` review stays listed until its reviewer reviews again. Once its summary is on the PR as our
+            # comment it is answered; the record stays, or the review would be open, drafted, and fixed again
+            if d["type"] == "changes-requested" and d.get("reply") and same_text(d["reply"]) in map(same_text, snap.get("my_comments", [])):
+                d["posted"] = True
+        save_drafts(path, kept, title)  # every time: the table file says where each commit is now
+    mark_held(snap["items"], kept)
+    return kept
+
+
+def commit_state(commit, head, branch):
+    """'pushed' when the PR's head holds the commit, 'not pushed' when only the local branch does, 'rewritten' when neither
+    does any more (a rebase or an amend gave the fix a new sha), None when this clone can't tell."""
+    def within(ref):
+        try:
+            return subprocess.run(["git", "merge-base", "--is-ancestor", commit, ref], capture_output=True).returncode
+        except OSError:
+            return None
+
+    if not commit:
+        return None
+    on_head = within(head)
+    if on_head == 0:
+        return "pushed"
+    return {0: "not pushed", 1: "rewritten"}.get(within(f"refs/heads/{branch}")) if on_head == 1 else None
+
+
+def environment():
+    """(the environment file's path, its text; None when it is set but can't be read). ('', '') when none is set."""
+    conv = sh(["git", "config", "--get", "--type=path", "gbase.conventions"], check=False)  # --type=path expands a leading ~
+    if not conv:
+        return "", ""
+    try:
+        return conv, Path(conv).expanduser().read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return conv, None
+
+
+def cmd_drafted(args):
+    pr_arg = take(args, "--pr")
+    try:
+        host, owner, repo, number = resolve(pr_arg)
+        me = sh(["gh", "api", "user", "-q", ".login"])
+        # the polls of the watch: the same comments are open here as in the snapshot that listed them
+        snap = fetch(owner, repo, number, me, load_state(state_path(number)).get("polls", []))
+    except GhError as e:
+        print(f"error: {e}")
+        return 1
+    path, title = replies_file(host, owner, repo, number), f"PR #{number} 답글 초안 ({owner}/{repo})"
+    text = "" if sys.stdin.isatty() else sys.stdin.read()
+    short_sha = lambda rev: sh(["git", "rev-parse", "--short", "--verify", "--quiet", f"{rev}^{{commit}}"], check=False)
+    entries, errors = parse_drafts(text, snap["items"], short_sha)
+    if errors:
+        print("\n".join([f"error: {e}" for e in errors] + ["next: nothing was recorded — fix the lines and run `pr-status drafted` again"]))
+        return 1
+    with locked(path):
+        drafts = {**still_held(load_drafts(path), snap), **entries}
+        for d in drafts.values():
+            d["pushed"] = commit_state(d.get("commit"), snap["head"], snap["branch"])
+        table = save_drafts(path, drafts, title)
+    if not drafts:
+        print("drafted: none — no reply is held as a draft on this PR")
+        return 0
+    print("\n".join([f"drafted: {len(entries)} recorded, {len(drafts)} held — pr-status lists them under `held replies`, not as open",
+                     *draft_table(drafts.values()),
+                     *(f"reply [{d['type']} {d['id']}]: {json.dumps(d['reply'], ensure_ascii=False)}" for d in drafts.values() if d.get("reply")),
+                     f"reply drafts: {table}",
+                     f"next: show the table as printed and ask what to do with it ({HELD_DOC}); headless: the table and the "
+                     "`reply drafts:` line go in the report. A reply that is posted is its `reply [...]` line above (a JSON string: decode it), "
+                     "not its table cell, which is escaped for the table. Under --until-settled, `pr-status wait` once more prints the `settle:` line"]))
+    return 0
+
+
+def write_state(path, state):
+    tmp = path.with_name(path.name + ".tmp")  # a reader never sees half a file
+    tmp.write_text(json.dumps(state))
+    os.replace(tmp, path)
+
+
+def save_state(path, state):
+    """With the reply request as the file has it now: another call of this watch may have made one while this one was polling,
+    and a `watch` must not write its older copy over it."""
+    with locked(path):
+        asked = load_state(path).get("replies")
+        state.pop("replies", None)
+        if asked:
+            state["replies"] = asked
+        write_state(path, state)
 
 
 def load_state(path, fresh=False):
@@ -508,21 +804,38 @@ def main(argv):
         return 0
     if args and args[0] == "patch":
         return cmd_patch(args[1:])
+    if args and args[0] == "drafted":
+        return cmd_drafted(args[1:])
     pr_arg = take(args, "--pr")
     timeout = take(args, "--timeout", 270, int)
     interval = take(args, "--interval", 30, int)
     want_merge, verified, handled = "--merge" in args, "--verified-locally" in args, "--handled" in args
     settle_rules = mode == "wait" or "--until-settled" in args
     try:
-        owner, repo, number = resolve(pr_arg)
+        host, owner, repo, number = resolve(pr_arg)
         me = sh(["gh", "api", "user", "-q", ".login"])
     except GhError as e:
         print(f"error: {e}\nnext: no PR for this branch → /gbase:branch-pr; no gh auth → the user runs `gh auth login`")
         return 1
     path = state_path(number)
     state = load_state(path, fresh="--start" in args)
+    asked = "hold" if "--hold-replies" in args else "post" if "--post-replies" in args else None
+    if asked:
+        state["replies"] = asked  # the request holds for the watch, not only for the call that carried it
+    if asked or "--start" in args:
+        with locked(path):  # before the first poll: every process of the watch reads the request from the file
+            write_state(path, state)
+    flag, replies, why = None, "post", ""
+    drafts_path, drafts_title = replies_file(host, owner, repo, number), f"PR #{number} 답글 초안 ({owner}/{repo})"
 
     def poll():
+        nonlocal flag, replies, why
+        # read again on every poll: a `watch` that started earlier must follow a request made since, not write its own copy over it
+        flag = load_state(path).get("replies")
+        state.pop("replies", None)
+        if flag:
+            state["replies"] = flag
+        replies, why = replies_mode(flag, *environment())
         polls = state.get("polls", [])
         snap = fetch(owner, repo, number, me, polls)
         for _ in range(3):  # mergeability is computed lazily: the first query after a push often says UNKNOWN
@@ -532,16 +845,24 @@ def main(argv):
             snap = fetch(owner, repo, number, me, polls)
         now = time.time()
         first_seen, new_links, new_notes = observe(state, snap, now)
-        verdict = decide(snap, first_seen, now, state.get("pushed", 0), settle_rules)
+        sync_drafts(drafts_path, snap, drafts_title)
+        verdict = decide(snap, first_seen, now, state.get("pushed", 0), settle_rules, replies, post_held=flag == "post")
         if new_notes and snap["state"] == "OPEN":
             verdict["new_notes"] = new_notes
             verdict["next"].insert(0, f"notes — {len(new_notes)} new bot comment(s): open each one; a finding in it is handled like a review comment "
                                       "(references/comments.md), a preview link or a summary needs nothing")
-        path.write_text(json.dumps(state))
+        save_state(path, state)
         return snap, verdict, new_links
 
     def full(snap, verdict, new_links):
         lines = render(snap, verdict, new_links)
+        if replies == "draft":
+            lines.insert(1, f"replies: draft — {why}: post nothing on this PR and push no fix made for a comment; read {HELD_DOC} "
+                            "before handling a comment")
+        elif flag == "post":
+            lines.insert(1, "replies: post — --post-replies, whatever the environment file says")
+        if any(i.get("held") for i in snap["items"]):
+            lines.insert(len(lines) - len(verdict["next"]), f"reply drafts: {drafts_path.with_suffix('.md')}")
         if want_merge and snap["state"] == "OPEN":
             lines += merge_lines(snap, verdict, owner, repo, verified)
         return lines

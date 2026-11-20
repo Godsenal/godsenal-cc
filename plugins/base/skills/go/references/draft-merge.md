@@ -1,6 +1,6 @@
-# `--draft`, `--merge`, `--preview`, and deferred findings
+# `--draft`, `--merge`, `--preview`, reply flags, and deferred findings
 
-Read before Step 5 when `go` was invoked with `--draft`, `--merge`, or `--preview`, or review deferred a finding.
+Read before Step 5 when `go` was invoked with `--draft`, `--merge`, `--preview`, `--hold-replies`, or `--post-replies`, or review deferred a finding.
 
 ## Deferred findings
 
@@ -15,6 +15,10 @@ Pass `--draft` to `branch-pr` at the front of its args (`"--draft Risk: …; Ver
 ## `--preview`
 
 The user wants to read the change before its PR exists, this once (also "PR 올리기 전에 보여 줘"). Put `--preview` at the front of `branch-pr`'s args, ahead of `--draft`: it stops before the push and asks ([preview.md](../../branch-pr/references/preview.md)). A `--merge` given with it waits for the PR the user opens from that question.
+
+## `--hold-replies`, `--post-replies`
+
+The user doesn't want replies posted on the PR under their name this once ("답글은 달지 마"), or wants them posted although their environment file says `review replies: draft` ("답글 달아"). Add the flag to monitor's args in Step 6; monitor passes it to `pr-status`, and [held-replies.md](../../monitor/references/held-replies.md) is monitor's to read. Without a flag the environment file decides, and `go` reads nothing for it. A fix `go` itself pushes for a deferred finding answers no reviewer, so it is pushed either way.
 
 ## `--merge`
 

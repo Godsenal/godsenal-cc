@@ -24,6 +24,8 @@ An automated reviewer and monitor's fixes can loop indefinitely: each push trigg
 
 ## Reply
 
+After a `replies: draft` line, nothing here is posted: [held-replies.md](held-replies.md) says what happens instead.
+
 Every comment monitor handles gets exactly one reply, after the fix is pushed so the reply can cite the commit. Inline for a `thread` item (`gh api --method POST repos/<owner>/<repo>/pulls/<pr>/comments/<id>/replies -f body=…`, the id from the script's `[thread <id>]`), a PR comment otherwise:
 
 | Outcome | Reply |

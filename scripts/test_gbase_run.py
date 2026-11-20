@@ -106,7 +106,7 @@ FAKE_CLAUDE = textwrap.dedent('''\
         skill(name, "toolu_agent1")
     if "--resume" in args:  # what only the resumed session's subagent called
         skill("gbase:compat-check", "toolu_agent2")
-    if model in ("commits", "preview"):
+    if model in ("commits", "preview", "held"):
         open("c.txt", "w").write(os.environ.get("FAKE_CONTENT", "run") + "\\n")
         subprocess.run(["git", "add", "c.txt"], check=True)
         subprocess.run(["git", "commit", "-q", "-m", "run commit"], check=True)
@@ -132,6 +132,11 @@ FAKE_CLAUDE = textwrap.dedent('''\
         "preview": "# PR 미리보기: 제목\\nship: local feat/x @abc1234 — 1 commits, not pushed\\nPR 본문 초안: /g/pr-body.md\\n"
                    "preview: /g/preview-feat-x.md\\n결정 필요: feat/x @abc1234 PR 열기 전 미리보기 /g/preview-feat-x.md → 열지 않음 "
                    "(추천: 미리보기를 읽고 PR 열기; 사람이 할 일: 이 브랜치에서 /gbase:go 로 PR 열기)\\n",
+        "held": "| # | 댓글 | 판단 | 수정 커밋 | 답글 초안 |\\n|---|---|---|---|---|\\n| 1 | alice | 고침 | `abc1234` (푸시 안 함) | Addressed in abc1234. |\\n"
+                "ship: local feat/x @abc1234 — 1 commits, not pushed\\nreply drafts: /g/replies/o-r-7.md\\n"
+                "결정 필요: PR #7 답글 초안 1건과 수정 커밋 1개(feat/x, 푸시 안 함)를 올릴지 → 올리지 않음 "
+                "(추천: /g/replies/o-r-7.md의 초안을 읽고 직접 답글; 사람이 할 일: 초안 확인 후 git push와 답글 작성)\\n"
+                "settle: 사람 필요 @abc1234 — alice src/a.ts:7 (답글 초안)\\n",
     }
     finals["subgo"] = finals["agent"]
     final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
@@ -608,6 +613,23 @@ class GbaseRunTest(unittest.TestCase):
         ship = "ship: local feat/x @abc1234 — 1 commits, not pushed"
         unshipped = lambda text: gbase_run.unshipped("work", "agent", [text], result["cwd"], result["base"]["ref"])
         self.assertEqual((unshipped(ship), unshipped(ship + "\npreview: /g/preview-feat-x.md")), ("pr:", None))
+
+    def test_a_run_that_holds_reply_drafts_is_not_resumed_to_push_them(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "held", "--worktree", "hr")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["base"]["ahead"], 1)
+        self.assertNotIn("resumed", result["sessions"]["held"])
+        self.assertEqual((result["status"], result["reply_drafts_file"]), ("done", "/g/replies/o-r-7.md"))
+        self.assertEqual(result["settle"], "settle: 사람 필요 @abc1234 — alice src/a.ts:7 (답글 초안)")
+        decision = result["decisions"][-1]
+        self.assertEqual((decision["applied"], decision["human"]), ("올리지 않음", "초안 확인 후 git push와 답글 작성"))
+        self.assertIsNone(gbase_run.report("reply drafts: 2 held")["reply_drafts_file"])
+        ship = "ship: local feat/x @abc1234 — 1 commits, not pushed"
+        for owner, line in (("agent", "pr:"), ("orchestrator", None)):
+            unshipped = lambda text: gbase_run.unshipped("work", owner, [text], result["cwd"], result["base"]["ref"])
+            self.assertEqual((unshipped(ship), unshipped(ship + "\nreply drafts: /g/replies/o-r-7.md")), (line, None))
+            self.assertIsNone(unshipped("reply drafts: /g/replies/o-r-7.md"))
 
     def test_a_resumed_session_that_reaches_a_cap_is_reported_like_the_first_one(self):
         for cap, flag, field, other in (("error_max_turns", "--max-turns", "turn_limit", "budget_limit"),
