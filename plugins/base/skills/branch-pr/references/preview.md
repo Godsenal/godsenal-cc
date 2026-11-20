@@ -69,7 +69,7 @@ Save it with `--write` and print the same text in the reply; a link to the file 
 One `AskUserQuestion`: **PR 열기** / **초안 PR로 열기** / **여기서 멈춤** (고칠 것을 말하면 고치고 다시 보여 준다).
 
 - **PR 열기, 초안 PR로 열기.** Upload the local screenshots now (`ship-prep assets`, then rewrite their links), run `ship-prep open <draft>` (`--draft` for the draft), and go on from Step 5 as written: the `pr:` line, the write-back, and under `go` its Step 6. No review or check runs again. If `open` refuses because the commit, the tree, or the draft is not what was shown, go to After a change. In a later session `go` no longer knows what its review left: the preview's 남긴 것 rows are the deferred findings `--merge` waits on, and Step 6 runs monitor without `--no-review`.
-- **여기서 멈춤.** End with `ship: local …`, `PR 본문 초안: …`, and `preview: <file>` at column 0, and say that `/gbase:go` on this branch comes back to this question.
+- **여기서 멈춤.** End with `ship: local …`, `PR 본문 초안: …`, and `preview: <file>` at column 0, and say that `/gbase:go` on this branch comes back to this question. When files were left uncommitted on purpose (`--partial`), say `/gbase:branch-pr` instead: `go` takes an uncommitted tree as the change to review.
 - **A fix the user names** → After a change.
 
 **Headless** (`AGENT_HEADLESS=1`): the stop holds. The setting means the team sees nothing before its owner has read it, and a recommendation can't do that reading. Push nothing, put the preview in the report, end with the three lines above, and add `결정 필요: <branch> @<sha> PR 열기 전 미리보기 <preview file> → 열지 않음 (추천: 미리보기를 읽고 PR 열기; 사람이 할 일: 이 브랜치에서 /gbase:go 로 PR 열기)` ([headless.md](../../../references/headless.md)). An `AGENT_ASK_CMD` answer that picks an option is applied.

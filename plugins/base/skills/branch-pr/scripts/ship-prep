@@ -256,12 +256,12 @@ def preview_file(branch):
 
 def draft_digest(path):
     """A hash of the PR draft that survives the one edit made between the preview and the PR: uploaded screenshots
-    replace their local paths. None when the draft can't be read."""
+    replace their local paths, and `ship-prep assets` prints its own label with each. None when the draft can't be read."""
     try:
         text = Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
-    return hashlib.sha256(re.sub(r"(!\[[^\]]*\]\()[^)\n]*\)", r"\1)", text).encode()).hexdigest()
+    return hashlib.sha256(re.sub(r"!\[[^\]]*\]\([^)\n]*\)", "![]()", text).encode()).hexdigest()
 
 
 def recorded_preview(branch):
@@ -520,6 +520,8 @@ def cmd_preview(args):
     paths = [a for a in args if not a.startswith("--")]
     if len(paths) != 1:
         raise Stop(1, "usage: ship-prep preview <draft> [--partial] [--write [--reviewed] < preview text]")
+    if "--reviewed" in args and "--write" not in args:
+        raise Stop(1, "error: --reviewed goes with --write: it marks the commit that call records, and this call records nothing")
     text = sys.stdin.read() if "--write" in args else None
     if text is not None and not text.strip():
         raise Stop(1, "error: --write saves the preview text it reads on stdin, and stdin was empty")

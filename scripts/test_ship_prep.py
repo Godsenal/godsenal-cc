@@ -623,6 +623,9 @@ class Preview(Repo):
         state = json.loads((self.repo / ".git" / "gbase" / f"preview-{head}.json").read_text(encoding="utf-8"))  # the name go's Step 1 reads
         self.assertEqual((state["reviewed"], state["branch"], state["head"], state["draft"], state["preview"], state["untracked"], state["left_out"]),
                          (False, "feat/x", head, draft, str(file), ["scratch.log"], []))
+        code, out = self.run_prep("preview", draft, "--reviewed")  # dropped without a word, the next go would review again
+        self.assertEqual(code, 1)
+        self.assertIn("--reviewed goes with --write", out)
         self.assertEqual(self.record(draft, "--reviewed")[0], 0)
         self.assertEqual([s["reviewed"] for s in self.states()], [True])  # one record per branch
         code, out = self.record(draft, text=" \n")
@@ -672,8 +675,8 @@ class Preview(Repo):
         draft = self.draft(BODY + "\n![after](/Users/me/shots/after.png)\n")
         self.assertEqual(self.record(draft)[0], 0)
         head = self.git("rev-parse", "HEAD")
-        # the one edit between the preview and the PR: the screenshot is uploaded and its link rewritten
-        Path(draft).write_text(Path(draft).read_text(encoding="utf-8").replace("/Users/me/shots/after.png", "https://github.com/o/r/raw/gbase-assets/feat/x/after.png"),
+        # the one edit between the preview and the PR: the screenshot is uploaded and the line `assets` printed, its own label included, is pasted in
+        Path(draft).write_text(Path(draft).read_text(encoding="utf-8").replace("![after](/Users/me/shots/after.png)", "![after-1](https://github.com/o/r/raw/gbase-assets/feat/x/after-1.png)"),
                                encoding="utf-8")
         self.fake_gh(self.CREATED)
         code, out = self.run_prep("open", draft, "--draft")
