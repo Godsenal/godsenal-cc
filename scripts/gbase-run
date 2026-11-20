@@ -80,6 +80,7 @@ PROCS = []  # running claude children, terminated when the runner is stopped
 DECISION = re.compile(r"^결정 필요: .*$", re.M)
 SHIP = re.compile(r"^ship: .*$", re.M)
 PR_BODY = re.compile(r"^PR 본문 초안: (.+)$", re.M)
+PREVIEW = re.compile(r"^preview: (/.+)$", re.M)  # branch-pr's preview file: the run stopped before the PR for a person to read it
 SETTLE = re.compile(r"^settle: .*$", re.M)
 PR_URL = re.compile(r"^pr: <?(https?://[^\s<>`]+)", re.M)  # go/branch-pr's `pr: <url>` line
 MOCKUP = re.compile(r"^mockup( url| shots)?: (.+)$", re.M)
@@ -475,6 +476,7 @@ def report(text):
         "decisions": [parse_decision(line) for line in DECISION.findall(text)],
         "ship": (SHIP.findall(text) or [None])[-1],
         "pr_body_line": pr[-1].strip() if pr else None,
+        "preview_file": (PREVIEW.findall(text) or [""])[-1].strip() or None,
         "settle": (SETTLE.findall(text) or [None])[-1],
         "pr_url": (PR_URL.findall(text) or [""])[-1].rstrip(".,;)") or None,
         "mockup": mockup(text),
@@ -866,7 +868,9 @@ def unshipped(slot, owner, texts, cwd, base):
     """The report line (`pr:` for an agent owner, `ship:` for orchestrator) a shipping run that ended with work in
     its worktree (uncommitted changes or unpushed commits) is missing, else None."""
     pattern, line = (SHIP, "ship:") if owner == "orchestrator" else (PR_URL, "pr:")
-    if slot not in SHIPPING_SLOTS or pattern.search("\n".join(texts)):
+    text = "\n".join(texts)
+    stopped_at_preview = owner == "agent" and SHIP.search(text) and PREVIEW.search(text)
+    if slot not in SHIPPING_SLOTS or pattern.search(text) or stopped_at_preview:
         return None
     # a branch whose PR already merged has nowhere to ship to: runs that merged by hand were resumed for the
     # report file they left untracked in the worktree
@@ -1296,6 +1300,7 @@ def cmd_run(argv):
             "questions": read_jsonl(run_dir / "questions.jsonl"),
             "ship": next((r["ship"] for r in parsed if r["ship"]), None),
             "pr_body_file": pr_line or (str(pr_draft) if pr_draft.exists() else None),
+            "preview_file": next((r["preview_file"] for r in parsed if r["preview_file"]), None),
             "settle": next((r["settle"] for r in parsed if r["settle"]), None),
             "pr_url": pr_url,
             "mockup": next((r["mockup"] for r in parsed if r["mockup"]), None),
