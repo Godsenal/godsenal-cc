@@ -17,8 +17,9 @@ How a program that runs agents with no person attached (for example `claude -p` 
 The final assistant message carries these lines at column 0; grep for the prefix.
 
 - `결정 필요: …` — a decision taken without a person, or an irreversible step not taken ([headless.md](headless.md#결정-필요-lines)).
-- `ship: local <branch> @<short-sha> — <n> commits, not pushed` — `go` under `AGENT_SHIP_OWNER=orchestrator`, and `monitor --until-settled` under it when it committed fixes.
+- `ship: local <branch> @<short-sha> — <n> commits, not pushed` — `go` under `AGENT_SHIP_OWNER=orchestrator`, and `monitor --until-settled` under it when it committed fixes; also an agent-owned run that stopped at the preview (below).
 - `PR 본문 초안: <absolute path>` — the same runs.
+- `preview: <absolute path>` — an agent-owned `go` in a repo whose owner asked to read a change before its PR (the environment file's `before the PR: preview`, [environment.md](environment.md)): the run committed and drafted locally, wrote the preview there, pushed nothing, and left a `결정 필요:` line. That is where such a run ends, not a PR that failed to open. It opens the PR itself only when the task asked for the PR or the merge in words. Under `AGENT_SHIP_OWNER=orchestrator` nothing is pushed either way and the line isn't written: the caller that opens PRs decides when.
 - `ship: skip — <reason>` — a run whose caller put shipping out of scope ("do not push"); it carries no `결정 필요:` line about it ([headless.md](headless.md#결정-필요-lines)).
 - `pr: <url>` — `branch-pr` after `gh pr create`, carried up by `go`: the PR an agent-owned run opened.
 - `settle: …` — `monitor --until-settled` ([below](#settle)).

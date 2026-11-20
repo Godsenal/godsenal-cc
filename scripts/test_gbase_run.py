@@ -106,7 +106,7 @@ FAKE_CLAUDE = textwrap.dedent('''\
         skill(name, "toolu_agent1")
     if "--resume" in args:  # what only the resumed session's subagent called
         skill("gbase:compat-check", "toolu_agent2")
-    if model == "commits":  # a session that commits c.txt in its checkout
+    if model in ("commits", "preview"):
         open("c.txt", "w").write(os.environ.get("FAKE_CONTENT", "run") + "\\n")
         subprocess.run(["git", "add", "c.txt"], check=True)
         subprocess.run(["git", "commit", "-q", "-m", "run commit"], check=True)
@@ -129,6 +129,9 @@ FAKE_CLAUDE = textwrap.dedent('''\
         # go → monitor ran long and the last message kept only the settle line
         "plan": "계획을 썼습니다\\nplan: /p/app-onboarding.md\\n남은 작업: 1. 스키마와 첫 화면\\n남은 작업: 2. 알림 설정\\n결정 필요: 알림 기본값 → 켬 (추천: 켬; 다른 선택지: 끔)\\n",
         "settled": "PR #64를 정리했습니다\\nsettle: 사람 필요 @7b0a03f\\n",
+        "preview": "# PR 미리보기: 제목\\nship: local feat/x @abc1234 — 1 commits, not pushed\\nPR 본문 초안: /g/pr-body.md\\n"
+                   "preview: /g/preview-feat-x.md\\n결정 필요: feat/x @abc1234 PR 열기 전 미리보기 /g/preview-feat-x.md → 열지 않음 "
+                   "(추천: 미리보기를 읽고 PR 열기; 사람이 할 일: 이 브랜치에서 /gbase:go 로 PR 열기)\\n",
     }
     finals["subgo"] = finals["agent"]
     final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
@@ -589,6 +592,22 @@ class GbaseRunTest(unittest.TestCase):
         (self.repo / "change.txt").unlink()
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "ship", "--ship-owner", "agent", "--model", "lessons")
         self.assertNotIn("resumed", json.loads(Path(out[-1]).read_text())["sessions"]["lessons"])
+
+    def test_a_run_that_stops_at_the_pr_preview_is_not_resumed_or_reported_as_unshipped(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "preview", "--worktree", "pv")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["base"]["ahead"], 1)
+        self.assertNotIn("resumed", result["sessions"]["preview"])
+        self.assertEqual((result["status"], result["pr_url"], result["gaps"]), ("done", None, []))
+        self.assertEqual((result["ship"], result["pr_body_file"], result["preview_file"]),
+                         ("ship: local feat/x @abc1234 — 1 commits, not pushed", "/g/pr-body.md", "/g/preview-feat-x.md"))
+        decision = result["decisions"][-1]
+        self.assertEqual((decision["applied"], decision["human"]), ("열지 않음", "이 브랜치에서 /gbase:go 로 PR 열기"))
+        self.assertIsNone(gbase_run.report("preview: on — /e/env.md says \"before the PR: preview\"")["preview_file"])
+        ship = "ship: local feat/x @abc1234 — 1 commits, not pushed"
+        unshipped = lambda text: gbase_run.unshipped("work", "agent", [text], result["cwd"], result["base"]["ref"])
+        self.assertEqual((unshipped(ship), unshipped(ship + "\npreview: /g/preview-feat-x.md")), ("pr:", None))
 
     def test_a_resumed_session_that_reaches_a_cap_is_reported_like_the_first_one(self):
         for cap, flag, field, other in (("error_max_turns", "--max-turns", "turn_limit", "budget_limit"),

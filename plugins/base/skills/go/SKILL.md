@@ -6,7 +6,7 @@ allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Agent Edit Write
 
 # /gbase:go
 
-Takes a finished change to an open, watched PR: **polish ∥ review → verify → branch-pr → monitor**. `go` only sequences; each sub-skill keeps its own consent and safety rules. Invoking it is the go-ahead to reach a PR: only a diff-caused check failure that resists a mechanical fix and `branch-pr`'s own questions may stop it first. It merges only with `--merge`.
+Takes a finished change to an open, watched PR: **polish ∥ review → verify → branch-pr → monitor**. `go` only sequences; each sub-skill keeps its own consent and safety rules. Invoking it is the go-ahead to reach a PR: only a diff-caused check failure that resists a mechanical fix and `branch-pr`'s own questions or preview may stop it first. It merges only with `--merge`.
 
 ## 출력 언어
 
@@ -16,16 +16,16 @@ Takes a finished change to an open, watched PR: **polish ∥ review → verify �
 
 | When | Read first |
 |---|---|
-| Step 1's check prints anything | [orchestrated.md](references/orchestrated.md). It changes every step, and under `AGENT_HEADLESS=1` nothing is asked ([headless.md](../../references/headless.md)). |
+| Step 1's check prints an `AGENT_` variable | [orchestrated.md](references/orchestrated.md). Under `AGENT_HEADLESS=1` nothing is asked ([headless.md](../../references/headless.md)). |
 | Risk `medium` or `high` | [review.md](references/review.md) before Step 2, [verify.md](references/verify.md) at Step 4; on `high` also [high.md](references/high.md) |
 | A check fails, or the repo has no verify block | [verify.md](references/verify.md) |
-| `--draft`, `--merge`, or a finding review deferred | [draft-merge.md](references/draft-merge.md), before Step 5 |
+| `--draft`, `--merge`, `--preview`, or a finding review deferred | [draft-merge.md](references/draft-merge.md), before Step 5 |
 
 ## Steps
 
 ### 1. Scope
 
-First run `printenv | grep '^AGENT_'`. Uncommitted changes → target them. Clean tree with unpushed `gbase:pause` commits at the tip (`wip:` subject + `Intent:` body) → target their combined diff; `branch-pr` regroups them. Otherwise → the latest commit; if later steps produce no edits there, there is nothing to PR: say so and stop.
+First run `printenv | grep '^AGENT_'; cat "$(git rev-parse --absolute-git-dir)/gbase/preview-$(git rev-parse HEAD).json" 2>/dev/null`. A `"reviewed": true` line on a clean tree → reviewed and shown: go to Step 5. Uncommitted changes → target them. Clean tree with unpushed `gbase:pause` commits at the tip (`wip:` subject + `Intent:` body) → target their combined diff; `branch-pr` regroups them. Otherwise → the latest commit; if later steps produce no edits there, there is nothing to PR: say so and stop.
 
 Classify the risk the way `branch-pr` does: `high` if it touches a path `REVIEW.md` marks always-high (without one: auth, payments, migrations, CI/release workflows, app config), `low` for docs/copy/tests/flagged additive changes, else `medium`. A user who asked for a deep pass gets `high`'s depth. Report scope and risk in one line.
 
@@ -57,7 +57,7 @@ Report one line per check, `verify: <command> → pass`, and carry the `behavior
 Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <Step 4 lines>; Deferred: <severity · introduced|pre-existing · file:line · failure scenario, per finding joined by ' | ', or none>")
 ```
 
-`branch-pr` owns branching, commits, push, and the PR body, where deferred findings become `## Review focus` items. Once the PR exists the report carries `pr: <url>` at column 0: `branch-pr`'s line, or `gh pr view --json url -q .url` when it pushed to a PR that already existed.
+`Deferred:` lands in the body's `## Review focus`. The report carries its `pr: <url>` line at column 0. A `preview:` line instead → it stopped before the PR: end with its lines, no Step 6.
 
 ### 6. Monitor
 

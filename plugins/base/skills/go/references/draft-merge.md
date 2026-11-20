@@ -1,6 +1,6 @@
-# `--draft`, `--merge`, and deferred findings
+# `--draft`, `--merge`, `--preview`, and deferred findings
 
-Read before Step 5 when `go` was invoked with `--draft` or `--merge`, or review deferred a finding.
+Read before Step 5 when `go` was invoked with `--draft`, `--merge`, or `--preview`, or review deferred a finding.
 
 ## Deferred findings
 
@@ -11,6 +11,10 @@ An `open` row from polish's `Comments:` line (a constraint comment deleted with 
 ## `--draft`
 
 Pass `--draft` to `branch-pr` at the front of its args (`"--draft Risk: …; Verification: …; Deferred: …"`) and to monitor, with the count of unresolved deferred findings: monitor holds the ready flip until CI is green and that count is zero.
+
+## `--preview`
+
+The user wants to read the change before its PR exists, this once (also "PR 올리기 전에 보여 줘"). Put `--preview` at the front of `branch-pr`'s args, ahead of `--draft`: it stops before the push and asks ([preview.md](../../branch-pr/references/preview.md)). A `--merge` given with it waits for the PR the user opens from that question.
 
 ## `--merge`
 
