@@ -678,6 +678,7 @@ class HeldReplies(unittest.TestCase):
         ps.mark_held(s["items"], self.draft(s["items"][0], verdict="answered", commit=None, reply="All addressed.", posted=True))
         v = decide(s, post_held=True)
         self.assertEqual([n.split(" — ")[0] for n in v["next"]], ["held"])   # not `comments`, not `post`
+        self.assertNotIn("no draft yet", v["next"][0])   # it has one, and it was posted: nothing to ask
         self.assertIn("answered on the PR: waits for the reviewer to review again", "\n".join(ps.render(s, v)))
 
     def test_two_repos_never_share_a_drafts_file(self):
@@ -707,6 +708,7 @@ class HeldReplies(unittest.TestCase):
                  '{"id": 30, "verdict": "fixed", "reply": "x"}': "a fixed comment names its commit",
                  '{"id": 30, "verdict": "answered"}': "no reply text",
                  '{"id": 30, "verdict": "declined", "reply": "Keeping the map."}': "a declined comment carries why",
+                 '{"id": 30, "verdict": "answered", "reply": ["a", "b"]}': "reply, why, gist, commit, and verdict are strings",
                  "id 30 fixed": "line 2 is not one JSON object"}
         for line, error in cases.items():
             entries, errors = ps.parse_drafts(f"{good}\n{line}\n", s["items"])
@@ -848,8 +850,12 @@ class HeldRepliesOnDisk(RepoCase):
         stamp = lambda offset: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + offset))
         changes = review(USER, "CHANGES_REQUESTED", "please split this", rid=20)
         self.respond(reviews=[changes])
-        self.status("drafted", stdin='{"id": 20, "verdict": "answered", "reply": "All three points are addressed."}\n')
-        self.respond(reviews=[changes], comments=[comment(MINE, "All three points are addressed.", at=stamp(60), cid=41)])
+        _, out = self.status("drafted", stdin='{"id": 20, "verdict": "answered", "reply": "All three points\\nare addressed."}\n')
+        self.assertIn('reply [changes-requested 20]: "All three points\\nare addressed."', out)   # the text to post, not the table cell
+        self.assertIn("All three points<br>are addressed. |", out)
+        self.respond(reviews=[changes], comments=[comment(MINE, "an unrelated note", at=stamp(60), cid=41)])
+        self.assertIn("next: post", self.status("--post-replies")[1])   # a comment of ours about something else answers nothing
+        self.respond(reviews=[changes], comments=[comment(MINE, "All three points\nare addressed.", at=BEFORE, cid=42)])   # whatever the clocks say
         for _ in range(2):   # the record stays: a later sweep doesn't see a new review to draft
             _, out = self.status("--post-replies")
             self.assertNotIn("next: comments", out)

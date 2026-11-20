@@ -33,13 +33,13 @@ Record every comment of this sweep in one call:
 EOF
 ```
 
-It prints the table (`댓글 | 판단 | 수정 커밋 | 답글 초안`) and a `reply drafts: <path>` line, the same table as a file outside the repo. From then on the script lists those comments under `held replies`, not as open, in a later watch and in another worktree too. A held comment is never fixed or drafted again; one left `undecided` by a headless run is asked about once a person is there. A fix whose commit a rebase or an amend rewrote is marked `rewritten`: record that comment again with the new sha, so the reply cites a commit the PR has. It is open again when someone adds a comment to it (`new comment since a draft`: read the thread, keep the earlier fix), and it leaves the list when the user replies or resolves it. A finding from a `note` has no id to record, so hold its fix with the rest and name it beside the table.
+It prints the table (`댓글 | 판단 | 수정 커밋 | 답글 초안`) and a `reply drafts: <path>` line, the same table as a file outside the repo. From then on the script lists those comments under `held replies`, not as open, in a later watch and in another worktree too. A held comment is never fixed or drafted again; one left `undecided` by a headless run is asked about once a person is there. A fix whose commit a rebase or an amend rewrote is marked `rewritten`: record that comment again with the new sha, so the reply cites a commit the PR has. It is open again when someone adds a comment to it (`new comment since a draft`: read the thread, keep the earlier fix), and it leaves the list when the user replies or resolves it. A PR-level comment has no thread, so the user's own PR comment answers every earlier one, and their drafts go with it. A finding from a `note` has no id to record, so hold its fix with the rest and name it beside the table.
 
 ## Ask
 
 Show the table as printed, then one `AskUserQuestion`:
 
-- **푸시하고 답글도 올리기** → push, then post each draft exactly as shown, by comments.md's Reply commands.
+- **푸시하고 답글도 올리기** → push, then post each draft by comments.md's Reply commands. The text is the script's `reply [...]` line for it (a JSON string, decoded), not the table cell: the table escapes `|` and line breaks.
 - **푸시만 하고 답글은 내가 쓰기** → push. Nothing is posted and the comments stay held.
 - **멈춤** → nothing is pushed. What the user asks to change goes into a new commit, is recorded with `drafted` again, and is shown again.
 
