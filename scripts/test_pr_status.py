@@ -1,11 +1,13 @@
 """monitor's pr-status: every classification and verdict, on hand-built GraphQL responses — no network."""
 import importlib.machinery
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -61,9 +63,9 @@ def snap(**kw):
     return ps.normalize(data(**kw), ME, annotations, polls)
 
 
-def decide(s, waited=600, pushed=0, settle_rules=True):
+def decide(s, waited=600, pushed=0, settle_rules=True, **kw):
     first_seen = ps.epoch(T0)
-    return ps.decide(s, first_seen, first_seen + waited, pushed, settle_rules)
+    return ps.decide(s, first_seen, first_seen + waited, pushed, settle_rules, **kw)
 
 
 class Time(unittest.TestCase):
@@ -401,9 +403,7 @@ class LinksAndRender(unittest.TestCase):
         self.assertIn("next: ci — check", text)
 
 
-class Patch(unittest.TestCase):
-    """`pr-status patch` on a throwaway repo: main moves, the branch is rebased or merged, and the verified head is origin's."""
-
+class RepoCase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -428,6 +428,17 @@ class Patch(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-q", "-m", message)
 
+    def path_with(self, **scripts):
+        """An env whose PATH holds only git and the given fake commands."""
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        for name, body in {"git": f'exec "{shutil.which("git")}" "$@"', **scripts}.items():
+            (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
+            (bin_dir / name).chmod(0o755)
+        return {**self.env, "PATH": str(bin_dir)}
+
+
+class Patch(RepoCase):
     def main_moves(self, files):
         self.git("checkout", "-q", "main")
         self.commit(files, "main moves")
@@ -438,15 +449,6 @@ class Patch(unittest.TestCase):
         p = subprocess.run([sys.executable, str(PATH), "patch", *base, *args], cwd=self.repo, env=env or self.env,
                            capture_output=True, text=True)
         return p.returncode, p.stdout
-
-    def path_with(self, **scripts):
-        """An env whose PATH holds only git and the given fake commands."""
-        bin_dir = self.tmp / "bin"
-        bin_dir.mkdir(exist_ok=True)
-        for name, body in {"git": f'exec "{shutil.which("git")}" "$@"', **scripts}.items():
-            (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
-            (bin_dir / name).chmod(0o755)
-        return {**self.env, "PATH": str(bin_dir)}
 
     def test_a_clean_rebase_keeps_the_verification(self):
         self.main_moves({"other.py": "x = 1\n"})
@@ -554,6 +556,351 @@ class Patch(unittest.TestCase):
         code, out = self.patch()
         self.assertEqual(code, 1)
         self.assertIn("next: name them — pr-status patch --base", out)
+
+
+class HeldReplies(unittest.TestCase):
+    def draft(self, item, **kw):
+        return {ps.draft_key(item): {**{k: item[k] for k in ("type", "id", "last", "author", "where", "quote", "url")},
+                                     "verdict": "fixed", "commit": "abc1234", "reply": "Addressed in abc1234.", "why": "", "gist": "", **kw}}
+
+    def held(self, checks=None, **kw):
+        s = snap(checks=checks or [run()], **kw)
+        ps.mark_held(s["items"], self.draft(s["items"][0]))
+        return s
+
+    def test_the_setting_is_read_from_the_environment_file(self):
+        for line in ("- review replies: draft", "review replies: draft", "- `review replies`: draft", "* **Review replies**: `draft`",
+                     "- review replies： draft"):
+            self.assertEqual(ps.replies_mode(None, "/e.md", f"## Shipping\n{line}\n")[0], "draft", line)
+        for text in ("", "## Shipping\n- before the PR: preview\n", "- review replies: post\n", "- review replies: drafts-later\n",
+                     "we used to have review replies: draft\n"):
+            self.assertEqual(ps.replies_mode(None, "/e.md", text), ("post", ""), text)
+        self.assertEqual(ps.replies_mode(None, "", ""), ("post", ""))
+
+    def test_a_file_that_cannot_be_read_holds_replies_since_the_line_may_be_in_it(self):
+        mode, why = ps.replies_mode(None, "/gone.md", None)
+        self.assertEqual(mode, "draft")
+        self.assertIn("/gone.md can't be read", why)
+
+    def test_the_request_wins_over_the_file_both_ways(self):
+        self.assertEqual(ps.replies_mode("post", "/e.md", "- review replies: draft\n")[0], "post")
+        self.assertEqual(ps.replies_mode("post", "/gone.md", None)[0], "post")
+        self.assertEqual(ps.replies_mode("hold", "", ""), ("draft", "--hold-replies"))
+
+    def test_in_draft_mode_the_comments_line_says_to_post_nothing(self):
+        s = snap(checks=[run()], threads=[thread(comment(USER, "rename this"))])
+        self.assertIn("reply once", decide(s)["next"][0])
+        line = decide(s, replies="draft")["next"][0]
+        self.assertIn("post nothing, push no fix made for one (references/held-replies.md)", line)
+        self.assertNotIn("reply once", line)
+        self.assertTrue((PATH.parents[1] / "references/held-replies.md").is_file())
+
+    def test_a_drafted_comment_is_not_open_again_on_the_next_sweep(self):
+        s = self.held(threads=[thread(comment(USER, "rename this"))])
+        v = decide(s)
+        self.assertEqual([n.split(" — ")[0] for n in v["next"]], ["held"])
+        self.assertIn("don't fix or draft them again", v["next"][0])
+        self.assertEqual(v["settle"], f"settle: 사람 필요 @{HEAD[:7]} — alice src/a.ts:7 (답글 초안)")
+        out = "\n".join(ps.render(s, v))
+        self.assertNotIn("open comments", out)
+        self.assertIn("held replies: 1", out)
+        self.assertIn("[thread 10] alice src/a.ts:7 · fixed abc1234 · draft: Addressed in abc1234.", out)
+
+    def test_a_held_draft_does_not_end_a_wait_while_checks_run(self):
+        s = self.held(checks=[run(status="IN_PROGRESS", conclusion=None)], threads=[thread(comment(USER, "rename this"))])
+        self.assertEqual([n.split(" — ")[0] for n in decide(s)["next"]], ["wait"])
+
+    def test_a_new_comment_on_the_thread_opens_it_again_and_names_the_earlier_fix(self):
+        first = snap(threads=[thread(comment(USER, "rename this", cid=10))])
+        drafts = self.draft(first["items"][0])
+        s = snap(checks=[run()], threads=[thread(comment(USER, "rename this", cid=10), comment(USER, "also the caller", cid=11))])
+        ps.mark_held(s["items"], drafts)
+        v = decide(s)
+        self.assertIn("comments — 1 open", v["next"][0])
+        out = "\n".join(ps.render(s, v))
+        self.assertIn("new comment since a draft (fixed abc1234): read the thread again, don't redo that fix: also the caller", out)
+        self.assertNotIn("held replies", out)
+
+    def test_only_the_comment_that_was_drafted_is_held(self):
+        s = snap(checks=[run()], threads=[thread(comment(USER, "rename this", cid=10)), thread(comment(USER, "why a map?", cid=30))])
+        ps.mark_held(s["items"], self.draft(s["items"][0]))
+        v = decide(s)
+        self.assertIn("comments — 1 open", v["next"][0])
+        self.assertIn("alice src/a.ts:7, alice src/a.ts:7 (답글 초안)", v["settle"])
+
+    def test_a_failing_check_is_still_fixed_while_a_draft_waits(self):
+        s = self.held(checks=[run("test", conclusion="FAILURE")], threads=[thread(comment(USER, "rename this"))])
+        v = decide(s, replies="draft")
+        self.assertEqual([n.split(" — ")[0] for n in v["next"]], ["ci"])
+
+    def test_in_draft_mode_ci_is_handled_before_comments_because_only_its_fix_is_pushed(self):
+        s = snap(checks=[run("test", conclusion="FAILURE")], threads=[thread(comment(USER, "rename this"))], mergeable="CONFLICTING")
+        order = lambda **kw: [n.split(" — ")[0] for n in decide(s, **kw)["next"]]
+        self.assertEqual(order(), ["conflict", "comments", "ci"])
+        self.assertEqual(order(replies="draft"), ["conflict", "ci", "comments"])
+
+    def test_a_held_draft_alone_never_counts_toward_the_fix_limit(self):
+        s = self.held(threads=[thread(comment(USER, "rename this"))])
+        self.assertFalse(any(n.startswith("limit") for n in decide(s, pushed=3)["next"]))
+
+    def test_a_held_draft_still_blocks_the_merge(self):
+        s = self.held(threads=[thread(comment(USER, "rename this"))])
+        ok, reasons = ps.merge_gate(s, decide(s))
+        self.assertFalse(ok)
+        self.assertIn("1 unanswered review comments", reasons)
+
+    def test_asked_to_post_the_whole_draft_is_printed_not_its_first_line(self):
+        long = "Keeping the map: lookups are by id on every render, and a list would be a linear scan over all rows each time.\nSee src/a.ts:40."
+        s = snap(checks=[run()], threads=[thread(comment(USER, "rename this", cid=10)), thread(comment(USER, "why a map?", cid=30))])
+        drafts = {**self.draft(s["items"][0], reply=long), **self.draft(s["items"][1], verdict="undecided", commit=None, reply="")}
+        ps.mark_held(s["items"], drafts)
+        v = decide(s, post_held=True)
+        self.assertIn("post — 1 held draft(s): push their commits, then post each `reply:` above as it is written", v["next"][0])
+        out = "\n".join(ps.render(s, v))
+        self.assertIn("reply: " + json.dumps(long), out)   # both lines, nothing cut
+        self.assertNotIn("…", out)
+        self.assertNotIn("reply: ", "\n".join(ps.render(s, decide(s))))   # only when it is about to be posted
+
+    def test_a_comment_left_undecided_is_asked_about_when_a_person_is_there(self):
+        s = snap(checks=[run()], threads=[thread(comment(USER, "why a map?", cid=30))])
+        ps.mark_held(s["items"], self.draft(s["items"][0], verdict="undecided", commit=None, reply=""))
+        v = decide(s, post_held=True)
+        self.assertEqual([n.split(" — ")[0] for n in v["next"]], ["held"])   # nothing to post for it
+        self.assertIn("undecided · no draft yet: with a person here, ask them about it", "\n".join(ps.render(s, v)))
+
+    def test_a_held_comment_with_no_draft_yet_is_named_on_the_held_line(self):
+        s = snap(checks=[run()], threads=[thread(comment(USER, "why a map?", cid=30))])
+        ps.mark_held(s["items"], self.draft(s["items"][0], verdict="undecided", commit=None, reply=""))
+        self.assertIn("except 1 with no draft yet: with a person here, ask about each", decide(s)["next"][0])
+
+    def test_an_answered_changes_requested_draft_is_neither_open_nor_posted_again(self):
+        s = snap(checks=[run()], reviews=[review(USER, "CHANGES_REQUESTED", "please split this", rid=20)])
+        ps.mark_held(s["items"], self.draft(s["items"][0], verdict="answered", commit=None, reply="All addressed.", posted=True))
+        v = decide(s, post_held=True)
+        self.assertEqual([n.split(" — ")[0] for n in v["next"]], ["held"])   # not `comments`, not `post`
+        self.assertIn("answered on the PR: waits for the reviewer to review again", "\n".join(ps.render(s, v)))
+
+    def test_two_repos_never_share_a_drafts_file(self):
+        os.environ["GBASE_HOME"], old = "relative-home", os.environ.get("GBASE_HOME")
+        try:
+            a, b = ps.replies_file("github.com", "acme", "web-app", 12), ps.replies_file("github.com", "acme-web", "app", 12)
+            c = ps.replies_file("git.acme.dev", "acme", "web-app", 12)
+        finally:
+            os.environ.pop("GBASE_HOME") if old is None else os.environ.update(GBASE_HOME=old)
+        self.assertEqual(len({a, b, c}), 3)
+        self.assertTrue(a.is_absolute())   # the runner reads `reply drafts: /…` from the report
+        self.assertEqual(a.parts[-5:], ("replies", "github.com", "acme", "web-app", "pr-12.json"))
+
+    def test_a_changes_requested_review_and_a_pr_comment_can_be_held_too(self):
+        s = snap(checks=[run()], reviews=[review(USER, "CHANGES_REQUESTED", "please split this", rid=20)], comments=[comment(USER, "why?", cid=40)])
+        drafts = {}
+        for i in s["items"]:
+            drafts.update(self.draft(i, verdict="answered", commit=None))
+        ps.mark_held(s["items"], drafts)
+        self.assertEqual([n.split(" — ")[0] for n in decide(s)["next"]], ["held"])
+
+    def test_a_draft_line_is_checked_before_anything_is_recorded(self):
+        s = snap(threads=[thread(comment(USER, "rename this", cid=10)), thread(comment(USER, "why a map?", cid=30))])
+        good = '{"id": 10, "verdict": "fixed", "commit": "abc1234", "reply": "Addressed in abc1234."}'
+        cases = {'{"id": 99, "verdict": "answered", "reply": "x"}': "99 is not an open comment on this PR (open: 10, 30)",
+                 '{"id": 30, "verdict": "wontfix", "reply": "x"}': "verdict is one of fixed, declined, answered, undecided, out-of-scope",
+                 '{"id": 30, "verdict": "fixed", "reply": "x"}': "a fixed comment names its commit",
+                 '{"id": 30, "verdict": "answered"}': "no reply text",
+                 '{"id": 30, "verdict": "declined", "reply": "Keeping the map."}': "a declined comment carries why",
+                 "id 30 fixed": "line 2 is not one JSON object"}
+        for line, error in cases.items():
+            entries, errors = ps.parse_drafts(f"{good}\n{line}\n", s["items"])
+            self.assertEqual(len(errors), 1, line)
+            self.assertIn(error, errors[0])
+        entries, errors = ps.parse_drafts(good + '\n\n{"id": "30", "verdict": "undecided", "gist": "map or list"}\n', s["items"])
+        self.assertEqual((errors, sorted(entries)), ([], ["thread:10", "thread:30"]))
+        self.assertEqual(entries["thread:30"]["reply"], "")
+        self.assertEqual(ps.parse_drafts(good, s["items"], short_sha=lambda rev: "")[1], ["line 1: no commit abc1234 in this repo"])
+
+    def test_the_table_shows_the_reply_as_it_would_be_posted_and_why_a_decline(self):
+        s = snap(threads=[thread(comment(USER, "rename | this", cid=10)), thread(comment(USER, "why a map?", cid=30))])
+        entries, _ = ps.parse_drafts(
+            '{"id": 10, "verdict": "fixed", "commit": "abc1234", "reply": "Addressed in abc1234."}\n'
+            '{"id": 30, "verdict": "declined", "reply": "Keeping the map: lookups are by id.\\nSee src/a.ts:40.", '
+            '"why": "src/a.ts:40 looks rows up by id on every render", "gist": "map 대신 배열"}', s["items"])
+        entries["thread:10"]["pushed"] = "not pushed"
+        table = ps.draft_table(entries.values())
+        self.assertEqual(table[0], "| # | 댓글 | 판단 | 수정 커밋 | 답글 초안 |")
+        self.assertEqual(table[2], "| 1 | alice · [`src/a.ts:7`](u10) · rename \\| this | 고침 | `abc1234` (푸시 안 함) | Addressed in abc1234. |")
+        self.assertEqual(table[3], "| 2 | alice · [`src/a.ts:7`](u30) · map 대신 배열 | 거절 | — | Keeping the map: lookups are by id.<br>See src/a.ts:40. |")
+        self.assertEqual(table[-1], "- #2 근거: src/a.ts:40 looks rows up by id on every render")
+        self.assertNotIn("초안", " ".join(r.split("|")[5] for r in table[2:4]))
+
+
+GH = """echo "$*" >> "{log}"
+case "$1 $2" in
+  "pr view") echo '{{"number":7,"url":"https://github.com/o/r/pull/7"}}' ;;
+  "api user") echo me ;;
+  "api graphql") /bin/cat "{gql}" ;;
+  *) exit 1 ;;
+esac"""
+
+
+class HeldRepliesOnDisk(RepoCase):
+    def setUp(self):
+        super().setUp()
+        self.gql = self.tmp / "graphql.json"
+        self.log = self.tmp / "gh.log"
+        self.home = self.tmp / "gbase-home"
+        self.respond(threads=[thread(comment(USER, "rename this", cid=10))])
+        self.env = {**self.path_with(gh=GH.format(log=self.log, gql=self.gql)), "GBASE_HOME": str(self.home)}
+
+    def respond(self, **kw):
+        head = self.git("rev-parse", "origin/feat/x")
+        self.gql.write_text(json.dumps({"data": data(checks=[run()], headRefOid=head, **kw)}))
+
+    def status(self, *args, stdin="", cwd=None):
+        p = subprocess.run([sys.executable, str(PATH), *args], cwd=cwd or self.repo, env=self.env, input=stdin, capture_output=True, text=True)
+        return p.returncode, p.stdout
+
+    def set_environment(self, text="# Environment: acme\n\n## Shipping\n- review replies: draft\n"):
+        (self.tmp / "env.md").write_text(text)
+        self.git("config", "gbase.conventions", str(self.tmp / "env.md"))
+
+    def test_without_the_setting_nothing_about_drafts_is_printed(self):
+        code, out = self.status("--start")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("replies:", out)
+        self.assertNotIn("held", out)
+        self.assertIn("next: comments — 1 open; classify each by references/comments.md and reply once", out)
+        self.assertFalse(self.home.exists())
+
+    def test_the_setting_turns_every_sweep_into_drafts(self):
+        self.set_environment()
+        _, out = self.status("--start")
+        self.assertIn(f'replies: draft — {self.tmp / "env.md"} says "review replies: draft": post nothing on this PR', out)
+        self.assertIn("read references/held-replies.md before handling a comment", out)
+        self.assertIn("next: comments — 1 open; classify each by references/comments.md and draft each reply, post nothing", out)
+
+    def test_a_request_to_post_wins_and_holds_for_the_watch(self):
+        self.set_environment()
+        _, out = self.status("--start", "--post-replies")
+        self.assertIn("replies: post — --post-replies", out)
+        self.assertIn("reply once", out)
+        self.assertIn("reply once", self.status()[1])
+        self.assertIn("replies: draft", self.status("--start")[1])
+
+    def test_a_request_to_hold_needs_no_environment_file(self):
+        _, out = self.status("--start", "--hold-replies")
+        self.assertIn("replies: draft — --hold-replies:", out)
+        self.assertIn("replies: draft — --hold-replies:", self.status()[1])
+
+    def test_a_drafted_comment_is_remembered_across_watches_and_worktrees(self):
+        self.set_environment()
+        self.commit({"app.py": "a = 1\nb = 2\nc = 31\n"}, "rename")
+        fix = self.git("rev-parse", "--short", "HEAD")
+        code, out = self.status("drafted", stdin=f'{{"id": 10, "verdict": "fixed", "commit": "{fix}", "reply": "Addressed in {fix}."}}\n')
+        self.assertEqual(code, 0, out)
+        table = self.home.resolve() / "replies" / "github.com" / "o" / "r" / "pr-7.md"
+        self.assertIn("drafted: 1 recorded, 1 held", out)
+        self.assertIn(f"| 1 | alice · [`src/a.ts:7`](u10) · rename this | 고침 | `{fix}` (푸시 안 함) | Addressed in {fix}. |", out)
+        self.assertIn(f"reply drafts: {table}", out)
+        self.assertIn(f"`{fix}` (푸시 안 함)", table.read_text())
+
+        _, out = self.status("--start")
+        self.assertNotIn("next: comments", out)
+        self.assertIn(f"[thread 10] alice src/a.ts:7 · fixed {fix} (not pushed) · draft: Addressed in {fix}.", out)
+        self.assertIn(f"reply drafts: {table}", out)
+        self.assertIn("next: held — 1 reply draft(s) wait on the user", out)
+
+        other = self.tmp / "other"
+        self.git("worktree", "add", "-q", "--detach", str(other))
+        self.assertIn("next: held", self.status("--start", "--pr", "7", cwd=other)[1])
+
+        self.git("commit", "-q", "--amend", "-m", "rename, reworded")   # the fix gets a new sha
+        self.assertIn(f"fixed {fix} (rewritten since (a rebase or an amend): find its new sha and record the comment", self.status()[1])
+        fix = self.git("rev-parse", "--short", "HEAD")
+        self.status("drafted", stdin=f'{{"id": 10, "verdict": "fixed", "commit": "{fix}", "reply": "Addressed in {fix}."}}\n')
+        self.git("push", "-q", "origin", "feat/x")
+        self.respond(threads=[thread(comment(USER, "rename this", cid=10))])
+        self.assertIn(f"fixed {fix} (pushed)", self.status()[1])
+        self.assertIn(f"`{fix}` (푸시됨)", table.read_text())   # the file a person opens follows the push too
+
+    def test_a_request_made_while_a_watch_runs_is_not_written_over_by_it(self):
+        self.status("--start")
+        watch = subprocess.Popen([sys.executable, str(PATH), "watch", "--interval", "1"], cwd=self.repo, env=self.env,
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        self.addCleanup(watch.stdout.close)
+        self.addCleanup(watch.wait)
+        self.addCleanup(watch.kill)
+        watch.stdout.readline()   # its first poll is done: it holds the state it read at its start
+        self.assertIn("replies: draft — --hold-replies", self.status("--hold-replies")[1])
+        time.sleep(2.5)           # the watch polls and writes its state at least once more
+        self.assertIn("replies: draft — --hold-replies", self.status()[1])
+        self.assertIn("draft each reply, post nothing", self.status()[1])
+
+    def test_a_pr_comment_the_snapshot_listed_can_be_recorded(self):
+        # a reviewer's PR comment arrives after our last look, then the user comments on something else: still open (polls)
+        stamp = lambda offset: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + offset))
+        self.status("--start")
+        self.respond(comments=[comment(USER, "why not cache this?", at=stamp(60), cid=40), comment(MINE, "unrelated note", at=stamp(120), cid=41)])
+        self.assertIn("[comment 40]", self.status()[1])
+        code, out = self.status("drafted", stdin='{"id": 40, "verdict": "answered", "reply": "It is cached one level up."}\n')
+        self.assertEqual(code, 0, out)
+        self.assertIn("drafted: 1 recorded, 1 held", out)
+
+    def test_a_posted_summary_keeps_its_changes_requested_review_from_opening_again(self):
+        stamp = lambda offset: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + offset))
+        changes = review(USER, "CHANGES_REQUESTED", "please split this", rid=20)
+        self.respond(reviews=[changes])
+        self.status("drafted", stdin='{"id": 20, "verdict": "answered", "reply": "All three points are addressed."}\n')
+        self.respond(reviews=[changes], comments=[comment(MINE, "All three points are addressed.", at=stamp(60), cid=41)])
+        for _ in range(2):   # the record stays: a later sweep doesn't see a new review to draft
+            _, out = self.status("--post-replies")
+            self.assertNotIn("next: comments", out)
+            self.assertNotIn("next: post", out)
+            self.assertIn("[changes-requested 20] alice review · answered · answered on the PR", out)
+
+    def test_a_merged_pr_leaves_no_drafts_behind(self):
+        self.status("drafted", stdin='{"id": 10, "verdict": "answered", "reply": "It is sorted upstream."}\n')
+        folder = self.home / "replies/github.com/o/r"
+        self.assertTrue((folder / "pr-7.json").exists())
+        self.respond(threads=[thread(comment(USER, "rename this", cid=10))], state="MERGED")
+        self.assertIn("next: done", self.status()[1])
+        self.assertEqual([f.name for f in folder.iterdir()], ["pr-7.lock"])
+
+    def test_nothing_on_stdin_prints_what_is_held(self):
+        self.status("drafted", stdin='{"id": 10, "verdict": "answered", "reply": "It is sorted upstream."}\n')
+        code, out = self.status("drafted")
+        self.assertEqual(code, 0)
+        self.assertIn("drafted: 0 recorded, 1 held", out)
+        self.assertIn("It is sorted upstream.", out)
+
+    def test_a_bad_line_records_nothing(self):
+        code, out = self.status("drafted", stdin='{"id": 10, "verdict": "answered", "reply": "ok"}\n{"id": 11, "verdict": "answered", "reply": "x"}\n')
+        self.assertEqual(code, 1)
+        self.assertIn("error: line 2: 11 is not an open comment", out)
+        self.assertIn("next: nothing was recorded", out)
+        self.assertFalse((self.home / "replies").exists())
+
+    def test_the_users_own_reply_drops_the_draft(self):
+        self.status("drafted", stdin='{"id": 10, "verdict": "answered", "reply": "It is sorted upstream."}\n')
+        self.respond(threads=[thread(comment(USER, "rename this", cid=10), comment(MINE, "sorted upstream, see a.ts", cid=11))])
+        _, out = self.status()
+        self.assertNotIn("held", out)
+        self.assertIn("next: settled", out)
+        self.assertEqual([f.name for f in (self.home / "replies/github.com/o/r").iterdir()], ["pr-7.lock"])
+
+    def test_a_new_comment_after_the_draft_is_open_again(self):
+        self.status("drafted", stdin='{"id": 10, "verdict": "answered", "reply": "It is sorted upstream."}\n')
+        self.respond(threads=[thread(comment(USER, "rename this", cid=10), comment(USER, "still wrong for empty input", cid=12))])
+        _, out = self.status()
+        self.assertIn("next: comments — 1 open", out)
+        self.assertIn("new comment since a draft (answered)", out)
+
+    def test_the_script_itself_never_writes_to_the_pr(self):
+        self.set_environment()
+        self.status("--start")
+        self.status("drafted", stdin='{"id": 10, "verdict": "answered", "reply": "It is sorted upstream."}\n')
+        self.status("wait", "--timeout", "1", "--interval", "1", "--handled")
+        calls = self.log.read_text()
+        for write in ("POST", "pr comment", "pr review", "pr ready", "pr edit"):
+            self.assertNotIn(write, calls)
 
 
 if __name__ == "__main__":

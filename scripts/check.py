@@ -48,6 +48,7 @@ SETTLE = "plugins/base/skills/monitor/references/settle.md"
 MERGE = "plugins/base/skills/monitor/references/merge.md"
 CONFLICTS = "plugins/base/skills/monitor/references/conflicts.md"
 COMMENTS = "plugins/base/skills/monitor/references/comments.md"
+HELD_REPLIES = "plugins/base/skills/monitor/references/held-replies.md"
 PR_STATUS = "plugins/base/skills/monitor/scripts/pr-status"
 ORCHESTRATOR = "plugins/base/references/orchestrator.md"
 HEADLESS = "plugins/base/references/headless.md"
@@ -63,7 +64,7 @@ CONVENTIONS = "plugins/base/references/conventions.md"
 ENVIRONMENT = "plugins/base/references/environment.md"
 SETUP_ENV = "plugins/base/skills/setup/references/explore-environment.md"
 TRACKER_FREE = [skill("work"), skill("go"), BRANCH_PR, skill("monitor"), PR_BODY, LOCAL_MODE, PREVIEW, SHIP_PREP, GO_REVIEW, GO_VERIFY, GO_HIGH,
-                GO_DRAFT_MERGE, GO_ORCH, SETTLE, MERGE, CONFLICTS, COMMENTS, PR_STATUS]
+                GO_DRAFT_MERGE, GO_ORCH, SETTLE, MERGE, CONFLICTS, COMMENTS, HELD_REPLIES, PR_STATUS]
 TRACKER_NAMES = r"\b(jira|acli|atlassian|linear|asana|trello|youtrack)\b"
 PSTACK_SYNC = "scripts/pstack-sync.py"
 PSTACK_DOC = "plugins/base/references/pstack-sync.md"
@@ -211,6 +212,38 @@ CONTRACTS = [
         ("preview_file", [RUNNER, RUNNER_DOC]),
         ("and preview.search(text)", [RUNNER], "unshipped(): a run that stopped at the preview is not resumed to push"),
     ]),
+    Contract("held-replies",
+             "where the user posts their own replies to reviewers, pr-status finds the setting, tells monitor to post nothing, and remembers "
+             "which comments already have a draft; monitor drafts and asks, and the runner takes unpushed comment fixes for the run's end", [
+        ("review replies: draft", [ENVIRONMENT, CONVENTIONS, SETUP_ENV, ORCHESTRATOR, RUNNER_DOC, HELD_REPLIES, GO_DRAFT_MERGE]),
+        ('review replies[`*_]*', [PR_STATUS], "the pattern that reads the environment file's line"),
+        ("`replies: draft` line", [skill("monitor"), COMMENTS, HELD_REPLIES], "the line that sends monitor to held-replies.md"),
+        ('f"replies: draft — ', [PR_STATUS]),
+        ("references/held-replies.md", [skill("monitor"), ENVIRONMENT, PR_STATUS]),
+        ("--hold-replies", [skill("monitor"), skill("go"), GO_DRAFT_MERGE, HELD_REPLIES, ENVIRONMENT, PR_STATUS],
+         "a one-off request travels go → monitor's args → pr-status"),
+        ("--post-replies", [skill("monitor"), skill("go"), GO_DRAFT_MERGE, HELD_REPLIES, ENVIRONMENT, PR_STATUS], "the request wins over the file"),
+        ("pr-status\" drafted", [HELD_REPLIES], "the command that records the drafts"),
+        ('args[0] == "drafted"', [PR_STATUS]),
+        ("댓글 | 판단 | 수정 커밋 | 답글 초안", [HELD_REPLIES, PR_STATUS], "the table the user reads is the one the script prints"),
+        ("`held replies`", [HELD_REPLIES]),
+        ('f"held replies: ', [PR_STATUS]),
+        ("new comment since a draft", [HELD_REPLIES, PR_STATUS]),
+        ("`next: post`", [HELD_REPLIES]),
+        ('f"post — ', [PR_STATUS]),
+        ('f"held — ', [PR_STATUS], "a watch with nothing left but held drafts has to end"),
+        ("(답글 초안)", [HELD_REPLIES, PR_STATUS, ORCHESTRATOR], "a held comment still needs a person: the settle verdict says so"),
+        ("`reply drafts: <path>`", [HELD_REPLIES]),
+        ('f"reply drafts: {', [PR_STATUS]),
+        ("`reply drafts: <absolute path>`", [ORCHESTRATOR]),
+        ("reply_drafts_file", [RUNNER, RUNNER_DOC]),
+        ("fixes_wait_on_held_replies = REPLY_DRAFTS.search(text)", [RUNNER], "unshipped(): a run whose comment fixes wait unpushed is not resumed to push them"),
+        ("→ 올리지 않음", [HELD_REPLIES], "headless: holding is a 결정 필요: line, and nothing is posted on a recommendation"),
+        ("wait --handled", [HELD_REPLIES, SETTLE], "the headless path reuses settle.md's local-commit rules instead of restating them"),
+        ("`agent_ship_owner=orchestrator` section", [HELD_REPLIES]),
+        ("## `agent_ship_owner=orchestrator`", [SETTLE]),
+        ("what the team sees", [SETUP_ENV]),
+    ]),
     Contract("pr-url-line", "agent-owned runs: branch-pr prints the PR URL, go carries it up, the runner parses it into pr_url", [
         ("`pr: <url>`", [skill("go"), GO_ORCH, BRANCH_PR, ORCHESTRATOR, RUNNER, FACTORY]),
         ('print(f"pr: {', [SHIP_PREP], "the script prints the line the skill promises"),
@@ -250,7 +283,7 @@ CONTRACTS = [
         ('"ci — ', [PR_STATUS]),
         ("| `ci` |", [skill("monitor")]),
         ('"notes — ', [PR_STATUS]),
-        ("| `notes` |", [skill("monitor")]),
+        ("`notes`", [skill("monitor")], "no row of its own: the script's line says what to do with a bot's comment"),
         ('"settled — ', [PR_STATUS]),
         ("| `settled` |", [skill("monitor")]),
         ('"limit — ', [PR_STATUS]),

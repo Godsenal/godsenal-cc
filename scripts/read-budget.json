@@ -61,6 +61,14 @@
       "limit": null,
       "reads": ["plugins/base/skills/branch-pr/references/preview.md"]
     },
+    "held-replies": {
+      "note": "the user posts their own replies to reviewers: the environment file's `review replies: draft`, or --hold-replies, and only once the PR has a comment; a run without either reads nothing more",
+      "limit": null,
+      "reads": [
+        "plugins/base/skills/monitor/references/comments.md",
+        "plugins/base/skills/monitor/references/held-replies.md"
+      ]
+    },
     "ticket": {
       "note": "a ticket reference in the request or branch, in a repo whose owner set an environment file (git config gbase.conventions); the file itself is the user's and is not counted",
       "limit": null,

@@ -40,6 +40,7 @@ A parent-folder `CLAUDE.md` doesn't do this: `gbase-run` worktrees live under `$
 | Labels, reviewers, assignees | settings only; CODEOWNERS assigns reviewers on GitHub's side | none |
 | Draft or ready | settings only | ready, unless `--draft` was passed |
 | Preview before the PR | settings only; `ship-prep` reads the environment file's `before the PR: preview` line ([environment.md](environment.md)) | none: the PR opens |
+| Replies on the PR | settings only; `pr-status` reads the environment file's `review replies: draft` line ([environment.md](environment.md)) | posted: monitor replies to each comment it handles |
 | Base branch | `gh repo view --json defaultBranchRef` (`origin/HEAD`) | `origin/main`, then `origin/master` |
 | Merge method, branch deletion | `gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,deleteBranchOnMerge`, then recent merges | squash, `--delete-branch` |
 | Screenshots in a PR | settings only | uploaded to the repo's `gbase-assets` branch |

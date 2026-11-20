@@ -19,7 +19,7 @@ Takes a finished change to an open, watched PR: **polish ∥ review → verify �
 | Step 1's check prints an `AGENT_` variable | [orchestrated.md](references/orchestrated.md). Under `AGENT_HEADLESS=1` nothing is asked ([headless.md](../../references/headless.md)). |
 | Risk `medium` or `high` | [review.md](references/review.md) before Step 2, [verify.md](references/verify.md) at Step 4; on `high` also [high.md](references/high.md) |
 | A check fails, or the repo has no verify block | [verify.md](references/verify.md) |
-| `--draft`, `--merge`, `--preview`, or a finding review deferred | [draft-merge.md](references/draft-merge.md), before Step 5 |
+| `--draft`, `--merge`, `--preview`, `--hold-replies`, `--post-replies`, or a finding review deferred | [draft-merge.md](references/draft-merge.md), before Step 5 |
 
 ## Steps
 

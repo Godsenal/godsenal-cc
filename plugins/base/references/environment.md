@@ -26,6 +26,7 @@ gbase names no tracker. A skill says a verb ("fetch the ticket") and the file sa
 
 ## Shipping
 - before the PR: preview
+- review replies: draft
 
 ## When a skill says
 - **"fetch the ticket"**: `acli jira workitem view <KEY> --fields summary,description,comment` (ran 2026-11-18: ok)
@@ -37,7 +38,8 @@ gbase names no tracker. A skill says a verb ("fetch the ticket") and the file sa
 - `## Conventions` holds the values of conventions.md's table.
 - `## Tickets` and `## When a skill says` are prose and commands. A method can be a CLI line, an MCP tool by its full name, a URL to open, or a folder of markdown files.
 - `## Write-back` lists each kind of write as `on`, `ask`, or `off`. A kind the file doesn't list is `off`.
-- `## Shipping` holds one line, `before the PR: preview`. With it, `ship-prep` stops `branch-pr` before the push: the change is committed and drafted locally, the user reads a preview, and the PR opens when they say so ([preview.md](../skills/branch-pr/references/preview.md)). Without the line, or with any other value, the PR opens as it always has. Words in the request that ask for the PR or the merge win over the line. A file that is set but can't be read (moved, or not UTF-8) holds the PR back too, since the line may be in it. It decides whether a PR opens yet; draft or ready is conventions.md's own row.
+- `## Shipping` holds two lines, each on its own. The first is `before the PR: preview`. With it, `ship-prep` stops `branch-pr` before the push: the change is committed and drafted locally, the user reads a preview, and the PR opens when they say so ([preview.md](../skills/branch-pr/references/preview.md)). Without the line, or with any other value, the PR opens as it always has. Words in the request that ask for the PR or the merge win over the line. A file that is set but can't be read (moved, or not UTF-8) holds the PR back too, since the line may be in it. It decides whether a PR opens yet; draft or ready is conventions.md's own row.
+- The second is `review replies: draft`. With it, `gbase:monitor` posts nothing on the PR under the user's name: no reply to a review comment, no summary, no other PR comment. It still classifies every comment, commits a fix a comment asked for without pushing it, and shows the replies it would have posted as a table for the user to post or rewrite ([held-replies.md](../skills/monitor/references/held-replies.md)). CI fixes and conflict resolutions are pushed as before. `pr-status` reads the line and remembers which comments already have a draft, so they are not handled twice. Without the line, or with any other value, monitor replies as it always has. Words in the request win both ways: "답글은 달지 마" (`--hold-replies`) and "답글 달아" (`--post-replies`). A file that is set but can't be read holds replies too.
 
 ## A task that names a ticket
 

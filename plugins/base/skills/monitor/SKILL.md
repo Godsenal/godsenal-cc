@@ -1,6 +1,6 @@
 ---
 name: monitor
-description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles, surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). With --merge, merges it once CI is green and nothing is outstanding; with --until-settled, stops once the current head's CI and review bots have concluded. Use when the user wants a PR babysat to merge; also the tail of gbase:go."
+description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles (or only drafts it, by the user's environment file), surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). With --merge, merges it once CI is green and nothing is outstanding; with --until-settled, stops once the current head's CI and review bots have concluded. Use when the user wants a PR babysat to merge; also the tail of gbase:go."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Agent Monitor
 ---
 
@@ -22,32 +22,31 @@ Keep the current branch's PR moving until merge or close. Auto-triggering starts
 
 ## Loop
 
-The PR's state comes from one script, not from `gh` calls of your own. Its `next:` lines say what to handle, in order:
+The PR's state comes from one script (`scripts/pr-status` in this skill's directory), not from `gh` calls of your own. Its `next:` lines say what to handle, in order:
 
 ```bash
-"${CLAUDE_SKILL_DIR}/scripts/pr-status" --start    # the first sweep; add --merge when invoked with it
+"${CLAUDE_SKILL_DIR}/scripts/pr-status" --start    # the first sweep; add --merge when invoked with it, --hold-replies / --post-replies when asked not to / to reply
 ```
-
-(`scripts/pr-status` in this skill's directory.)
 
 1. Run it. Pre-existing comments are in that first output: handle every `next:` line before waiting.
 2. `--until-settled` (always the case under `AGENT_SHIP_OWNER=orchestrator`) → the run ends at a verdict, not at merge: read [settle.md](references/settle.md) now and follow it instead of step 3.
 3. Otherwise start a persistent `Monitor` on `"${CLAUDE_SKILL_DIR}/scripts/pr-status" watch`: it exits at merge or close.
 4. Unless `--no-review`, run the self-review once, now (below).
-5. On each change, run the script again (no `--start`) and handle its `next:` lines top to bottom. On merge or close, print a one-line summary.
+5. On each change, run the script again (no `--start`) and handle its `next:` lines top to bottom.
 
-What each `next:` line needs:
+Per `next:` line:
 
 | `next:` | Do |
 |---|---|
-| `conflict` | Read [conflicts.md](references/conflicts.md). It comes first: CI keeps failing on the merge commit while it stands. |
+| `conflict` | Read [conflicts.md](references/conflicts.md). |
 | `comments` | Read [comments.md](references/comments.md) before touching any of them. |
-| `ci` | Read the failing log (the command is on the `failed:` line). Fix what the diff caused and push. A failure the diff didn't cause is reported, not fixed. A check still failing after two fixes → [premise.md](../../references/premise.md). |
-| `notes` | A bot's PR-level comment, shown once. Open it: a finding in it is handled like a review comment. |
+| `ci` | Fix what the diff caused, from the log on the `failed:` line, and push. A failure it didn't cause is reported, not fixed. Still failing after two fixes → [premise.md](../../references/premise.md). |
 | `wait` | Nothing to do yet. |
 | `settled` | With `--draft` or `--merge`, read [merge.md](references/merge.md); otherwise keep watching for reviews. |
 
-Any other `next:` line (`unstarted`, `done`, and under `--until-settled` `give up` and `limit`) says what to do itself.
+Any other `next:` line (`notes`, `unstarted`, `done`, and under `--until-settled` `give up` and `limit`) says what to do itself.
+
+A `replies: draft` line → read [held-replies.md](references/held-replies.md) before any comment: nothing is posted.
 
 A `link:` line is a build or preview someone can try: pass each one on once, with its source and commit. Don't open it or post it back.
 
