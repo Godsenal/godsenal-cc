@@ -1,6 +1,6 @@
 # Pre-PR review: Steps 2 and 3 on `medium` and `high`
 
-Read before Step 2 when the risk is `medium` or `high` (and on `low` in a headless run, by orchestrated.md). Review runs before the PR so its fixes land in the initial commits; a review after the PR opens turns every finding into an extra commit and a CI rerun.
+Read before Step 2 when the risk is `medium` or `high` (and on `low` in a headless run, by orchestrated.md). Reviewing before the PR lands its fixes in the initial commits, not in extra commits and CI reruns.
 
 ## Step 2: the finder, in the same message as polish
 
@@ -9,8 +9,9 @@ Agent(subagent_type: "general-purpose", run_in_background: true, description: "r
       prompt: "Run Skill(skill: \"code-review\", args: \"<effort> <scope from Step 1>\") and return its findings verbatim. Edit nothing.")
 ```
 
-- **Don't call `code-review` in the main session.** Under `claude -p` a forked skill blocks its caller until it finishes, which turned review ∥ polish into review → polish.
-- **Pass the scope explicitly.** With no target the built-in reviews the current diff, which is empty on the clean-tree path: it would report "nothing found" about a commit it never read.
+- **codex beside it**, when on PATH: a background `Bash` running `codex exec -s read-only review --base <base>`; its findings join Step 3. Skip it if it fails.
+- **Don't call `code-review` in the main session**: under `claude -p` a forked skill blocks its caller, turning review ∥ polish into review → polish.
+- **Pass the scope explicitly**: with none, the built-in reviews the current diff, which is empty on the clean-tree path.
 - Effort per Step 1's table, never above `high`: above `medium` the built-in already fans out to a multi-agent workflow.
 - Never `--fix` (it would race polish for the same files), `--comment` (no PR yet), or `ultra` (user-triggered and billed).
 
