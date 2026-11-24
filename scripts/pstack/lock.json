@@ -5,8 +5,8 @@
     "ref": "main",
     "tree": "harness/pstack/claude-code",
     "license": "MIT, Copyright (c) 2026 Lauren Tan",
-    "sha": "aaeb0ea3a0584995aa8f55ce44c6c5259414b896",
-    "version": "0.15.46"
+    "sha": "ca782ed8b3c2c521cead8e1720d55c3a5dbf2347",
+    "version": "0.15.48"
   },
   "exclude": [
     {
@@ -93,8 +93,8 @@
     },
     "docs/guide": {
       "mode": "follow",
-      "hash": "6e3cf9581e582087",
-      "out": "b872356cde9dc9b8"
+      "hash": "63168936f83ff15a",
+      "out": "a81fe803a62e871c"
     },
     "docs/harness": {
       "mode": "merge",
@@ -159,8 +159,8 @@
     },
     "poteto-help": {
       "mode": "follow",
-      "hash": "7f6c814bcad6f89b",
-      "out": "6eac9b4d8f08b3e2"
+      "hash": "cbd90c196108e11a",
+      "out": "57dffaa8fd7c9d41"
     },
     "poteto-mode": {
       "mode": "follow",
@@ -322,6 +322,11 @@
       "mode": "follow",
       "hash": "86cbaf1f6030c3d6",
       "out": "a9615ed0356567fd"
+    },
+    "reframe": {
+      "mode": "follow",
+      "hash": "ec9aa4248836d163",
+      "out": "00a4dd496baaa2ce"
     },
     "root/.claude-plugin/plugin.json": {
       "mode": "skip",
