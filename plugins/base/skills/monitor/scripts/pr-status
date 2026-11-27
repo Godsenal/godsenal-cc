@@ -35,6 +35,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
 from pathlib import Path
 
 GIVE_UP_SECONDS = 30 * 60   # into the wait on one head
@@ -65,7 +66,7 @@ query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$r
     reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:50){nodes{databaseId author{login __typename} authorAssociation body createdAt url}}}}
     reviews(last:50){nodes{databaseId author{login __typename} authorAssociation state body submittedAt commit{oid} url}}
     comments(last:50){nodes{databaseId author{login __typename} authorAssociation body createdAt updatedAt url}}
-    reviewRequests(first:20){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login}}}}
+    reviewRequests(first:20){nodes{asCodeOwner requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Team{combinedSlug}}}}
   }
   pullRequests(states:MERGED,first:5,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{
     reviews(first:30){nodes{author{login __typename}}}}}
@@ -73,17 +74,21 @@ query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$r
 
 
 ANNOTATIONS = {}
+REQUIRED_APPROVALS = {}
 
 
 class GhError(Exception):
     pass
 
 
-def sh(cmd, check=True):
+def sh(cmd, check=True, body_on_error=False):
+    """`body_on_error`: a failed `gh api` that still printed a JSON body returns it (GraphQL's partial errors)."""
     try:
         p = subprocess.run(cmd, capture_output=True, text=True)
     except OSError as e:
         raise GhError(f"can't run {cmd[0]} — {e.strerror}")
+    if body_on_error and p.returncode and p.stdout.lstrip().startswith("{"):
+        return p.stdout.strip()
     if check and p.returncode:
         message = (p.stderr or p.stdout).strip()
         raise GhError(message.splitlines()[-1] if message else f"{cmd[0]} exited {p.returncode}")
@@ -130,7 +135,7 @@ def first_line(body, width=110):
     return line if len(line) <= width else line[: width - 1] + "…"
 
 
-def normalize(data, me, annotations=lambda check_id: (), polls=()):
+def normalize(data, me, annotations=lambda check_id: (), polls=(), required=lambda base: None):
     """GraphQL response -> the snapshot every decision below reads. `polls`: when earlier snapshots of this watch were taken."""
     repo = data["repository"]
     pr = repo["pullRequest"]
@@ -156,6 +161,12 @@ def normalize(data, me, annotations=lambda check_id: (), polls=()):
     requested = {bot_key(login(r["requestedReviewer"])) for r in pr["reviewRequests"]["nodes"]
                  if (r.get("requestedReviewer") or {}).get("__typename") == "Bot"}
     expected |= requested
+    reviewers = []
+    for r in pr["reviewRequests"]["nodes"]:
+        who = r.get("requestedReviewer")  # null when the token can't read it (a team without read:org): still someone asked
+        if who is None or who.get("__typename") in ("User", "Team"):
+            name = (who or {}).get("login") or (who or {}).get("combinedSlug") or "읽을 수 없는 리뷰어"
+            reviewers.append(name + (" (CODEOWNERS)" if r.get("asCodeOwner") else ""))
     expected.discard(bot_key(me))
     expected -= {"github-actions"}  # posts check summaries, reviews nothing
 
@@ -236,7 +247,10 @@ def normalize(data, me, annotations=lambda check_id: (), polls=()):
             "base": pr["baseRefName"], "branch": pr["headRefName"], "pushed": pushed, "notes": notes,
             "head_is_mine": login(((commit.get("author") or {}).get("user"))) == me,
             "checks": checks, "items": items, "expected": sorted(expected), "activity": activity,
-            "concluded_apps": sorted(concluded_apps), "links": links, "my_comments": [c["body"] or "" for c in comments if login(c["author"]) == me]}
+            "concluded_apps": sorted(concluded_apps), "links": links, "reviewers": reviewers,
+            "approvals": sum(1 for who, r in latest_review.items() if r["state"] == "APPROVED" and who != me),
+            "required_approvals": required(pr["baseRefName"]) if pr.get("reviewDecision") == "REVIEW_REQUIRED" or pr["mergeStateStatus"] == "BLOCKED" else None,
+            "my_comments": [c["body"] or "" for c in comments if login(c["author"]) == me]}
 
 
 def waiting_bots(snap, since):
@@ -271,6 +285,18 @@ def mark_held(items, drafts):
         d = drafts.get(draft_key(i))
         if d:
             i["held" if d.get("last") == i["last"] else "redraft"] = d
+
+
+def approval_wait(snap):
+    need, given = snap["required_approvals"], snap["approvals"]
+    if snap["draft"] or (snap["review_decision"] != "REVIEW_REQUIRED" and not (snap["merge_state"] == "BLOCKED" and need and given < need)):
+        return None
+    return {"need": need, "given": given, "who": snap["reviewers"]}
+
+
+def approval_text(wait):
+    count = f"{wait['given']}/{wait['need']}" if wait["need"] else f"{wait['given']}개"
+    return f"승인 {count} (승인 대기: {', '.join(wait['who']) or '요청된 리뷰어 없음'})"
 
 
 def decide(snap, first_seen, now, pushed=0, settle_rules=True, replies="post", post_held=False):
@@ -316,6 +342,9 @@ def decide(snap, first_seen, now, pushed=0, settle_rules=True, replies="post", p
             nxt.append(nxt.pop(comments_at))
     if unstarted:
         human += [f"CI 미실행(계정) {c['name']}" for c in unstarted]
+    approval = approval_wait(snap)
+    if approval:
+        human.append(approval_text(approval))
     if settle_rules and pushed >= MAX_PUSHED_HEADS and (conflict or open_items or failed):
         nxt.insert(0, f"limit — {MAX_PUSHED_HEADS} fixes already pushed in this watch: push no more; report what is still open")
 
@@ -334,6 +363,9 @@ def decide(snap, first_seen, now, pushed=0, settle_rules=True, replies="post", p
             if unstarted:
                 nxt.append("unstarted — these checks never started for account reasons, not because of the diff; nothing to fix "
                            "(with --merge: references/merge.md)")
+            if approval:
+                nxt.append(f"approval — the merge waits on a person's approval: {approval_text(approval)}; nothing to fix or push here, "
+                           "and requesting reviewers is not this run's job (--until-settled: report the settle line; --merge: don't merge)")
             if held:
                 ask = sum(1 for i in held if not i["held"].get("reply"))
                 nxt.append(f"held — {len(held)} reply draft(s) wait on the user: nothing more to do here until they reply or a new "
@@ -367,6 +399,10 @@ def merge_gate(snap, verdict, verified_locally=False):
     open_items = [i for i in snap["items"] if i["type"] != "changes-requested"]
     if open_items:
         reasons.append(f"{len(open_items)} unanswered review comments")
+    approval = approval_wait(snap)
+    if approval:
+        count = f"{approval['given']} of {approval['need']} approvals" if approval["need"] else f"{approval['given']} approvals so far"
+        reasons.append(f"review required ({count}; waiting on: {', '.join(approval['who']) or 'no reviewer requested'})")
     if unstarted and not verified_locally:
         reasons.append("checks never started (account) and no `verified-locally`: " + ", ".join(c["name"] for c in unstarted))
     state = snap["merge_state"]  # UNSTABLE is fine only for checks that never started, which `verified_locally` already vouched for
@@ -511,9 +547,14 @@ def resolve(pr_arg):
 
 
 def fetch(owner, repo, number, me, polls=()):
-    raw = json.loads(sh(["gh", "api", "graphql", "-f", f"query={QUERY}", "-F", f"owner={owner}", "-F", f"repo={repo}", "-F", f"number={number}"]))
-    if raw.get("errors") and not (raw.get("data") or {}).get("repository"):
-        raise GhError(raw["errors"][0].get("message", "graphql error"))
+    out = sh(["gh", "api", "graphql", "-f", f"query={QUERY}", "-F", f"owner={owner}", "-F", f"repo={repo}", "-F", f"number={number}"], body_on_error=True)
+    try:
+        raw = json.loads(out)
+    except ValueError:
+        raise GhError("graphql: no JSON in gh's output")
+    if not ((raw.get("data") or {}).get("repository") or {}).get("pullRequest"):  # a REST-style error body ("Bad credentials", 502) has no data
+        errors = raw.get("errors") or [{}]
+        raise GhError(raw.get("message") or errors[0].get("message") or "graphql: no pull request in the response")
 
     def annotations(check_id):
         if check_id not in ANNOTATIONS:  # a concluded run's annotations don't change: ask once, not on every poll
@@ -522,7 +563,25 @@ def fetch(owner, repo, number, me, polls=()):
             except (GhError, ValueError):
                 return []
         return ANNOTATIONS[check_id]
-    return normalize(raw["data"], me, annotations, polls)
+    return normalize(raw["data"], me, annotations, polls, lambda base: required_approvals(owner, repo, base))
+
+
+def required_approvals(owner, repo, base):
+    """None when neither can be read (protection needs admin)."""
+    if (owner, repo, base) not in REQUIRED_APPROVALS:
+        counts, ref = [], urllib.parse.quote(base, safe="")
+        try:
+            counts.append(json.loads(sh(["gh", "api", f"repos/{owner}/{repo}/branches/{ref}/protection/required_pull_request_reviews"]))
+                          .get("required_approving_review_count"))
+        except (GhError, ValueError, AttributeError):
+            pass
+        try:
+            counts += [(r.get("parameters") or {}).get("required_approving_review_count")
+                       for r in json.loads(sh(["gh", "api", f"repos/{owner}/{repo}/rules/branches/{ref}"])) if r.get("type") == "pull_request"]
+        except (GhError, ValueError, AttributeError, TypeError):
+            pass
+        REQUIRED_APPROVALS[(owner, repo, base)] = max([c for c in counts if isinstance(c, int)], default=None)
+    return REQUIRED_APPROVALS[(owner, repo, base)]
 
 
 def state_path(number):

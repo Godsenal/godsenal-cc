@@ -8,9 +8,9 @@ Run `gh pr ready` once CI is green and every outstanding finding is resolved: fr
 
 ## `--merge`
 
-Only when `--merge` was passed, because the user asked to merge or the project's instructions say to. Never by default.
+Only when `--merge` was passed (the user asked, or the project's instructions say to).
 
-`pr-status --merge` (add `--verified-locally` when `go` passed it) judges the gate: no failing check (required or not), the head settled, no standing `CHANGES_REQUESTED`, no unanswered review comment, no conflict, a mergeable state. `merge: not now — …` means don't merge. On `merge: gate passed` three things are still yours:
+`pr-status --merge` (add `--verified-locally` when `go` passed it) judges the gate: no failing check (required or not), the head settled, no standing `CHANGES_REQUESTED`, no unanswered review comment, no conflict, no approval still due, a mergeable state. `merge: not now — …` means don't merge; `review required (…)` names who must approve. On `merge: gate passed` three things are still yours:
 
 - **No unresolved finding from this run's self-review.** The script can't see it. (`go` passes `--merge` only after its deferred findings are settled.)
 - **A merge that deploys is a deploy: ask first.** The script lists the workflows that run on push (follow any `workflow_run` chained to one). If one deploys on the default branch (EAS Update / OTA, a production web deploy, a release) and this PR's paths aren't excluded by its `paths` / `paths-ignore`, stop and ask before merging.

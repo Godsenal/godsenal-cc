@@ -85,7 +85,7 @@ settle: 사람 필요 @<short-sha> — <item>, …
 
 - `수렴` — every check on the head concluded without failure, every expected automated reviewer finished on it, and nothing monitor handles is left open.
 - `미확정` — something hadn't concluded 30 minutes into the wait on this head.
-- `사람 필요` — something only a person can resolve: a failing check monitor couldn't fix, a review comment that needs a decision, a standing `CHANGES_REQUESTED`, or a merge conflict.
+- `사람 필요` — something only a person can resolve: a failing check monitor couldn't fix, a review comment that needs a decision, a standing `CHANGES_REQUESTED`, a merge conflict, or an approval branch protection still requires (`승인 <given>/<required> (승인 대기: <reviewers>)`, or `승인 <given>개 (…)` when the required count can't be read; CODEOWNERS' requests marked `(CODEOWNERS)`).
 
 When more than one applies, `사람 필요` wins over `미확정`. The head sha is the last one monitor waited on; each fix it pushes starts a new wait. It merges only when invoked with `--merge` (the task asked for it) and the verdict allows it, adding `— merged <merge short-sha>` to the line; and rebases (pushing with `--force-with-lease`) only when the invocation explicitly asks to rebase ([settle.md](../skills/monitor/references/settle.md)); otherwise it never rebases or force-pushes. Wherever monitor does resolve a conflict, a resolution that combined both sides' content is reviewed before it's pushed, or leaves a `review` `open` evidence line ([conflicts.md](../skills/monitor/references/conflicts.md)). On a `high` PR a rebase or base merge is followed by `pr-status patch`: the same `git patch-id` re-verifies nothing, a changed one gets one verifier.
 

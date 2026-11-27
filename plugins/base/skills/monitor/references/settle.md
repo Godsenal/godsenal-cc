@@ -8,7 +8,7 @@ Read when monitor was invoked with `--until-settled` (the only mode run under `A
 <the loop's pr-status script> wait     # add --merge when invoked with it, --verified-locally when go passed it
 ```
 
-- Call it in the foreground, again and again; no persistent `Monitor`. Each call returns within 5 minutes with a status line per poll, or as soon as something needs action. A caller may kill a run that prints nothing for ~10 minutes.
+- Call it in the foreground, again and again; no persistent `Monitor`. Each call returns within 5 minutes, sooner when something needs action. A caller may kill a run silent for ~10 minutes.
 - Handle its `next:` lines as in the loop. **Each fix you push is a new head**; the script starts that head's wait over.
 - The script decides what "settled" means (every check concluded, every expected automated reviewer finished on this head), gives up 30 minutes into one head, and prints `next: limit` after the third fix you pushed in this watch. On `limit`, push no more fixes: a run that keeps fixing is usually chasing a problem the approach has.
 
@@ -17,7 +17,7 @@ Read when monitor was invoked with `--until-settled` (the only mode run under `A
 End with exactly one line, the script's `settle:` line ([meaning](../../../references/orchestrator.md#settle)):
 
 - `settle: 수렴 @<sha>`, or `settle: 미확정 @<sha> — 안 옴: …` after `give up` or `limit` — as printed.
-- `settle: 사람 필요 @<sha> — …` — the script prints it whenever a failed check, an open comment, or a conflict exists. It becomes the verdict only for what you could not fix or answer here; fix what you can, push, and wait on the new head first.
+- `settle: 사람 필요 @<sha> — …` — printed for a failed check, an open comment, a conflict, or an approval still due (`승인 대기: <reviewers>`). It's the verdict only for what you couldn't fix or answer; fix what you can, push, and wait on the new head first.
 
 ## What it never does
 
