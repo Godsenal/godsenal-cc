@@ -77,6 +77,7 @@ REFS_WATCH = "scripts/refs-watch.py"
 PSTACK_ADAPTER = "plugins/base/references/pstack-adapter.md"
 TRIGGERS = "scripts/triggers.py"
 BASELINE = "scripts/baseline.py"
+BENCH = "scripts/bench/run"
 RUNNER_DOC = "plugins/base/references/runner.md"  # the runner's usage and result.json, split out of orchestrator.md
 
 
@@ -535,6 +536,20 @@ CONTRACTS = [
         ("Risk:", [RUNNER]),
         ("**위험도** <low / medium / high>", [BRANCH_PR, PR_BODY]),
         ("위험도", [RUNNER]),
+    ]),
+    Contract("bench-inputs",
+             "scripts/bench/run judges each fixed task from the result.json gbase-run writes and the ship: local line a "
+             "headless orchestrator-owned run reports; renaming one makes every bench run fail or lose its numbers", [
+        ('"duration_s"', [RUNNER, BENCH]),
+        ('"tokens"', [RUNNER, BENCH]),
+        ('"followups"', [RUNNER, BENCH]),
+        ('"ship"', [RUNNER, BENCH]),
+        ('"cwd"', [RUNNER, BENCH]),
+        ('"skills"', [RUNNER, BENCH]),
+        ('"budget_limit"', [RUNNER, BENCH]),
+        ('"risk"', [RUNNER, BENCH]),
+        ("ship: local", [HEADLESS, BENCH]),
+        ('"tasks"', [BENCH, BASELINE]),
     ]),
     Contract("followups-line",
              "work's size gate reports the slices it left; the runner reads them into followups, and asks a capped run for them", [

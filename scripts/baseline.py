@@ -215,13 +215,19 @@ def runs_dir_exists(runs_dir):
     return False
 
 
-def build(version, eval_path, runs_dir):
+def bench_summary(path):
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {**data["tasks"], "spent_usd": data.get("spent_usd"), "skipped": data.get("skipped") or []}
+
+
+def build(version, eval_path, runs_dir, bench_path=None):
     return {
         "version": version,
         "date": date.today().isoformat(),
         "eval": eval_summary(eval_path) if eval_path else None,
         "read_budget": read_budget(),
         "trend": trend(runs_dir) if runs_dir and runs_dir_exists(runs_dir) else {},
+        "bench": bench_summary(bench_path) if bench_path else None,
     }
 
 
@@ -238,7 +244,7 @@ def flatten(obj, prefix=""):
 
 
 def diff(old, new):
-    a, b = (flatten({k: d.get(k) for k in ("eval", "read_budget", "trend")}) for d in (old, new))
+    a, b = (flatten({k: d.get(k) for k in ("eval", "read_budget", "trend", "bench")}) for d in (old, new))
     rows = []
     for key in sorted(set(a) | set(b)):
         x, y = a.get(key), b.get(key)
@@ -287,12 +293,13 @@ def main(argv=None):
                    help="an eval --json file; repeat it to merge a rerun of the cases a cost cap left out (later wins)")
     gbase_home = Path(os.environ.get("GBASE_HOME") or "~/.gbase").expanduser()
     p.add_argument("--runs", default=str(gbase_home / "runs"))
+    p.add_argument("--bench", help="the bench.json scripts/bench/run wrote")
     p.add_argument("--out")
     args = p.parse_args(argv)
     tree = json.loads((HERE.parent / "plugins/base/.claude-plugin/plugin.json").read_text(encoding="utf-8"))["version"]
     if tree != args.version:
         print(f"baseline: --version {args.version}, but this tree is gbase {tree}; read_budget measures this tree", file=sys.stderr)
-    text = json.dumps(build(args.version, args.eval_path, args.runs), ensure_ascii=False, indent=2) + "\n"
+    text = json.dumps(build(args.version, args.eval_path, args.runs, args.bench), ensure_ascii=False, indent=2) + "\n"
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
         print(f"baseline: {args.out}")

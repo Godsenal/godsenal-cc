@@ -1,0 +1,4 @@
+body { font-family: system-ui, sans-serif; margin: 0; background: #fafafa; color: #222; }
+main { max-width: 480px; margin: 0 auto; padding: 24px 16px; }
+#todos { list-style: none; padding: 0; }
+#todos li { padding: 12px; border-bottom: 1px solid #eee; }

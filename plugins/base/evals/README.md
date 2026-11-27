@@ -124,3 +124,15 @@ python3 scripts/baseline.py diff <older>/baseline.json "$OUT/baseline.json"
 - `trend` reads every `result.json` under `$GBASE_HOME/runs` (`--runs` to change it). `n` and `failed` count every run; time, turns, cost, tokens, and the gaps/unverified rates count `done` runs only. It mixes versions, repos, and models, so use it to watch a direction, not as a before/after number.
 - `trend.<slot>.by_risk.{low,medium,high}` splits the same numbers by risk tier, and `risk_known` says how many of the slot's runs have one: `risk` in `result.json` (gbase-run records it from 1.66.0), else the risk line of the run's `pr-body.md`. On 2026-11-27, 69 of 324 work runs had a tier this way. From 1.66.0 the tokens come from `result.json`'s `tokens` less its `subagent` part, the same main-session count the logs give for older runs.
 
+### Bench
+
+`scripts/bench/run` times the whole `work` → `go` path on five fixed tasks: `low` (a README typo), `medium` (a two-file cart fix with hidden tests), `high` (retry logic its `REVIEW.md` marks always-high), `headless` (two PRs' worth, so one `남은 작업:` line), and `ui` (an empty state, so `design-taste` loads). Each run gets a fresh scratch repo from `scripts/bench/fixtures/<task>/` with no remote, a `gh` that answers nothing, and its own `GBASE_HOME`. `gbase-run` runs it headless with the orchestrator as ship owner, so nothing is pushed, under the task's `--max-budget-usd`. A run passes when it ends `done`, reports `ship: local`, and its task's end-state checks hold (hidden tests, the file content, the tier, the follow-up line, the skill loaded).
+
+```bash
+scripts/bench/run --out "$OUT/bench" --runs-low 2 --max-total-usd 20
+python3 scripts/baseline.py --version "$V" --bench "$OUT/bench/bench.json" --out "$OUT/baseline.json"
+```
+
+A run also fails when `go` didn't load, when it hit its cost cap (`budget_limit`), or when it passed `--run-timeout` (30 minutes) and was killed. `--with <earlier bench.json>` adds an earlier invocation's runs to the summary and numbers the new ones after them, so a top-up doesn't repeat the spend; `bench.<task>.risk` is the tier most runs got, and `tokens` is the main-session count, the same measure as `trend`. The bench's own `GBASE_HOME` would hide `$GBASE_HOME/accounts`, so its content goes to the runs as `GBASE_ACCOUNTS`.
+
+Seen on this tree (2026-11-28, $12.55 + $5.36 + $1.50, every run passed): `low` 4 runs, p50 86 s (59–94 s, so read one run as ±30%) and $1.12 ($0.62–1.53: about double when `go` ran polish and a review finder); `medium` 3 runs, p50 186 s (167–189 s) and $2.30; `high` 238 s $2.89, `headless` 174 s $2.16, `ui` 253 s $2.77 (one run each). The tier matched the task each time except `headless`, whose first slice is `low`. After the rebase onto 1.73.0 (go, branch-pr's review policy, and gbase-run had changed), one run each on 1.74.0 took `low` 112 s $1.60 and `medium` 199 s $2.65, both passing and both above the earlier range; one run can't say why yet. These are far below the 9 and 18 minutes `trend` shows for low and medium work runs because the bench stops at `ship: local`: no push, CI, or monitor.
