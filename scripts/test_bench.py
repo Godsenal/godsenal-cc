@@ -263,7 +263,8 @@ class HardTasks(unittest.TestCase):
             right(repo)
             subprocess.run(["git", "-C", str(repo), "update-ref", "refs/gbase/backup/1",
                             subprocess.run(["git", "-C", str(repo), "commit-tree", "HEAD^{tree}", "-m", "backup"],
-                                           capture_output=True, text=True, check=True).stdout.strip()], check=True)
+                                           capture_output=True, text=True, check=True,
+                                           env={**os.environ, **GIT_ENV}).stdout.strip()], check=True)
             back_to_main(repo)
         self.assert_trap("strict", right, unsigned, bad_subject, rate_changed, on_main, no_changelog,
                          rate_changed_then_main)
