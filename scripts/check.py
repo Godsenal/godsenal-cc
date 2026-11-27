@@ -435,12 +435,15 @@ CONTRACTS = [
         ("`gbase:plan`", [SESSION_HOOK, skill("work")]),
     ]),
     Contract("work-poteto-mode",
-             "work is poteto-mode inside gbase: it routes to pstack's playbooks and reads their Cursor names through playbooks.md", [
+             "work is poteto-mode inside gbase: it routes to pstack's playbooks by the table in playbooks.md, which it reads only "
+             "once a playbook route is picked, and reads the principle leaves through principles.md only when a call hinges on one", [
         ("../poteto-mode/playbooks/", [skill("work")]),
         ("references/playbooks.md", [skill("work")]),
         ("pstack-adapter.md", [WORK_PLAYBOOKS]),
+        ("feature.md", [WORK_PLAYBOOKS]),
         ("benchmark-checklist", [skill("work")]),
-        ("root cause before smallest", [skill("work")]),
+        ("references/principles.md", [skill("work")]),
+        ("root cause before smallest", ["plugins/base/skills/work/references/principles.md"]),
         ("references/correction.md", [skill("work")]),
     ]),
     Contract("polish-comment-pass",
@@ -926,15 +929,14 @@ def load_script(rel):
 
 def check_playbooks():
     """Every playbook work's route table names is one pstack-sync wrote: an upstream rename fails here, not in a run."""
-    text = (ROOT / skill("work")).read_text(encoding="utf-8")
-    section = re.search(r"^## 1\. Pick one route\n(.*?)(?=^## )", text, re.M | re.S)
-    rows = re.findall(r"^\|.*$", section.group(1), re.M) if section else []  # the table's rows, not the prose around it
-    names = re.findall(r"`([a-z0-9-]+\.md)`", "\n".join(rows))
+    text = (ROOT / WORK_PLAYBOOKS).read_text(encoding="utf-8")
+    route_table_rows = re.findall(r"^\|.*$", text, re.M)
+    names = re.findall(r"`([a-z0-9-]+\.md)`", "\n".join(route_table_rows))
     if not names:
-        fail(skill("work"), "route table names no playbook (`<name>.md`)")
+        fail(WORK_PLAYBOOKS, "route table names no playbook (`<name>.md`)")
     for name in names:
         if not (ROOT / PLAYBOOK_DIR / name).is_file():
-            fail(skill("work"), f"route table names playbook {name}, which is not in {PLAYBOOK_DIR}/")
+            fail(WORK_PLAYBOOKS, f"route table names playbook {name}, which is not in {PLAYBOOK_DIR}/")
 
 
 def check_read_budget():
