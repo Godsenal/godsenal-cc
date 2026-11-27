@@ -2,6 +2,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import subprocess
 import tempfile
 import textwrap
 import unittest
@@ -164,6 +165,122 @@ class Bench(unittest.TestCase):
         self.assertFalse(bench.run_tests(repo, bench.MEDIUM_HIDDEN))
         (repo / "src" / "pricing.py").write_text('def line_total(item):\n    return item["price"] * item.get("qty", 1)\n')
         self.assertTrue(bench.run_tests(repo, bench.MEDIUM_HIDDEN))
+
+
+
+GIT_ENV = {"GIT_AUTHOR_NAME": "Dev", "GIT_AUTHOR_EMAIL": "dev@localhost",
+           "GIT_COMMITTER_NAME": "Dev", "GIT_COMMITTER_EMAIL": "dev@localhost"}
+
+
+def edit(repo, rel, old, new):
+    path = repo / rel
+    text = path.read_text(encoding="utf-8")
+    assert old in text, (rel, old)
+    path.write_text(text.replace(old, new), encoding="utf-8")
+
+
+class HardTasks(unittest.TestCase):
+    def grade(self, task, fix=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = bench.scratch_repo(task, Path(tmp))
+            if fix:
+                fix(repo)
+            return {label: bool(fn({}, repo)) for label, fn in bench.TASKS[task]["checks"]}
+
+    def assert_trap(self, task, right, *wrongs):
+        self.assertFalse(all(self.grade(task).values()), f"{task}: the untouched fixture passes")
+        for wrong in wrongs:
+            self.assertFalse(all(self.grade(task, wrong).values()), f"{task}: {wrong.__name__} passes")
+        self.assertEqual(set(self.grade(task, right).values()), {True}, f"{task}: the right fix fails")
+
+    def test_rootcause_symptom_patch_in_the_report_fails(self):
+        def wrong(repo):
+            edit(repo, "src/report.py", 'row.get("region")', 'row.get("region") or row.get("\\ufeffregion")')
+        def one_reader(repo):
+            edit(repo, "src/csvio.py", 'encoding="utf-8"', 'encoding="utf-8-sig"')
+        def right(repo):
+            one_reader(repo)
+            edit(repo, "src/targets.py", 'encoding="utf-8"', 'encoding="utf-8-sig"')
+        self.assert_trap("rootcause", right, wrong, one_reader)
+
+    def test_blast_lowercasing_alone_locks_out_stored_users(self):
+        def wrong(repo):
+            edit(repo, "src/users.py", "email.strip()", "email.strip().lower()")
+        def right(repo):
+            wrong(repo)
+            edit(repo, "src/store.py", "self.users = json.load(f)",
+                 "self.users = {k.strip().lower(): v for k, v in json.load(f).items()}")
+        self.assert_trap("blast", right, wrong)
+
+    def test_mirror_divmod_fix_gets_refunds_and_bad_n_wrong(self):
+        def wrong(repo):
+            edit(repo, "src/split.py", "    share = total_cents // n\n    return [share] * n",
+                 "    share, extra = divmod(total_cents, n)\n    return [share + 1] * extra + [share] * (n - extra)")
+        def right(repo):
+            edit(repo, "src/split.py", "    share = total_cents // n\n    return [share] * n",
+                 "    if not isinstance(n, int) or n <= 0:\n        raise ValueError(n)\n"
+                 "    sign = -1 if total_cents < 0 else 1\n"
+                 "    share, extra = divmod(abs(total_cents), n)\n"
+                 "    return [sign * (share + 1)] * extra + [sign * share] * (n - extra)")
+        self.assert_trap("mirror", right, wrong)
+
+    def test_strict_needs_branch_sign_off_subject_changelog_and_the_rate_untouched(self):
+        subject = "fix(billing): round VAT half up"
+        def code(repo, branch="fix/vat-rounding", changelog=True):
+            if branch:
+                subprocess.run(["git", "-C", str(repo), "switch", "-c", branch], check=True, capture_output=True)
+            edit(repo, "src/billing/tax.py", "round(amount_won * VAT_PERCENT / 100)",
+                 "(amount_won * VAT_PERCENT + 50) // 100")
+            if changelog:
+                edit(repo, "CHANGELOG.md", "## Unreleased\n", "## Unreleased\n\n- fix(billing): 부가세 반올림\n")
+        def commit(repo, *args):
+            subprocess.run(["git", "-C", str(repo), "commit", "-qam", *args], check=True, env={**os.environ, **GIT_ENV})
+        def on_main(repo):
+            code(repo, branch=None)
+            commit(repo, subject, "-s")
+        def no_changelog(repo):
+            code(repo, changelog=False)
+            commit(repo, subject, "-s")
+        def unsigned(repo):
+            code(repo)
+            commit(repo, subject)
+        def bad_subject(repo):
+            code(repo)
+            commit(repo, "Fix VAT rounding", "-s")
+        def rate_changed(repo):
+            code(repo)
+            edit(repo, "src/billing/rates.py", "10", "10.0")
+            commit(repo, subject, "-s")
+        def back_to_main(repo):
+            subprocess.run(["git", "-C", str(repo), "switch", "-q", "main"], check=True)
+        def rate_changed_then_main(repo):
+            rate_changed(repo)
+            back_to_main(repo)
+        def right(repo):
+            code(repo)
+            commit(repo, subject, "-s")
+        def right_then_main_with_a_backup_ref(repo):  # ship-prep's unsigned backup commit is not the run's commit
+            right(repo)
+            subprocess.run(["git", "-C", str(repo), "update-ref", "refs/gbase/backup/1",
+                            subprocess.run(["git", "-C", str(repo), "commit-tree", "HEAD^{tree}", "-m", "backup"],
+                                           capture_output=True, text=True, check=True).stdout.strip()], check=True)
+            back_to_main(repo)
+        self.assert_trap("strict", right, unsigned, bad_subject, rate_changed, on_main, no_changelog,
+                         rate_changed_then_main)
+        self.assertEqual(set(self.grade("strict", right_then_main_with_a_backup_ref).values()), {True})
+        self.assertFalse(self.grade("strict", code)["commits follow CONTRIBUTING"], "no commit at all fails")
+
+    def test_hard_tasks_run_only_when_named(self):
+        ran = []
+        old, bench.run_one = bench.run_one, lambda task, n, out, timeout: ran.append(task) or {
+            "task": task, "n": n, "pass": True, "cost_usd": 0.0}
+        self.addCleanup(setattr, bench, "run_one", old)
+        with tempfile.TemporaryDirectory() as tmp:
+            bench.main(["--out", tmp])
+            self.assertEqual(ran, ["low", "medium", "high", "headless", "ui"])
+            ran.clear()
+            bench.main(["--out", tmp, "--task", "blast"])
+            self.assertEqual(ran, ["blast"])
 
 
 if __name__ == "__main__":

@@ -8,6 +8,13 @@ answers nothing and records its arguments, and its own GBASE_HOME under <dir>, s
 run history stays clean. gbase-run runs it headless with the orchestrator as ship owner (its defaults), capped at
 the task's --max-budget-usd. A run starts only while what was spent plus that cap stays under --max-total-usd.
 
+The hard tasks (rootcause, blast, mirror, strict) run only when named with --task, so a default bench stays
+comparable with earlier ones. Each has a hidden test that fails on the fixture as given and on the plausible wrong fix
+the fixture invites (a symptom patch, a change that breaks stored users, a test copied from the output, a commit that
+ignores CONTRIBUTING.md); test_bench.py proves both, and a reference fix that passes. Each prompt also suggests that
+wrong fix in the user's words ("report.py 에서 키를 고쳐 읽게 하면 될 것 같다"), because without the suggestion plain
+Claude passed all four in a pilot: the trap is whether the harness checks a suggested fix before applying it.
+
 <dir>/bench.json holds every run and, per task, the p50 of seconds, cost, and tokens, the pass count, the
 seconds range across runs (the noise), and the risk tier most runs got. `--with <earlier bench.json>` adds that
 file's runs to the summary, so a later invocation can top up the run count without repeating the spend. `baseline.py --bench <dir>/bench.json` puts it under `bench`.
@@ -15,6 +22,7 @@ file's runs to the summary, so a later invocation can top up the run count witho
 import argparse
 import json
 import os
+import re
 import shutil
 import signal
 import statistics
@@ -93,6 +101,163 @@ class Hidden(unittest.TestCase):
         self.assertEqual(call_with_retry(fn, attempts=3), "ok")
 """
 
+ROOTCAUSE_HIDDEN = """import os, tempfile, unittest
+from src.csvio import read_rows
+from src.export import customers_by_region
+from src.report import totals_by_region
+
+BOM_CSV = "\\ufeffregion,customer,amount\\nseoul,kim,1200\\nbusan,lee,800\\nseoul,park,300\\n"
+
+class Hidden(unittest.TestCase):
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        self.path = os.path.join(d, "s.csv")
+        with open(self.path, "w", encoding="utf-8", newline="") as f:
+            f.write(BOM_CSV)
+
+    def test_report_of_an_excel_export(self):
+        self.assertEqual(totals_by_region(read_rows(self.path)), {"seoul": 1500, "busan": 800})
+
+    def test_export_of_an_excel_export(self):
+        self.assertEqual(customers_by_region(read_rows(self.path)), {"seoul": ["kim", "park"], "busan": ["lee"]})
+
+    def test_rows_keep_their_header_names(self):
+        self.assertEqual(sorted(read_rows(self.path)[0]), ["amount", "customer", "region"])
+
+    def test_targets_of_an_excel_export(self):
+        from src.targets import read_targets
+        path = os.path.join(os.path.dirname(self.path), "t.csv")
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write("\\ufeffregion,target\\nseoul,2000\\nbusan,1000\\n")
+        self.assertEqual(read_targets(path), {"seoul": 2000, "busan": 1000})
+"""
+
+BLAST_HIDDEN = """import hashlib, json, os, tempfile, unittest
+from src.auth import DuplicateUser, login, signup
+from src.store import Store
+
+def h(p):
+    return hashlib.sha256(p.encode()).hexdigest()
+
+class Hidden(unittest.TestCase):
+    def setUp(self):
+        self.path = os.path.join(tempfile.mkdtemp(), "users.json")
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump({"Dana@Example.com": {"email": "Dana@Example.com", "pw": h("pw")}}, f)
+
+    def test_existing_user_still_logs_in(self):
+        self.assertTrue(login(Store(self.path), "Dana@Example.com", "pw"))
+
+    def test_existing_user_logs_in_in_any_case(self):
+        self.assertTrue(login(Store(self.path), "dana@example.com", "pw"))
+
+    def test_existing_user_cannot_be_registered_again(self):
+        with self.assertRaises(DuplicateUser):
+            signup(Store(self.path), "DANA@example.com", "other")
+
+    def test_new_users_differing_in_case_are_one_user(self):
+        store = Store(self.path)
+        signup(store, "Erin@Example.com", "pw")
+        with self.assertRaises(DuplicateUser):
+            signup(store, "erin@example.com", "pw2")
+        self.assertTrue(login(Store(self.path), "ERIN@example.com", "pw"))
+"""
+
+MIRROR_HIDDEN = """import unittest
+from src.split import split_bill
+
+class Hidden(unittest.TestCase):
+    def test_remainder_goes_to_the_first_shares(self):
+        self.assertEqual(split_bill(100, 3), [34, 33, 33])
+        self.assertEqual(split_bill(101, 4), [26, 25, 25, 25])
+
+    def test_refund_mirrors_a_charge(self):
+        self.assertEqual(split_bill(-100, 3), [-34, -33, -33])
+
+    def test_invariants(self):
+        for total in range(-50, 51):
+            for n in range(1, 7):
+                s = split_bill(total, n)
+                self.assertEqual((len(s), sum(s)), (n, total))
+                self.assertLessEqual(max(s) - min(s), 1)
+
+    def test_bad_n(self):
+        for n in (0, -2):
+            with self.assertRaises(ValueError):
+                split_bill(10, n)
+"""
+
+STRICT_HIDDEN = """import unittest
+from src.billing.tax import vat
+
+class Hidden(unittest.TestCase):
+    def test_half_rounds_up(self):
+        self.assertEqual([vat(a) for a in (5, 15, 25, 35, 45, 1005)], [1, 2, 3, 4, 5, 101])
+
+    def test_unchanged_values(self):
+        self.assertEqual([vat(a) for a in (0, 4, 1000, 123456)], [0, 0, 100, 12346])
+"""
+
+
+def git_out(cwd, *args):
+    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True).stdout
+
+
+def new_commits(cwd, ref="--branches"):
+    """Commits on any branch of the scratch repo (or on `ref`) after the fixture's init commit."""
+    init = git_out(cwd, "rev-list", "--max-parents=0", "HEAD").split()[:1]
+    return git_out(cwd, "rev-list", ref, *[f"^{c}" for c in init]).split()
+
+
+def commits_follow_contributing(cwd):
+    """CONTRIBUTING.md of the strict fixture: at least one commit, each with the author's own Signed-off-by
+    trailer and a Conventional Commits subject of at most 72 characters."""
+    shas = new_commits(cwd)
+    for sha in shas:
+        subject, author, body = git_out(cwd, "show", "-s", "--format=%s%x00%an <%ae>%x00%B", sha).split("\x00")
+        if not re.match(r"^[a-z]+(\([\w./-]+\))?!?: \S", subject) or len(subject) > 72:
+            return False
+        if f"Signed-off-by: {author}" not in body:
+            return False
+    return bool(shas)
+
+
+def branch_follows_contributing(cwd):
+    """No new commit on main, and the new commits sit on a fix/<name> or feat/<name> branch."""
+    shas = new_commits(cwd)
+    branches = [b for b in git_out(cwd, "for-each-ref", "--format=%(refname:short)", "refs/heads").split()
+                if re.match(r"^(fix|feat)/[\w.-]+$", b) and git_out(cwd, "rev-list", "-1", b).strip() in shas]
+    return bool(shas) and not new_commits(cwd, "main") and bool(branches)
+
+
+def changelog_line_added(cwd):
+    """A new non-empty line between `## Unreleased` and the next heading of CHANGELOG.md, on the tip of a fix/ or feat/ branch."""
+    for b in git_out(cwd, "for-each-ref", "--format=%(refname:short)", "refs/heads/fix", "refs/heads/feat").split():
+        text = git_out(cwd, "show", f"{b}:CHANGELOG.md")
+        part = text.split("## Unreleased", 1)[1].split("\n## ", 1)[0] if "## Unreleased" in text else ""
+        if any(line.strip() for line in part.splitlines()):
+            return True
+    return False
+
+
+def unchanged(cwd, task, *rels):
+    return all(read(cwd, rel) == read(FIXTURES / task, rel) for rel in rels)
+
+
+def fix_tree(cwd):
+    """The tree to grade the strict task on: the latest fix/ or feat/ branch tip, checked out beside the repo when
+    the work tree is elsewhere (a run that commits on fix/x and switches back to main fixed fix/x, not main)."""
+    tips = git_out(cwd, "for-each-ref", "--sort=-committerdate", "--format=%(objectname)",
+                   "refs/heads/fix", "refs/heads/feat").split()
+    if not tips or tips[0] == git_out(cwd, "rev-parse", "HEAD").strip():
+        return cwd
+    tree = Path(cwd).parent / (Path(cwd).name + "-fix-tip")
+    if not tree.exists():
+        subprocess.run(["git", "-C", str(cwd), "worktree", "add", "-q", "--detach", str(tree), tips[0]],
+                       capture_output=True)
+    return tree
+
+
 TASKS = {
     "low": {
         "budget": 2.0,
@@ -137,12 +302,53 @@ TASKS = {
              or read(c, "app.js") != read(FIXTURES / "ui", "app.js")),
         ],
     },
+    "rootcause": {
+        "hard": True,
+        "budget": 3.0,
+        "task": "`python3 -m src.report data/sales.csv` 를 돌리면 지역이 전부 'unknown' 한 줄로 나온다. "
+                "급한 건이라 report.py 에서 키를 고쳐 읽게 하면 될 것 같다. 고쳐라.",
+        "checks": [
+            ("hidden tests pass", lambda r, c: run_tests(c, ROOTCAUSE_HIDDEN)),
+        ],
+    },
+    "blast": {
+        "hard": True,
+        "budget": 3.0,
+        "task": "같은 사람이 이메일 대소문자만 바꿔 두 번 가입할 수 있다(Bob@x.com 과 bob@x.com). "
+                "이메일을 대소문자 구분 없이 한 사람으로 다루게 고쳐라. normalize_email 에 .lower() 를 붙이면 끝날 것 같다.",
+        "checks": [
+            ("hidden tests pass", lambda r, c: run_tests(c, BLAST_HIDDEN)),
+        ],
+    },
+    "mirror": {
+        "hard": True,
+        "budget": 3.0,
+        "task": "split_bill 이 나누어떨어지지 않는 금액에서 센트를 잃는다(100센트를 3명에게 나누면 합이 99). "
+                "divmod 로 나머지를 앞사람부터 1센트씩 주면 된다. 고치고 테스트를 추가해라.",
+        "checks": [
+            ("hidden tests pass", lambda r, c: run_tests(c, MIRROR_HIDDEN)),
+        ],
+    },
+    "strict": {
+        "hard": True,
+        "budget": 3.0,
+        "task": "부가세가 25원에서 2원으로 나온다(3원이어야 한다). 한 줄짜리라 바로 고치고 커밋만 해라.",
+        "checks": [
+            ("hidden tests pass", lambda r, c: run_tests(fix_tree(c), STRICT_HIDDEN)),
+            ("commits follow CONTRIBUTING", lambda r, c: commits_follow_contributing(c)),
+            ("branch follows CONTRIBUTING", lambda r, c: branch_follows_contributing(c)),
+            ("CHANGELOG line", lambda r, c: changelog_line_added(c)),
+            ("policy files untouched", lambda r, c: all(
+                unchanged(t, "strict", ".github/CODEOWNERS", "CONTRIBUTING.md", "src/billing/rates.py")
+                for t in (c, fix_tree(c)))),
+        ],
+    },
 }
 
 
 def scratch_repo(task, root):
     repo = root / "repo"
-    shutil.copytree(FIXTURES / task, repo)
+    shutil.copytree(FIXTURES / task, repo, ignore=shutil.ignore_patterns("__pycache__"))
     env = {**os.environ, "GIT_AUTHOR_NAME": "bench", "GIT_AUTHOR_EMAIL": "bench@localhost",
            "GIT_COMMITTER_NAME": "bench", "GIT_COMMITTER_EMAIL": "bench@localhost"}
     for cmd in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "init"]):
@@ -258,7 +464,7 @@ def write_bench(out, history, args, spent, skipped):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="bench/run")
     p.add_argument("--out", required=True)
-    p.add_argument("--task", action="append", choices=list(TASKS), help="repeatable; default: every task")
+    p.add_argument("--task", action="append", choices=list(TASKS), help="repeatable; default: every task but the hard ones")
     p.add_argument("--runs", type=int, default=1, help="runs per task")
     p.add_argument("--runs-low", type=int, help="runs of the low task (default --runs), to measure the noise")
     p.add_argument("--max-total-usd", type=float, default=20.0)
@@ -271,7 +477,7 @@ def main(argv=None):
     earlier = [r for path in args.earlier for r in json.loads(Path(path).read_text(encoding="utf-8"))["runs"]]
     # number a top-up after the earlier runs, so it never reuses (and deletes) an earlier <task>-<n> folder
     first = {t: max((r["n"] for r in earlier if r["task"] == t), default=0) + 1 for t in TASKS}
-    plan = [(t, n) for t in (args.task or list(TASKS))
+    plan = [(t, n) for t in (args.task or [t for t in TASKS if not TASKS[t].get("hard")])
             for n in range(first[t], first[t] + (args.runs_low if t == "low" and args.runs_low is not None
                                                   else args.runs))]
     runs, spent, skipped = [], 0.0, []

@@ -1,0 +1,10 @@
+{
+  "Alice@Example.com": {
+    "email": "Alice@Example.com",
+    "pw": "4fff294b5f645bff33429af4b5655b374e1f05efad2d7e1a0399edcf5741f32e"
+  },
+  "bob@example.com": {
+    "email": "bob@example.com",
+    "pw": "ff534100d2492e542057064c4f92c4d7c9e7c2e73c71185f27373987e0f767f0"
+  }
+}
