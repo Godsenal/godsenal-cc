@@ -3,8 +3,8 @@
   "note": "limit = the ceiling check.py enforces now; target = where the route has to end up. Lower a limit whenever a route shrinks; raising one needs a reason in the PR. polish, review, compat-check, and unslop run in subagents (go, branch-pr, and monitor launch them), so their bodies are not in any route.",
   "routes": {
     "low": {
-      "target": 25000,
-      "limit": 25000,
+      "target": 22300,
+      "limit": 22300,
       "reads": [
         "plugins/base/skills/work/SKILL.md",
         "plugins/base/skills/go/SKILL.md",
@@ -13,8 +13,8 @@
       ]
     },
     "medium": {
-      "target": 40000,
-      "limit": 40000,
+      "target": 36050,
+      "limit": 36050,
       "extends": "low",
       "reads": [
         "plugins/base/skills/go/references/review.md",
@@ -30,6 +30,12 @@
     }
   },
   "extras": {
+    "session-start": {
+      "note": "what every session pays before its first word, and again on every later turn as cache reads: the session hook's text and the listed name (gbase:<name>) and description of each gbase skill, agent, and command the model sees (a skill with disable-model-invocation is not listed). 15,836 characters in gbase 1.75.1, 6,036 tokens over no plugin at turn 1 (claude -p, isolated config); 1.77.0 cut it to 11,420 characters",
+      "limit": 11450,
+      "reads": ["plugins/base/hooks/session-start.md"],
+      "listing": ["plugins/base/skills/*/SKILL.md", "plugins/base/agents/*.md", "plugins/base/commands/*.md"]
+    },
     "headless": {
       "note": "an unattended run settles the PR instead of watching it, and reviews low-risk changes before the PR",
       "limit": 12500,

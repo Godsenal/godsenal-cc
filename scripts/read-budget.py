@@ -9,23 +9,53 @@
 
 The unit is characters, not bytes: Korean text is three bytes a character and one token or so either way.
 """
+import importlib.util
 import json
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 BUDGET = ROOT / "scripts" / "read-budget.json"
 
 
-def size(rel, ref=None):
-    """Characters in a repo file, at `ref` when given; None when it isn't there."""
+def text_of(rel, ref=None):
     if ref:
         p = subprocess.run(["git", "-C", str(ROOT), "show", f"{ref}:{rel}"], capture_output=True)
-        return len(p.stdout.decode("utf-8", "replace")) if p.returncode == 0 else None
+        return p.stdout.decode("utf-8", "replace") if p.returncode == 0 else None
     path = ROOT / rel
-    return len(path.read_text(encoding="utf-8")) if path.is_file() else None
+    return path.read_text(encoding="utf-8") if path.is_file() else None
+
+
+def size(rel, ref=None):
+    """Characters in a repo file, at `ref` when given; None when it isn't there."""
+    text = text_of(rel, ref)
+    return None if text is None else len(text)
+
+
+def listing_rows(patterns, ref=None):
+    if ref:
+        tree = subprocess.run(["git", "-C", str(ROOT), "ls-tree", "-r", "--name-only", ref], capture_output=True, text=True).stdout.split()
+        paths = sorted(f for f in tree if any(PurePosixPath(f).match(pat) for pat in patterns))
+    else:
+        paths = sorted(p.relative_to(ROOT).as_posix() for pat in patterns for p in ROOT.glob(pat))
+    spec = importlib.util.spec_from_file_location("check", Path(__file__).with_name("check.py"))
+    check = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(check)
+    rows = []
+    for rel in paths:
+        fm = check.frontmatter(text_of(rel, ref) or "") or {}
+        if fm.get("disable-model-invocation", "").lower() in ("true", "yes", "on") or not fm.get("description"):
+            continue
+        name = Path(rel).parent.name if Path(rel).name == "SKILL.md" else Path(rel).stem
+        parts = rel.split("/")
+        plugin_dir = "/".join(parts[:next(i for i, p in enumerate(parts) if p in ("skills", "agents", "commands"))])
+        manifest = text_of(f"{plugin_dir}/.claude-plugin/plugin.json", ref)
+        plugin = json.loads(manifest).get("name", "") if manifest else ""
+        listed = f"{plugin}:{name}" if plugin else name
+        rows.append((f"{rel} (description)", len(listed) + len(fm["description"])))
+    return rows
 
 
 def route_files(budget, name):
@@ -41,7 +71,7 @@ def measure(budget, ref=None):
         files = [(f, size(f, ref)) for f in route_files(budget, name)]
         out[name] = {"files": files, "total": sum(n or 0 for _, n in files), "limit": route.get("limit"), "target": route.get("target")}
     for name, extra in budget.get("extras", {}).items():
-        files = [(f, size(f, ref)) for f in extra["reads"]]
+        files = [(f, size(f, ref)) for f in extra["reads"]] + listing_rows(extra.get("listing", []), ref)
         out[f"+{name}"] = {"files": files, "total": sum(n or 0 for _, n in files), "limit": extra.get("limit"), "target": None}
     return out
 

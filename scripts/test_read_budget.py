@@ -49,6 +49,23 @@ class Budget(unittest.TestCase):
     def test_a_limit_below_the_target_is_a_mistake(self):
         self.assertTrue(any("limit 90 is below its target 100" in p for p in rb.problems(self.budget(low_limit=90))))
 
+    def test_session_start_counts_listed_names_and_descriptions_not_bodies_or_hidden_skills(self):
+        def write(rel, fm, body="x" * 500):
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
+        write("p/skills/go/SKILL.md", 'name: go\ndescription: "Ships it."')
+        write("p/skills/leaf/SKILL.md", "name: leaf\ndescription: Hidden.\ndisable-model-invocation: true")
+        write("p/agents/scout.md", "name: scout\ndescription: >-\n  Reads\n  files.")
+        (self.root / "p/.claude-plugin").mkdir()
+        (self.root / "p/.claude-plugin/plugin.json").write_text('{"name": "g"}')
+        budget = {"routes": {}, "extras": {"session-start": {"limit": 30, "reads": ["c.md"],
+                                                            "listing": ["p/skills/*/SKILL.md", "p/agents/*.md"]}}}
+        m = rb.measure(budget)["+session-start"]
+        self.assertEqual(m["files"], [("c.md", 30), ("p/agents/scout.md (description)", 19), ("p/skills/go/SKILL.md (description)", 13)])
+        self.assertEqual(m["total"], 62)
+        self.assertTrue(any("route +session-start loads 62 characters" in p for p in rb.problems(budget)))
+
     def test_the_repo_budget_holds(self):
         rb.ROOT = self.old_root
         self.assertEqual(rb.problems(), [])
