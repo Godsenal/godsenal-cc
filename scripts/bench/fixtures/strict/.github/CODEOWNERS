@@ -1,0 +1,2 @@
+*               @acme/platform
+/src/billing/   @acme/payments
