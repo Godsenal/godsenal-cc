@@ -1,8 +1,10 @@
 # Pre-PR review: Steps 2 and 3 on `medium` and `high`
 
-Read before Step 2 when the risk is `medium` or `high` (and on `low` in a headless run, by orchestrated.md). Reviewing before the PR lands its fixes in the initial commits, not in extra commits and CI reruns.
+Read before Step 2 when the risk is `medium` or `high` (and on `low` in a headless run, by orchestrated.md). Fixes found before the PR land in its first commits, not in CI reruns.
 
 ## Step 2: the finder, in the same message as polish
+
+Launch it when `stage-delta mark` prints `finder: … — owed` (go's Step 2), with the effort that line names.
 
 ```
 Agent(subagent_type: "general-purpose", run_in_background: true, description: "review finder",
@@ -12,12 +14,12 @@ Agent(subagent_type: "general-purpose", run_in_background: true, description: "r
 - **codex beside it**, when on PATH: a background `Bash` running `codex exec -s read-only review --base <base>`; its findings join Step 3. Skip it if it fails.
 - **Don't call `code-review` in the main session**: under `claude -p` a forked skill blocks its caller, turning review ∥ polish into review → polish.
 - **Pass the scope explicitly**: with none, the built-in reviews the current diff, which is empty on the clean-tree path.
-- Effort per Step 1's table, never above `high`: above `medium` the built-in already fans out to a multi-agent workflow.
+- Effort per Step 1's table, never above `high` (above `medium` the built-in fans out to a multi-agent workflow).
 - Never `--fix` (it would race polish for the same files), `--comment` (no PR yet), or `ultra` (user-triggered and billed).
 
 ## Step 3: judge and fix
 
-If the findings haven't arrived when polish finishes, wait for them: the gate then runs once on the final tree. If the finder fails, go on without it (Step 6 drops `--no-review`). Then hand the findings to review's judgment stages, in a subagent:
+When polish returns, run `stage-delta polish` and do what its `next:` says (it may send you to [deltas.md](deltas.md)). Wait for the findings; a failed one is skipped (Step 6 drops `--no-review`). Then hand the findings to review's judgment stages, in a subagent:
 
 ```
 Agent(subagent_type: "general-purpose", run_in_background: false, description: "review",
@@ -26,4 +28,4 @@ Agent(subagent_type: "general-purpose", run_in_background: false, description: "
 
 On `medium`, insert `; one skeptic for low/medium` right after `start at Stage 2`. No `Agent` tool in this session → call `gbase:review` directly with the same args.
 
-Clear fixes come back as working-tree edits (no commits: `branch-pr` groups them); judgment calls come back deferred. Read `git diff --stat` to see what the agents changed, then tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`. Go on to Step 4 in the same turn: under `claude -p` a turn that ends on the table ends the run once no background task is left to wake it.
+Clear fixes come back as working-tree edits (no commits: `branch-pr` groups them); judgment calls come back deferred. When the agent returns, run `stage-delta review` and do what its `next:` says. Then tally in one line: `review: F found, R refuted, S survived — A fixed, K deferred`. Go on to Step 4 in the same turn: under `claude -p` a turn that ends on the table ends the run once no background task is left to wake it.
