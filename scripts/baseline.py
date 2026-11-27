@@ -65,6 +65,9 @@ def eval_summary(paths):
     incomplete = sorted(n for n, c in cases.items() if not c["complete"])
     not_run = sorted(suite_names - set(cases)) if suite_names is not None else None
     cases_left_out = bool(not_run or incomplete)
+    speed = {"seconds_p50": median(seconds),
+             "cost_p50": median([r["costUsd"] for r in runs if r.get("costUsd") is not None]),
+             "turns_p50": median([r["turns"] for r in runs if r.get("turns") is not None])}
 
     def total(key):
         values = [d.get(key) for d in files if d.get(key) is not None]
@@ -72,7 +75,7 @@ def eval_summary(paths):
 
     return {
         "cases": cases,
-        "passed": sum(1 for n, c in cases.items() if c["score"] is not None and c["score"] >= (threshold_of[n] or 1)),
+        "passed": sum(1 for n, c in cases.items() if c["score"] is not None and c["score"] >= (1 if threshold_of[n] is None else threshold_of[n])),
         "total": len(cases),
         "suite_total": len(suite_names | set(cases)) if suite_names is not None else None,
         "pass_rate": sum(rates) / len(rates) if rates else None,
@@ -85,9 +88,7 @@ def eval_summary(paths):
         "files": len(files),
         "cost_usd": total("costUsd"),
         "seconds": total("durationSeconds"),
-        "speed": {"seconds_p50": median(seconds),
-                  "cost_p50": median([r["costUsd"] for r in runs if r.get("costUsd") is not None]),
-                  "turns_p50": median([r["turns"] for r in runs if r.get("turns") is not None])} if seconds else None,
+        "speed": speed if any(v is not None for v in speed.values()) else None,
         "tokens": None,
     }
 
@@ -128,7 +129,8 @@ def minutes(result):
 
 
 def session_sum(result, field):
-    values = [s.get(field) for s in (result.get("sessions") or {}).values() if isinstance(s, dict)]
+    sessions = result.get("sessions")
+    values = [s.get(field) for s in sessions.values() if isinstance(s, dict)] if isinstance(sessions, dict) else []
     values = [v for v in values if v is not None]
     return sum(values) if values else None
 
@@ -139,6 +141,8 @@ def trend(runs_dir):
         try:
             result = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            continue
+        if not isinstance(result, dict):
             continue
         by_slot.setdefault(result.get("slot") or "?", []).append((path.parent, result))
     out = {}
@@ -243,6 +247,9 @@ def main(argv=None):
     p.add_argument("--runs", default=str(gbase_home / "runs"))
     p.add_argument("--out")
     args = p.parse_args(argv)
+    tree = json.loads((HERE.parent / "plugins/base/.claude-plugin/plugin.json").read_text(encoding="utf-8"))["version"]
+    if tree != args.version:
+        print(f"baseline: --version {args.version}, but this tree is gbase {tree}; read_budget measures this tree", file=sys.stderr)
     text = json.dumps(build(args.version, args.eval_path, args.runs), ensure_ascii=False, indent=2) + "\n"
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
