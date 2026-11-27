@@ -1,6 +1,7 @@
 ---
-type: tool_used
-tool: Read
-input_match: 'poteto-mode/playbooks/trace-forensics'
+type: regex
+pattern: '"(?:file_path|command|path)"\s*:\s*"(?:[^"\\]|\\.)*poteto-mode/playbooks/trace-forensics\.md'
+match: contains
+target: trace
 arm: both
 ---

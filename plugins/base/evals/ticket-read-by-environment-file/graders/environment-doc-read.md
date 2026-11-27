@@ -1,6 +1,7 @@
 ---
-type: tool_used
-tool: Read
-input_match: 'references/environment\.md'
+type: regex
+pattern: '"(?:file_path|command|path)"\s*:\s*"(?:[^"\\]|\\.)*references/environment\.md'
+match: contains
+target: trace
 arm: both
 ---
