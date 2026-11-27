@@ -1,8 +1,7 @@
 ---
-type: tool_used
-tool: Read
-input_match: 'review-policy\.md'
-min: 0
-max: 0
+type: regex
+pattern: '"(?:file_path|command|path)"\s*:\s*"(?:[^"\\]|\\.)*review-policy\.md'
+match: not_contains
+target: trace
 arm: both
 ---

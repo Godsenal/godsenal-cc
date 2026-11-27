@@ -26,7 +26,7 @@ Then decide where tasks come from:
 
 **Run the read method once** on a real key from the history before recording it, as the verify block does with its commands. Take the command's shape from the tool's own `--help` or the MCP tool's schema, not from memory, because a CLI's flags change between versions. Record `(ran <date>: ok)` or `(not run: <reason>)`, for example when the server needs a login only the user can do. Never run a write (comment, transition, assign, create) during setup.
 
-**No tool here reads the tracker** → the method line says that and what the user has to connect, and stops there. Write no example command for a tool this session doesn't have, because an unrun line in the file gets run later as if it had been checked.
+**No tool here reads the tracker** → the method line says that and names the kind of tool to connect (a CLI for that tracker, its MCP server), and stops there. Write no command for a tool this session doesn't have, not even its install or login, in the file, the preview, or a `결정 필요:` line: an unrun line gets run later as if it had been checked. A run once wrote "install `acli` and run `acli jira auth login`" from memory.
 
 ## 2. Draft
 
@@ -34,7 +34,7 @@ Fill environment.md's format with what was found.
 
 - A line needs evidence: a file, a count of PRs that agree, a command that ran. The evidence goes in the preview, not in the file.
 - `## Write-back` is `off` for every kind unless the user turns one on in the preview. A write method is recorded only for a kind that is `on` or `ask`, marked `(not run)`.
-- Put no token, cookie, or password in the file. Name the environment variable or the login command.
+- Put no token, cookie, or password in the file. Name the environment variable, or the login command of a tool that ran here.
 - `## Shipping` and its lines (`before the PR: preview`, `review replies: draft`) are written only when the user picks them in step 3. Nothing in a repo shows whether its owner wants to read a change before the team sees it, or to write their own replies to reviewers, so neither is ever inferred.
 - **Review policy** ([review-policy.md](../../branch-pr/references/review-policy.md)): propose `Reviewers:` only for people or a team asked on most of the 20 PRs and not already CODEOWNERS (GitHub asks those itself), `Labels:` only for a label on most of them, and `Commit sign-off: on` only when most commits carry the trailer or a DCO check runs in CI. They go into the draft unasked, as the formats do, with the count as evidence. `PR size:` is never inferred from the history, since a size the team merged is not a limit it set: propose it in the preview only when `CONTRIBUTING` or a CI check states one.
 - **Strict review** (the approvals and protection rows): a required approval count needs no line, because `pr-status` reads GitHub's review state, and a policy file needs none, because `ship-prep` names it on its `approvals:` line; say what each asks in the preview, with the file or the API answer as evidence. Propose no `Reviewers:` for files a policy's `seats` or CODEOWNERS already cover. Required signed commits → no line either, since signing is git's `commit.gpgsign`: say in the preview whether it is on here, because an unsigned commit fails only on GitHub. Required linear history → `Merge: squash` (or `rebase` when only that is allowed) under `## Conventions`. **Never edit a policy file, a ruleset, or branch protection**: they are the repo's, and setup only reads them.

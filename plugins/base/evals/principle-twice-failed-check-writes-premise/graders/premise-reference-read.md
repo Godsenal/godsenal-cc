@@ -1,6 +1,6 @@
 ---
 type: regex
-pattern: '(base/| )references/premise\.md'
+pattern: '"(?:file_path|command|path)"\s*:\s*"(?:[^"\\]|\\.)*references/premise\.md'
 match: contains
 target: trace
 arm: both

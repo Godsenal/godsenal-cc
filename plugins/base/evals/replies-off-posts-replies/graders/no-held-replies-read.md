@@ -1,8 +1,7 @@
 ---
-type: tool_used
-tool: Read
-input_match: 'held-replies'
-min: 0
-max: 0
+type: regex
+pattern: '"(?:file_path|command|path)"\s*:\s*"(?:[^"\\]|\\.)*held-replies'
+match: not_contains
+target: trace
 arm: both
 ---
