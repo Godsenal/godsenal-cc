@@ -128,7 +128,7 @@ def problems(cases, docs):
         if name not in docs:
             found.append(f"{name}: no model-invocable skill by that name — remove it from triggers.json or restore the skill")
     for name, case in cases["skills"].items():
-        both = set(case.get("train", [])) & set(case.get("test", []))
+        both = set(case.get("train", [])) & set(case["test"])
         if both:
             found.append(f"{name}: {sorted(both)} in both train and test — a held-out prompt can't also be tuned on; keep it in test")
     result, index = measure(cases, docs, "test")
