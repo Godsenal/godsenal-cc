@@ -76,6 +76,7 @@ PSTACK_DOC = "plugins/base/references/pstack-sync.md"
 REFS_WATCH = "scripts/refs-watch.py"
 PSTACK_ADAPTER = "plugins/base/references/pstack-adapter.md"
 TRIGGERS = "scripts/triggers.py"
+BASELINE = "scripts/baseline.py"
 RUNNER_DOC = "plugins/base/references/runner.md"  # the runner's usage and result.json, split out of orchestrator.md
 
 
@@ -497,6 +498,27 @@ CONTRACTS = [
         ("--exclusive", [RUNNER_DOC, RUNNER]),
         ("--max-turns", [RUNNER_DOC, RUNNER]),
         ("--max-budget-usd", [RUNNER_DOC, RUNNER]),
+    ]),
+    Contract("baseline-inputs",
+             "baseline.py reads the result.json fields gbase-run writes and runner.md documents, and read-budget.py's measure; "
+             "renaming one makes the trend or the read_budget numbers silently empty", [
+        ("started_at", [RUNNER, RUNNER_DOC, BASELINE]),
+        ("finished_at", [RUNNER, RUNNER_DOC, BASELINE]),
+        ('"cost_usd"', [RUNNER, BASELINE]),
+        ('"turns"', [RUNNER, BASELINE]),
+        ('"gaps"', [RUNNER, BASELINE]),
+        ('"unverified"', [RUNNER, BASELINE]),
+        ('"sessions"', [RUNNER, BASELINE]),
+        ('"slot"', [RUNNER, BASELINE]),
+        ('"status"', [RUNNER, BASELINE]),
+        ("log.jsonl", [RUNNER]),
+        ("log-{", [RUNNER]),
+        ("log*.jsonl", [BASELINE]),
+        ("BUDGET = ", ["scripts/read-budget.py"]),
+        ("rb.BUDGET", [BASELINE]),
+        ('"total"', ["scripts/read-budget.py", BASELINE]),
+        ("def measure(", ["scripts/read-budget.py"]),
+        ("rb.measure(", [BASELINE]),
     ]),
     Contract("followups-line",
              "work's size gate reports the slices it left; the runner reads them into followups, and asks a capped run for them", [

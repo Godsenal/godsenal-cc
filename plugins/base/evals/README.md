@@ -104,3 +104,22 @@ Seen on 1.64.0 (2026-11-27, 3 runs per case, on the 1.65.0 tree, whose skill bod
 Review of this change then tightened four cases, and they were measured again on the final tree ($1.30, for $14.04 in all): `cover-compat-check-flags-migration`'s fixture now stages the new migration so `git diff HEAD` shows it, and a grader checks that `src/users.mjs` is unchanged (3 of 3 again); `pressure-tested-still-verifies` gained `check-reported`, which reads the final report, because `check-ran` also counts a `node check.mjs` run by polish or a skeptic (the three kept traces above all pass it); `cover-plan-headless-reports-slices` now requires an absolute `plan:` path and `cover-reproduce-leaves-product-code` a colon after `reproduce` and `command` (one run each, both passed).
 
 Seen on 1.65.1 (2026-11-27, the three cases that failed on 1.64.0, 3 runs each, `-j 3`, $8.33 in all): `cover-bug-fix-starts-with-reproduce` 3 of 3 (50 seconds, $0.75), `cover-review-reports-table` 3 of 3 (100 seconds, $2.18), `pressure-urgent-still-reviews` 3 of 3 (240 seconds, $5.40), each 0 of 3 before. The fixes: `bug-fix`'s step 1 says to call `gbase:reproduce` before the first edit even when the bug looks obvious, and why; `review`'s report names the four severities and maps the built-in's `important`/`nit` the way `gbase-run`'s `review_rows` now does too (`SEVERITY_ALIASES`, so an older review's rows are read instead of dropped); `go`'s Step 1 says words never lower the tier and only `--no-review`/`--no-verify` skip a step. In a run read, the `review` table carried `medium`/`low` rows, and the `go` report said "급하니까"라는 말만으로는 리뷰를 생략하지 않습니다. `pressure-tested-still-verifies` was not run again on 1.65.1 (it passed 3 of 3 on 1.64.0, and the budget for this change was $10).
+
+## Baseline
+
+A baseline is the whole suite, the read budget, and the trend of real runs, taken for one version with one command and kept outside the repo. Take it before and after a change that claims to make gbase better or faster, and compare the two with `diff`:
+
+```bash
+V=$(python3 -c "import json;print(json.load(open('plugins/base/.claude-plugin/plugin.json'))['version'])")
+OUT="${GBASE_HOME:-$HOME/.gbase}/baselines/$(date +%Y%m%d)-$V"; mkdir -p "$OUT"
+(cd plugins/base && claude plugin eval . --ablation none --scaffold --trust-plugin --allow-tools Bash Edit Write --no-publish \
+  --threshold 0.67 -j 3 --max-cost-usd 40 --output-dir "$OUT/eval" --json "$OUT/eval.json")
+python3 scripts/baseline.py --version "$V" --eval "$OUT/eval.json" --out "$OUT/baseline.json"
+python3 scripts/baseline.py diff <older>/baseline.json "$OUT/baseline.json"
+```
+
+- `--max-cost-usd 40` stops 1.64.0's suite about halfway (the cases cost about $65 together). `eval.not_run` and `eval.incomplete` name what the cap left out; rerun those cases from a copy of their folders (`--eval-dir evals-rest`, same flags, a second cap) and pass both files, `--eval "$OUT/eval.json" --eval "$OUT/eval2.json"`: a case in the later file replaces the earlier one, and cost and seconds add up.
+- The suite runs with `Bash` for every case, so `trace-artifact-reads-forensics` scores as a rate (see above). Keep the command the same across baselines; a different `--allow-tools` makes two baselines incomparable.
+- The eval JSON has seconds, cost, and turns per run but no token counts, so `eval.tokens` is `null`. Tokens come from `trend`: every `type: "result"` event of a run's `log*.jsonl`, summed (each event carries the usage since the one before; only `total_cost_usd` is cumulative), split into fresh (input + cache creation), cache read, and output. They are the main session's tokens only (subagents' are in `modelUsage`, left out), while `cost_p50` covers subagents too.
+- `trend` reads every `result.json` under `$GBASE_HOME/runs` (`--runs` to change it). `n` and `failed` count every run; time, turns, cost, tokens, and the gaps/unverified rates count `done` runs only. It mixes versions, repos, and models, so use it to watch a direction, not as a before/after number.
+
