@@ -141,7 +141,7 @@ def graphql():
              "isRequired": True, "checkSuite": {"app": {"slug": "github-actions"}}}
     print(json.dumps({"data": {"repository": {
         "pullRequest": {"number": 7, "url": "https://github.com/acme/checkout/pull/7", "state": "OPEN", "isDraft": False,
-                        "mergeable": "MERGEABLE", "mergeStateStatus": "BLOCKED" if red else "CLEAN", "reviewDecision": "REVIEW_REQUIRED",
+                        "mergeable": "MERGEABLE", "mergeStateStatus": "BLOCKED" if red else "CLEAN", "reviewDecision": None,
                         "baseRefName": "main", "headRefName": BRANCH, "headRefOid": head,
                         "commits": {"nodes": [{"commit": {"author": {"user": me}, "statusCheckRollup": {"contexts": {"nodes": [check]}}}}]},
                         "reviewThreads": {"nodes": threads}, "reviews": {"nodes": []}, "comments": {"nodes": []},

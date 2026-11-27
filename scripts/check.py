@@ -299,6 +299,18 @@ CONTRACTS = [
         ("merge: retarget stacked pr first", [PR_STATUS, MERGE]),
         ("--handled", [PR_STATUS, SETTLE]),
     ]),
+    Contract("approval-wait",
+             "a green PR that waits on a person's approval is reported as that: pr-status prints whose and how many, monitor's settle and "
+             "merge references name the lines, the orchestrator reads it as 사람 필요, and a draft waits on none so --draft can still flip it", [
+        ('"approval — ', [PR_STATUS], "a watch with nothing left but an approval has to end"),
+        ("승인 대기", [PR_STATUS, SETTLE, ORCHESTRATOR]),
+        ("(CODEOWNERS)", [PR_STATUS, ORCHESTRATOR]),
+        ("review required (", [PR_STATUS, MERGE]),
+        ("no approval still due", [MERGE]),
+        ("required_pull_request_reviews", [PR_STATUS], "the required count; rulesets are read too"),
+        ('if snap["draft"] or (', [PR_STATUS]),
+        ("approval-required-settles", ["plugins/base/evals/README.md"]),
+    ]),
     Contract("ship-prep-lines", "branch-pr acts on ship-prep's output lines and flags: a line the skill or a reference names is one the script prints", [
         ('"ask: ', [SHIP_PREP]),
         ("`ask:` lines", [BRANCH_PR]),
