@@ -44,6 +44,8 @@ CHECK_GRACE_SECONDS = 120   # checks can take a minute to register after a push
 # a change to these alone re-verifies nothing; `license.py` and `page.mdx` are code
 WORDING_FILES = (r".*\.(md|rst|adoc)", r"(LICENSE|CHANGELOG|NOTICE)(\.txt)?")
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+# Claude Approvals' check is red while its policy waits on people (the claude-approvals skill's explain.md)
+APPROVALS_CHECK, HUMAN_REVIEW = "Claude Approvals", "Waiting on human review"
 # GitHub's own annotation for a job the account couldn't start; a test named "billing" must not match
 NOT_STARTED = re.compile(r"not started because|recent account payments have failed|spending limit needs to be increased", re.I)
 NOT_A_TRY_LINK = re.compile(r"^https?://docs\.|badge|\.(svg|png|jpe?g|gif)(\?|$)", re.I)
@@ -62,7 +64,7 @@ query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$r
   pullRequest(number:$number){
     number url state isDraft mergeable mergeStateStatus reviewDecision baseRefName headRefName headRefOid
     commits(last:1){nodes{commit{author{user{login}} statusCheckRollup{contexts(first:100){nodes{__typename
-      ... on CheckRun{name status conclusion startedAt detailsUrl databaseId isRequired(pullRequestNumber:$number) checkSuite{app{slug}}}
+      ... on CheckRun{name title status conclusion startedAt detailsUrl databaseId isRequired(pullRequestNumber:$number) checkSuite{app{slug}}}
       ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}}
     reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:50){nodes{databaseId author{login __typename} authorAssociation body createdAt url}}}}
     reviews(last:50){nodes{databaseId author{login __typename} authorAssociation state body submittedAt commit{oid} url}}
@@ -114,8 +116,13 @@ def bot_key(name):
     return re.sub(r"\[bot\]$", "", name or "").lower()
 
 
+def app_slug(node):
+    return bot_key(((node.get("checkSuite") or {}).get("app") or {}).get("slug"))
+
+
 def check_kind(node, annotations=()):
-    """passed / failed / pending / skipped / not-started (a job the account couldn't start: not a diff failure)."""
+    """passed / failed / pending / skipped / not-started (a job the account couldn't start: not a diff failure) /
+    approvals (a red "Claude Approvals" check: a person's call, not the diff's)."""
     if node.get("__typename") == "StatusContext":
         state = node.get("state")
         return {"SUCCESS": "passed", "PENDING": "pending", "EXPECTED": "pending"}.get(state, "failed")
@@ -126,6 +133,8 @@ def check_kind(node, annotations=()):
         return "passed"
     if conclusion == "SKIPPED":
         return "skipped"
+    if node.get("name") == APPROVALS_CHECK and app_slug(node) not in ("", "github-actions"):  # an unreadable app stays `failed`
+        return "approvals"
     if any(NOT_STARTED.search(a or "") for a in annotations):
         return "not-started"
     return "failed"
@@ -144,11 +153,13 @@ def normalize(data, me, annotations=lambda check_id: (), polls=(), required=lamb
     rollup = ((commit.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []
     checks = []
     for n in rollup:
-        run = n.get("__typename") != "StatusContext"
-        notes = annotations(n["databaseId"]) if run and n.get("status") == "COMPLETED" and n.get("conclusion") not in ("SUCCESS", "NEUTRAL", "SKIPPED") and n.get("databaseId") else ()
-        checks.append({"name": n.get("name") or n.get("context"), "kind": check_kind(n, notes), "required": bool(n.get("isRequired")),
+        kind = check_kind(n)
+        if kind == "failed" and n.get("__typename") != "StatusContext" and n.get("databaseId"):
+            kind = check_kind(n, annotations(n["databaseId"]))
+        checks.append({"name": n.get("name") or n.get("context"), "kind": kind, "required": bool(n.get("isRequired")),
+                       "title": (n.get("title") or "").strip(),
                        "url": n.get("detailsUrl") or n.get("targetUrl") or "", "id": n.get("databaseId"),
-                       "app": bot_key(((n.get("checkSuite") or {}).get("app") or {}).get("slug")), "started": epoch(n.get("startedAt"))})
+                       "app": app_slug(n), "started": epoch(n.get("startedAt"))})
 
     threads = pr["reviewThreads"]["nodes"] or []
     thread_comments = [c for t in threads for c in t["comments"]["nodes"]]
@@ -299,17 +310,23 @@ def mark_held(items, drafts):
             i["held" if d.get("last") == i["last"] else "redraft"] = d
 
 
+def approvals_policy(snap):  # a draft isn't evaluated, so its red check is stale and must not hold `--draft`'s flip
+    return [] if snap["draft"] else [c for c in by_kind(snap, "approvals") if not c["title"].startswith(HUMAN_REVIEW)]
+
+
 def approval_wait(snap):
     need, given = snap["required_approvals"], snap["approvals"]
-    # only while GitHub blocks the merge: REVIEW_REQUIRED with CLEAN is a viewer who may bypass the review
-    if snap["draft"] or (snap["merge_state"] != "BLOCKED") or (snap["review_decision"] != "REVIEW_REQUIRED" and not (need and given < need)):
+    waiting = next((c for c in by_kind(snap, "approvals") if c["title"].startswith(HUMAN_REVIEW)), None)  # GitHub may require no review at all, or not the check
+    # GitHub's own wait counts only while it blocks the merge: REVIEW_REQUIRED with CLEAN is a viewer who may bypass the review
+    if snap["draft"] or (not waiting and (snap["merge_state"] != "BLOCKED"
+                                          or (snap["review_decision"] != "REVIEW_REQUIRED" and not (need and given < need)))):
         return None
-    return {"need": need, "given": given, "who": snap["reviewers"]}
+    return {"need": need, "given": given, "who": snap["reviewers"], "check": f"; {APPROVALS_CHECK}: {waiting['title']}" if waiting else ""}
 
 
 def approval_text(wait):
     count = f"{wait['given']}/{wait['need']}" if wait["need"] else f"{wait['given']}개"
-    return f"승인 {count} (승인 대기: {', '.join(wait['who']) or '요청된 리뷰어 없음'})"
+    return f"승인 {count} (승인 대기: {', '.join(wait['who']) or '요청된 리뷰어 없음'}{wait['check']})"
 
 
 def decide(snap, first_seen, now, pushed=0, settle_rules=True, replies="post", post_held=False):
@@ -358,6 +375,8 @@ def decide(snap, first_seen, now, pushed=0, settle_rules=True, replies="post", p
     approval = approval_wait(snap)
     if approval:
         human.append(approval_text(approval))
+    policy = approvals_policy(snap)
+    human += [f"{APPROVALS_CHECK}: {c['title'] or '빨강'}" for c in policy]
     if settle_rules and pushed >= MAX_PUSHED_HEADS and (conflict or open_items or failed):
         nxt.insert(0, f"limit — {MAX_PUSHED_HEADS} fixes already pushed in this watch: push no more; report what is still open")
 
@@ -379,6 +398,10 @@ def decide(snap, first_seen, now, pushed=0, settle_rules=True, replies="post", p
             if approval:
                 nxt.append(f"approval — the merge waits on a person's approval: {approval_text(approval)}; nothing to fix or push here, "
                            "and requesting reviewers is not this run's job (--until-settled: report the settle line; --merge: don't merge)")
+            if policy:
+                nxt.append(f"policy — the {APPROVALS_CHECK} check is red: " + "; ".join(c["title"] or "no title" for c in policy)
+                           + "; its summary says what clears it (a person, a rerun, a push, or a policy edit), none of them this run's call"
+                           " (--until-settled: report the settle line; --merge: don't merge)")
             if held:
                 ask = sum(1 for i in held if not i["held"].get("reply"))
                 nxt.append(f"held — {len(held)} reply draft(s) wait on the user: nothing more to do here until they reply or a new "
@@ -415,7 +438,9 @@ def merge_gate(snap, verdict, verified_locally=False):
     approval = approval_wait(snap)
     if approval:
         count = f"{approval['given']} of {approval['need']} approvals" if approval["need"] else f"{approval['given']} approvals so far"
-        reasons.append(f"review required ({count}; waiting on: {', '.join(approval['who']) or 'no reviewer requested'})")
+        reasons.append(f"review required ({count}; waiting on: {', '.join(approval['who']) or 'no reviewer requested'}"
+                       f"{approval['check']})")
+    reasons += [f"{APPROVALS_CHECK} is red: {c['title'] or 'no title'}" for c in approvals_policy(snap)]
     if unstarted and not verified_locally:
         reasons.append("checks never started (account) and no `verified-locally`: " + ", ".join(c["name"] for c in unstarted))
     state = snap["merge_state"]  # UNSTABLE is fine only for checks that never started, which `verified_locally` already vouched for
@@ -434,7 +459,7 @@ def merge_method(allowed, recent_subjects):
 
 
 def render(snap, verdict, new_links=()):
-    kinds = {k: len(by_kind(snap, k)) for k in ("passed", "failed", "pending", "skipped", "not-started")}
+    kinds = {k: len(by_kind(snap, k)) for k in ("passed", "failed", "approvals", "pending", "skipped", "not-started")}
     out = [f"pr: #{snap['number']} {snap['state']}{' draft' if snap['draft'] else ''} @{snap['head'][:7]} · merge state {snap['merge_state']}"
            f" · {snap['url']}",
            "checks: " + (", ".join(f"{n} {k}" for k, n in kinds.items() if n) or "none")]
@@ -442,6 +467,9 @@ def render(snap, verdict, new_links=()):
         if c["kind"] == "failed":
             log = f" · gh run view --job {c['id']} --log-failed" if c["id"] and "/actions/" in c["url"] else f" · {c['url']}"
             out.append(f"  failed: {c['name']}{' (required)' if c['required'] else ''}{log}")
+        elif c["kind"] == "approvals":
+            out.append(f"  red: {c['name']}{' (required)' if c['required'] else ''} — {c['title'] or 'no title'}; a person's call, not a CI failure"
+                       f" · {c['url']}")
         elif c["kind"] == "not-started":
             out.append(f"  not started (account, not the diff): {c['name']}")
     open_items = [i for i in snap["items"] if not i.get("held")]

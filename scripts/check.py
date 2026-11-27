@@ -353,6 +353,14 @@ CONTRACTS = [
         ('if snap["draft"] or (', [PR_STATUS]),
         ("approval-required-settles", ["plugins/base/evals/README.md"]),
     ]),
+    Contract("claude-approvals-check",
+             "a red \"Claude Approvals\" check is a policy waiting on people (the claude-approvals skill), not a CI failure: pr-status names it "
+             "under the approval wait or `next: policy` (a line that says what to do itself), never `ci`, and settle and the orchestrator read the same words", [
+        ('APPROVALS_CHECK, HUMAN_REVIEW = "Claude Approvals", "Waiting on human review"', [PR_STATUS]),
+        ('"policy — ', [PR_STATUS]),
+        ("; Claude Approvals: <title>", [SETTLE, ORCHESTRATOR]),
+        ("class ClaudeApprovalsCheck", ["scripts/test_pr_status.py"]),
+    ]),
     Contract("ship-prep-lines", "branch-pr acts on ship-prep's output lines and flags: a line the skill or a reference names is one the script prints", [
         ('"ask: ', [SHIP_PREP]),
         ("`ask:` lines", [BRANCH_PR]),
