@@ -5,7 +5,7 @@ Usage:
   python3 scripts/refs-watch.py --check    one JSON line: {repo: {changed, sha, locked_sha, new_skills, removed_skills, changed_skills}}
   python3 scripts/refs-watch.py --update   write each repo's current head and SKILL.md list into the lock
 
-It never imports anything: a person (or a gbase:plan run) reads what changed and updates the gap table,
+It never imports anything: a person (or a gbase:plan run) reads what changed, decides what gbase takes,
 then runs --update. See plugins/base/references/pstack-sync.md, "Reference watch".
 A fetch failure prints {"error": …} and exits 1.
 """
@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -42,7 +43,7 @@ def api(path):
 
 
 def fetch(repo, ref):
-    sha = api(f"repos/{repo}/commits/{ref}")["sha"]
+    sha = api(f"repos/{repo}/commits/{urllib.parse.quote(ref, safe='/')}")["sha"]
     tree = api(f"repos/{repo}/git/trees/{sha}?recursive=1")
     if tree.get("truncated"):
         raise WatchError(f"{repo}: tree listing truncated; SKILL.md list would be incomplete")

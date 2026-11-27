@@ -124,8 +124,8 @@ class WatchTest(unittest.TestCase):
         lock = watch.load_lock(Path(__file__).resolve().parent.parent)
         self.assertLessEqual({"addyosmani/agent-skills", "anthropics/skills", "mattpocock/skills", "obra/superpowers"},
                              set(lock["repos"]))
-        for entry in lock["repos"].values():
-            self.assertTrue(entry["sha"] and entry["skills"])
+        for repo, entry in lock["repos"].items():
+            self.assertTrue(entry.get("sha") and entry.get("skills"), f"{repo}: run scripts/refs-watch.py --update")
 
 
 class ApiTest(unittest.TestCase):
