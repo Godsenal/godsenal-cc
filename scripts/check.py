@@ -517,6 +517,13 @@ CONTRACTS = [
         ("fix its description", [TRIGGERS]),
         ("only go up", ["plugins/base/evals/triggers.json", TRIGGERS]),
     ]),
+    Contract("trigger-holdout",
+             "triggers.json splits each skill's prompts into train (for tuning a description) and test (held out); only test is judged, so the rank1 line says how a description does on prompts it wasn't tuned on", [
+        ('"train"', ["plugins/base/evals/triggers.json"]),
+        ('"test"', ["plugins/base/evals/triggers.json"]),
+        ("held-out test", [TRIGGERS, "CLAUDE.md", "plugins/base/evals/README.md"]),
+        ("in both train and test", [TRIGGERS]),
+    ]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore

@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Adversarially reviews the current change for defects — bugs, regressions, security holes, missing handling. Delegates finding to the built-in code-review, has independent skeptic sub-agents try to refute each finding, auto-fixes the clear and local survivors, and reports the rest. Local-only; never posts to GitHub. Use when asked to review a change or find bugs before shipping; also runs inside gbase:go (before the PR) and gbase:monitor (on an open PR)."
+description: "Adversarially reviews the current change for defects — bugs, regressions, security holes, missing handling. Delegates finding to the built-in code-review, has independent skeptic sub-agents try to refute each finding, auto-fixes the clear and local survivors, and reports the rest. Local-only; never posts to GitHub. Use when asked to review a change or find bugs before shipping ('리뷰해 줘', '버그 찾아 줘', '보안 구멍이나 회귀 봐 줘'); also runs inside gbase:go (before the PR) and gbase:monitor (on an open PR)."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent Skill
 ---
 
