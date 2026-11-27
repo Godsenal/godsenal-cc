@@ -19,6 +19,7 @@ sp = load("ship_prep_setting", BASE / "branch-pr/scripts/ship-prep")
 
 REPLIES = ("review replies", "draft")
 PREVIEW = ("before the PR", "preview")
+SIGNOFF = ("commit sign-off", "on")
 
 ON = (
     "- {k}: {v}",
@@ -69,6 +70,37 @@ class SameLineFormat(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.env = Path(tmp.name) / "env.md"
         sp.environment_file = lambda: str(self.env)
+
+    def signoff_pr_status(self, text):
+        return any("sign-off: on" in line for line in ps.commit_rules(str(self.env), text))
+
+    def signoff_ship_prep(self, text):
+        self.env.write_bytes(text.encode("utf-8"))
+        return sp.review_policy().get("signoff", False)
+
+    def test_both_scripts_read_the_sign_off_line_in_the_same_forms(self):
+        for form in ON:
+            with self.subTest(form=form):
+                self.assertTrue(self.signoff_pr_status(fill(form, SIGNOFF)), "pr-status does not read this form")
+                self.assertTrue(self.signoff_ship_prep(fill(form, SIGNOFF)), "ship-prep does not read this form")
+        for form in OFF:
+            with self.subTest(form=form):
+                self.assertFalse(self.signoff_pr_status(fill(form, SIGNOFF)), "pr-status reads this form as on")
+                self.assertFalse(self.signoff_ship_prep(fill(form, SIGNOFF)), "ship-prep reads this form as on")
+
+    def test_the_value_lines_take_the_same_prefixes(self):
+        for form in (f for f in ON if "{k}:\n" not in f):
+            with self.subTest(form=form):
+                self.env.write_bytes((fill(form, ("reviewers", "@alice")) + "\n" + fill(form, ("labels", "needs-review"))
+                                      + "\n" + fill(form, ("PR size", "400 lines"))).encode("utf-8"))
+                policy = sp.review_policy()
+                self.assertEqual([r.lower() for r in policy.get("reviewers", [])], ["alice"])
+                self.assertEqual([l.lower() for l in policy.get("labels", [])], ["needs-review"])
+                self.assertEqual(policy.get("size"), 400)
+        for form in OFF:
+            with self.subTest(form=form):
+                self.env.write_bytes(fill(form, ("PR size", "400 lines")).encode("utf-8"))
+                self.assertIsNone(sp.review_policy().get("size"), "ship-prep reads this form as a size")
 
     def replies(self, text):
         return ps.replies_mode(None, str(self.env), text)[0] == "draft"

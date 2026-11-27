@@ -37,7 +37,7 @@ A parent-folder `CLAUDE.md` doesn't do this: `gbase-run` worktrees live under `$
 | PR body | the repo's PR template | `branch-pr`'s body |
 | PR language | the merged PRs' bodies | Korean, section headings in English (the `## 출력 언어` block) |
 | Ticket or issue reference | the key pattern in branch names, titles, and commits (`ABC-123`, `#123`, `Closes #123`) | none |
-| Labels, reviewers, assignees | settings only; CODEOWNERS assigns reviewers on GitHub's side | none |
+| Labels, reviewers, sign-off, PR size | settings only; the environment file's lines (review-policy.md); CODEOWNERS on GitHub's side | none |
 | Draft or ready | settings only | ready, unless `--draft` was passed |
 | Preview before the PR | settings only; `ship-prep` reads the environment file's `before the PR: preview` line ([environment.md](environment.md)) | none: the PR opens |
 | Replies on the PR | settings only; `pr-status` reads the environment file's `review replies: draft` line ([environment.md](environment.md)) | posted: monitor replies to each comment it handles |

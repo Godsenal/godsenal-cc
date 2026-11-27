@@ -43,6 +43,7 @@ PLAYBOOK_DIR = "plugins/base/skills/poteto-mode/playbooks"
 PR_BODY = "plugins/base/skills/branch-pr/references/pr-body.md"
 LOCAL_MODE = "plugins/base/skills/branch-pr/references/local-mode.md"
 PREVIEW = "plugins/base/skills/branch-pr/references/preview.md"
+REVIEW_POLICY = "plugins/base/skills/branch-pr/references/review-policy.md"
 SHIP_PREP = "plugins/base/skills/branch-pr/scripts/ship-prep"
 SETTLE = "plugins/base/skills/monitor/references/settle.md"
 MERGE = "plugins/base/skills/monitor/references/merge.md"
@@ -63,7 +64,7 @@ RUNNER = "scripts/gbase-run"
 CONVENTIONS = "plugins/base/references/conventions.md"
 ENVIRONMENT = "plugins/base/references/environment.md"
 SETUP_ENV = "plugins/base/skills/setup/references/explore-environment.md"
-TRACKER_FREE = [skill("work"), skill("go"), BRANCH_PR, skill("monitor"), PR_BODY, LOCAL_MODE, PREVIEW, SHIP_PREP, GO_REVIEW, GO_VERIFY, GO_HIGH,
+TRACKER_FREE = [skill("work"), skill("go"), BRANCH_PR, skill("monitor"), PR_BODY, LOCAL_MODE, PREVIEW, REVIEW_POLICY, SHIP_PREP, GO_REVIEW, GO_VERIFY, GO_HIGH,
                 GO_DRAFT_MERGE, GO_ORCH, SETTLE, MERGE, CONFLICTS, COMMENTS, HELD_REPLIES, PR_STATUS]
 TRACKER_NAMES = r"\b(jira|acli|atlassian|linear|asana|trello|youtrack)\b"
 PSTACK_SYNC = "scripts/pstack-sync.py"
@@ -213,6 +214,34 @@ CONTRACTS = [
         ("`preview: <absolute path>`", [ORCHESTRATOR]),
         ("preview_file", [RUNNER, RUNNER_DOC]),
         ("and preview.search(text)", [RUNNER], "unshipped(): a run that stopped at the preview is not resumed to push"),
+    ]),
+    Contract("review-policy",
+             "the environment file's reviewers, labels, sign-off, and PR size lines: ship-prep reads them and sends branch-pr to "
+             "review-policy.md only when one is set, pr-status reads the sign-off line for monitor's fix commits by the same pattern, "
+             "and an orchestrator-owned run reports reviewers and labels for the caller that opens the PR", [
+        ("`review policy:`", [ENVIRONMENT, REVIEW_POLICY]),
+        ('f"review policy: ', [SHIP_PREP]),
+        ("review-policy.md", [ENVIRONMENT, CONVENTIONS, SETUP_ENV, LOCAL_MODE, ORCHESTRATOR, SHIP_PREP]),
+        ("Reviewers:", [ENVIRONMENT, REVIEW_POLICY, SETUP_ENV]),
+        ("Labels:", [ENVIRONMENT, REVIEW_POLICY, SETUP_ENV]),
+        ("Commit sign-off: on", [ENVIRONMENT, REVIEW_POLICY, SETUP_ENV]),
+        ("PR size:", [ENVIRONMENT, REVIEW_POLICY, SETUP_ENV]),
+        ("commit sign[- ]?off[`*_]*", [SHIP_PREP, PR_STATUS], "both scripts read the line by one pattern (test_shipping_setting.py)"),
+        ('"--reviewer"', [SHIP_PREP]),
+        ('"--label"', [SHIP_PREP]),
+        ("requested: ", [SHIP_PREP, REVIEW_POLICY]),
+        ("git rebase --signoff", [SHIP_PREP, REVIEW_POLICY]),
+        ("`git commit -s`", [PR_STATUS, REVIEW_POLICY], "monitor's fix commits carry the trailer too"),
+        ("never `--no-gpg-sign`", [SHIP_PREP, REVIEW_POLICY], "a commit that fails to sign stops the run"),
+        ("never made with `--no-gpg-sign`", [PR_STATUS], "monitor's fix commits too"),
+        ("(크기)", [SHIP_PREP, REVIEW_POLICY], "Review focus item 1 that proposes the split; check and open look for it"),
+        ("`reviewers:`", [LOCAL_MODE, REVIEW_POLICY, RUNNER_DOC]),
+        ("`reviewers: <login or org/team, …>`", [ORCHESTRATOR]),
+        ('f"{k}: {', [SHIP_PREP], "start --local prints the reviewers: and labels: lines"),
+        ('"reviewers"', [RUNNER]),
+        ('"labels"', [RUNNER]),
+        ("review-policy-adds-reviewers", ["plugins/base/evals/README.md"]),
+        ("review-policy-off-reads-nothing", ["plugins/base/evals/README.md"]),
     ]),
     Contract("held-replies",
              "where the user posts their own replies to reviewers, pr-status finds the setting, tells monitor to post nothing, and remembers "

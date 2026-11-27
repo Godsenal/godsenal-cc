@@ -61,6 +61,14 @@ LEAD_LINES = 45  # body lines before ## Change outline: one screen
 ENVIRONMENT_DOC = Path(__file__).resolve().parents[3] / "references" / "environment.md"
 PREVIEW_DOC = Path(__file__).resolve().parents[1] / "references" / "preview.md"
 PREVIEW_SETTING = r"^[\s>*_-]*`?before the PR[`*_]*\s*[:：][\s`*_]*preview\b"
+POLICY_DOC = Path(__file__).resolve().parents[1] / "references" / "review-policy.md"
+SIGNOFF_SETTING = r"^[\s>*_-]*`?commit sign[- ]?off[`*_]*\s*[:：][\s`*_]*on\b"
+SIZE_SETTING = (r"^[\s>*_-]*`?PR size[`*_]*\s*[:：][\s`*_]*(\d[\d,]*)[`*_]*(?:\s*(?:lines?|줄))?[`*_]*"
+                r"[ \t]*(?:(?:[,;]|\s[—–-])[ \t]*(ask)\b[^\n]*|\([^\n]*\)|\.)?[ \t\r]*$")
+SIZE_LINE = r"^[\s>*_-]*`?PR size[`*_]*\s*[:：]"  # a line that names a size: one SIZE_SETTING can't read gets a note
+LIST_SETTING = r"^[\s>*_-]*`?{key}[`*_]*\s*[:：][ \t`*_]*(\S.*)$"
+REVIEWER = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(/[A-Za-z0-9][A-Za-z0-9_.-]*)?"  # a GitHub login, or org/team
+SIZE_ITEM = r"^> 1\. .*\((크기|size)\)"  # Review focus item 1 that proposes the split, when the change is over PR size
 
 
 class Stop(Exception):
@@ -229,16 +237,133 @@ def environment_file():
     return git("config", "--get", "--type=path", "gbase.conventions", check=False)  # --type=path expands a leading ~
 
 
-def preview_setting():
-    """(the environment file's path when it asks for a preview before the PR, else ''; the path when it is set but unreadable)."""
+def environment_text():
+    """(the environment file's path, its text; None when it is set but can't be read). ('', '') when none is set."""
     conv = environment_file()
     if not conv:
         return "", ""
     try:
-        text = Path(conv).expanduser().read_text(encoding="utf-8")
+        return conv, Path(conv).expanduser().read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
+        return conv, None
+
+
+def preview_setting():
+    """(the environment file's path when it asks for a preview before the PR, else ''; the path when it is set but unreadable)."""
+    conv, text = environment_text()
+    if text is None:
         return "", conv
     return (conv if re.search(PREVIEW_SETTING, text, re.I | re.M) else ""), ""
+
+
+def listed(text, key):
+    """The items of a `<key>: a, b` line, its backticks, quotes, and (notes) dropped; [] when there is none or it says none."""
+    m = re.search(LIST_SETTING.format(key=key), text, re.I | re.M)
+    value = re.sub(r"\([^)]*\)", "", m.group(1)) if m else ""
+    items = [i.strip(" `'\"*_.") for i in value.split(",")]
+    items = [i for i in items if i]
+    return [] if [i.lower() for i in items] in ([], ["none"], ["off"], ["-"], ["없음"]) else items
+
+
+def review_policy():
+    """What the environment file asks of every PR here (review-policy.md): {} when it is unset, unreadable, or holds none of it.
+    Keys: reviewers, labels (lists), bad (items that are not a login or org/team), signoff (bool), size (int), size_ask (bool)."""
+    conv, text = environment_text()
+    if not text:
+        return {}
+    policy = {}
+    items = listed(text, "reviewers")
+    people = [r for item in items for r in item.split()]
+    bad = [r for r in people if not re.fullmatch("@?" + REVIEWER, r)]
+    # words of a sentence each look like a login ("CODEOWNERS assigns them", "@alice and @bob"): a list item is one word,
+    # or every word of it names someone with @ or /
+    bad = bad or [i for i in items if len(i.split()) > 1 and not all(re.match(r"@|\S*/", w) for w in i.split())]
+    if bad:  # prose ("CODEOWNERS가 배정"), not a list: asking GitHub for it would fail after the push
+        policy["bad"] = bad
+    elif people:
+        policy["reviewers"] = [r.lstrip("@") for r in people]
+    labels = listed(text, "labels")
+    prose = [l for l in labels if len(l.split()) > 3]  # a label is a name of a word or three, not "set by the triage bot"
+    if prose:
+        policy["bad_labels"] = prose
+    elif labels:
+        policy["labels"] = labels
+    if re.search(SIGNOFF_SETTING, text, re.I | re.M):
+        policy["signoff"] = True
+    size = re.search(SIZE_SETTING, text, re.I | re.M)
+    limit = int(size.group(1).replace(",", "")) if size else 0
+    if limit:
+        policy["size"], policy["size_ask"] = limit, bool(size.group(2))
+    elif not size and re.search(SIZE_LINE, text, re.I | re.M):
+        policy["size_bad"] = True
+    return {"file": conv, **policy} if policy else {}
+
+
+def policy_line(policy):
+    parts = [f"{k} {', '.join(policy[k])}" for k in ("reviewers", "labels") if policy.get(k)]
+    if policy.get("signoff"):
+        parts.append("sign-off on")
+    if policy.get("size"):
+        parts.append(f"PR size {policy['size']} lines" + (", ask" if policy["size_ask"] else ""))
+    return f"review policy: {' · '.join(parts)} — from {policy['file']}; read {POLICY_DOC} before the first commit" if parts else None
+
+
+def gpgsign():
+    return git("config", "--type=bool", "--get", "commit.gpgsign", check=False) == "true"
+
+
+def diff_size(base, entries=()):
+    """Lines added plus removed between the base and the tree (untracked files counted whole); binary files count 0."""
+    total = 0
+    for row in git("diff", "--numstat", base).splitlines():
+        added, removed = row.split("\t")[:2]
+        total += int(added) + int(removed) if added.isdigit() and removed.isdigit() else 0
+    for code, path in entries:
+        if code == "??":
+            try:
+                total += len(Path(path).read_text(encoding="utf-8").splitlines())
+            except (OSError, UnicodeDecodeError):
+                pass
+    return total
+
+
+def unpushed(base, *flags):
+    """Commits of base..HEAD no remote has: the only ones a sign-off or signature can still be added to without a force-push."""
+    return [c for c in git("rev-list", "--reverse", *flags, f"{base}..HEAD", "--not", "--remotes").split("\n") if c] if base else []
+
+
+def rewrite_hint(command, first):
+    """How to fix the commits from `first` on, or, with a merge among them, why not by a rebase: one would flatten it and
+    write the commits it brought in again, base commits included. A merge below `first` isn't rewritten, so it doesn't count."""
+    merges = [c for c in git("rev-list", "--merges", f"{first}^..HEAD", check=False).split("\n") if c]
+    if merges:
+        return (f"a merge commit ({merges[0][:7]}) is among them, so no rebase: redo the branch's own commits on the base without it "
+                "or ask the person (review-policy.md)")
+    return f"`{command} {first[:7]}^` rewrites only these unpushed commits (review-policy.md)"
+
+
+def commit_problems(policy, base):
+    """Error lines for unpushed commits the policy or `commit.gpgsign` wants and they lack."""
+    commits, errors = unpushed(base, "--no-merges"), []  # a merge commit needs no trailer: DCO checks skip it
+    if policy.get("signoff"):
+        # DCO checks the author's own sign-off, not any trailer
+        missing = [c for c in commits if not re.search(r"^Signed-off-by: " + re.escape(git("log", "-1", "--format=%an <%ae>", c)) + r"\s*$",
+                                                      git("log", "-1", "--format=%B", c), re.M)]
+        if missing:
+            errors.append(f"{policy['file']} says \"commit sign-off: on\" and {len(missing)} commit(s) have no `Signed-off-by:` trailer: "
+                          + ", ".join(c[:7] for c in missing[:10])
+                          + " — add it: " + rewrite_hint("git rebase --signoff", missing[0])
+                          + ("; a commit someone else wrote needs its author's own sign-off, which only they can give: ask them"
+                             if any(git("log", "-1", "--format=%ae", c) != git("log", "-1", "--format=%ce", c) for c in missing) else ""))
+    if gpgsign():
+        # the header, not %G?: an SSH signature reads as N when no gpg.ssh.allowedSignersFile is set
+        # a merge commit too: branch protection that requires signed commits checks every commit the push brings
+        unsigned = [c for c in unpushed(base) if not re.search(r"^gpgsig(-sha256)? ", git("cat-file", "commit", c), re.M)]
+        if unsigned:
+            errors.append(f"commit.gpgsign is on and {len(unsigned)} commit(s) carry no signature: " + ", ".join(c[:7] for c in unsigned[:10])
+                          + " — signing failed or was skipped. Never `--no-gpg-sign`: say what failed, fix the signing setup, then re-sign them: "
+                          + rewrite_hint("git rebase --exec 'git commit --amend --no-edit -S'", unsigned[0]))
+    return errors
 
 
 def gbase_dir():
@@ -398,6 +523,28 @@ def cmd_start(args):
     if conv:
         out.append(f"environment: {conv} — when this change came from a ticket (the request or the branch names one), "
                    f"read \"Shipping it\" in {ENVIRONMENT_DOC} before the PR draft")
+    policy = review_policy()
+    if line := policy_line(policy):
+        out.append(line)
+    if policy.get("size_bad"):
+        out.append(f"note: the `PR size:` line of {conv} holds no number of lines this reads (`PR size: 400 lines`) — no size is checked; "
+                   "say so in the report")
+    if policy.get("bad_labels"):
+        out.append(f"note: the `Labels:` line of {conv} reads as a sentence ({policy['bad_labels'][0]}), not label names — no label is added; "
+                   "say so in the report")
+    if policy.get("bad"):
+        out.append(f"note: the `Reviewers:` line of {conv} is not a list of logins or org/teams ({', '.join(policy['bad'][:5])}) — "
+                   "no reviewer is requested; say so in the report")
+    if local:  # the caller opens the PR, so it is the one that asks for these: they go in the report as they are
+        out += [f"{k}: {', '.join(policy[k])}" for k in ("reviewers", "labels") if policy.get(k)]
+    if policy.get("size") and base:
+        size = diff_size(git("merge-base", base, "HEAD", check=False) or base, entries)  # base's own later commits aren't this change
+        if size > policy["size"]:
+            out.append(f"size: {size} lines, over the {policy['size']} of PR size — the draft's Review focus item 1 proposes the split (review-policy.md)")
+            if policy["size_ask"]:
+                ask.append(f"ask: the change is {size} lines, over the {policy['size']} the environment file sets — split it, or open it as one PR?")
+    if gpgsign():
+        out.append("signing: commit.gpgsign is on — a commit that fails to sign stops the run; never `--no-gpg-sign`")
     out.append(compat_line(paths, base or "<base>"))
     out.append(risk_hint(paths))
     state = preview = None
@@ -455,8 +602,9 @@ def unverified_lines(body):
     return found
 
 
-def draft_problems(lines, local=False):
-    """Mechanical rules of branch-pr's body. Returns (errors, warnings)."""
+def draft_problems(lines, local=False, size=None):
+    """Mechanical rules of branch-pr's body; `size` is (lines changed, the PR size limit) when the review policy sets one.
+    Returns (errors, warnings)."""
     errors, warnings = [], []
     if not lines or not lines[0].strip():
         errors.append("line 1 must be the PR title")
@@ -477,6 +625,9 @@ def draft_problems(lines, local=False):
         items = re.findall(r"^> \d+\. ", focus.group(1), re.M)
         if len(items) > MAX_FOCUS_ITEMS:
             errors.append(f"{len(items)} Review focus items (at most {MAX_FOCUS_ITEMS}) — the PR should be split; say so as item 1")
+    if size and size[0] > size[1] and not (focus and re.search(SIZE_ITEM, focus.group(1), re.M)):
+        errors.append(f"the change is {size[0]} lines, over the {size[1]} of PR size — Review focus item 1 proposes how to split it "
+                      "and ends with `(크기)` (review-policy.md)")
     unverified = unverified_lines(body)
     if unverified and not (focus and re.search(CONFIRM_ITEM, focus.group(1), re.M)):
         errors.append(f"{len(unverified)} unverified line(s) (`behavior: skip`, `differs:`) but Review focus has no `(확인)` item — "
@@ -495,12 +646,18 @@ def draft_problems(lines, local=False):
     return errors, warnings
 
 
+def size_limit(policy, base):
+    return (diff_size(f"{base}...HEAD"), policy["size"]) if policy.get("size") and base else None
+
+
 def cmd_check(args):
     local = "--local" in args
     paths = [a for a in args if not a.startswith("--")]
     if len(paths) != 1:
         raise Stop(1, "usage: ship-prep check <draft> [--local]")
-    errors, warnings = draft_problems(read_draft(paths[0]), local)
+    policy, base = review_policy(), default_base()[1]
+    errors, warnings = draft_problems(read_draft(paths[0]), local, size_limit(policy, base))
+    errors += commit_problems(policy, base)  # the one check a local run makes: its caller pushes what this passes
     out = [f"warn: {w}" for w in warnings] + [f"error: {e}" for e in errors]
     print("\n".join(out + (["next: fix the draft and run check again"] if errors else ["draft: ok"])))
     return 1 if errors else 0
@@ -526,13 +683,14 @@ def cmd_preview(args):
     if text is not None and not text.strip():
         raise Stop(1, "error: --write saves the preview text it reads on stdin, and stdin was empty")
     lines = read_draft(paths[0])
-    errors, _ = draft_problems(lines, local=True)  # nothing is uploaded before the PR, so a local image path is fine here
+    policy = review_policy()
+    default, base = default_base()
+    errors = draft_problems(lines, local=True, size=size_limit(policy, base))[0] + commit_problems(policy, base)
     if errors:
         raise Stop(1, [f"error: {e}" for e in errors] + ["next: fix the draft and run preview again"])
     entries = status_paths()
     uncommitted(entries, args, "the preview would describe a PR")
     branch = git("branch", "--show-current")
-    default, base = default_base()
     if not base:
         raise Stop(1, ["error: can't tell which branch the PR goes to — no origin/HEAD, main, or master here",
                        "next: `git remote set-head origin -a` (or fetch the default branch), then run preview again"])
@@ -587,15 +745,16 @@ def cmd_open(args):
     if len(paths) != 1:
         raise Stop(1, "usage: ship-prep open <draft> [--draft] [--partial] [--remote <name>] [--no-preview]")
     lines = read_draft(paths[0])
-    errors, _ = draft_problems(lines)
+    policy = review_policy()
+    default, base = default_base()
+    errors = draft_problems(lines, size=size_limit(policy, base))[0] + commit_problems(policy, base)
     if errors:
-        raise Stop(1, [f"error: {e}" for e in errors] + ["next: fix the draft and run open again"])
+        raise Stop(1, [f"error: {e}" for e in errors] + ["next: fix what it says and run open again; nothing was pushed"])
     entries = status_paths()
     uncommitted(entries, args, "the PR would ship")
     if entries:  # untracked leftovers (caches, scratch files) don't block; deleting them to get past a gate would be worse
         print("note: untracked files stay out of the PR — say so in the report: " + ", ".join(path for _, path in entries[:10]))
     branch = git("branch", "--show-current")
-    default, _ = default_base()
     if not branch or branch == default:
         raise Stop(1, f"error: on {branch or 'a detached HEAD'} — a PR needs its own branch")
     preview_gate(branch, entries, paths[0], args)
@@ -611,8 +770,24 @@ def cmd_open(args):
         forget_preview(branch)
         write_back_line(already_open=True)
         return 0
-    create = run(["gh", "pr", "create", "--title", lines[0].strip(), "--body-file", "-"] + (["--draft"] if draft else []),
-                 check=False, input="\n".join(lines[2:]))
+    base_args = ["gh", "pr", "create", "--title", lines[0].strip(), "--body-file", "-"] + (["--draft"] if draft else [])
+    asked = [a for k, flag in (("reviewers", "--reviewer"), ("labels", "--label")) for v in policy.get(k, []) for a in (flag, v)]
+    create = run(base_args + asked, check=False, input="\n".join(lines[2:]))
+    if create.returncode and asked:  # a login that left, the author, a label not made yet: the PR opens without them, and the report says so
+        print(f"note: GitHub refused the reviewers or labels of {policy['file']} ({(create.stderr.strip().splitlines() or ['no reason given'])[-1]}) — "
+              "the PR opens without what it refused; say so in the report")
+        made = run(["gh", "pr", "view", "--json", "url,state"], check=False)  # gh makes the PR before it asks for reviewers
+        if made.returncode == 0 and json.loads(made.stdout).get("state") == "OPEN":
+            create = subprocess.CompletedProcess(base_args, 0, json.loads(made.stdout)["url"], "")
+        else:
+            # it failed before making the PR: drop one kind at a time, so a missing label doesn't cost the reviewers too
+            parts = [[a for i in range(0, len(asked), 2) if asked[i] == flag for a in asked[i:i + 2]] for flag in ("--reviewer", "--label")]
+            for extra in [p for p in parts if p and p != asked] + [[]]:
+                create = run(base_args + extra, check=False, input="\n".join(lines[2:]))
+                if not create.returncode:
+                    break
+    elif asked:
+        print("requested: " + " · ".join(f"{k} {', '.join(policy[k])}" for k in ("reviewers", "labels") if policy.get(k)))
     if create.returncode:
         raise Stop(1, ["error: gh pr create failed (the branch is pushed)", create.stderr.strip()])
     url = next((l.strip() for l in reversed(create.stdout.splitlines()) if l.strip().startswith("http")), create.stdout.strip())

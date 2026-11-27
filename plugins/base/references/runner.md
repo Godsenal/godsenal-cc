@@ -72,6 +72,7 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `mockup` | `{html, url, screenshots}` from the `mockup` lines (`url` is `null` for `none`), or `null` |
 | `pr_body_file` | the path from `PR 본문 초안:`, else `pr-body.md` if it exists, else `null` |
 | `preview_file` | the path from `preview:` when an agent-owned run stopped before the PR for its owner to read the preview (`ship` then holds its `ship: local` line, `pr_url` is `null`, and a `decisions` entry says how the PR gets opened), else `null` |
+| `reviewers`, `labels` | the lists from the last `reviewers:` / `labels:` lines (an orchestrator-owned run in an environment whose file names them for every PR): ask for them when opening the PR; else `[]` |
 | `reply_drafts_file` | the path from `reply drafts:` when monitor held its replies to review comments as drafts (the environment file's `review replies: draft`): the table of drafts for the person to post. `ship` then holds a `ship: local` line when a comment's fix is committed and not pushed, and a `decisions` entry says what the person does; else `null` |
 | `evidence` | the parsed evidence lines |
 | `questions` | each `{question, recommend, options}` sent to the default `AGENT_ASK_CMD` |
