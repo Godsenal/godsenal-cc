@@ -141,6 +141,29 @@ FAKE_CLAUDE = textwrap.dedent('''\
     finals["subgo"] = finals["agent"]
     final = finals.get(model, "done\\n결정 필요: x → y (추천: z; 다른 선택지: z / w)\\nship: local feat/x @abc1234 — 1 commits, not pushed\\n"
                               "PR 본문 초안: " + os.environ["AGENT_PR_BODY_FILE"] + "\\n  결정 필요: indented, not a report line")
+    if model in ("metered", "metered-old"):
+        sid = "s-" + model
+        print(json.dumps({"type": "system", "subtype": "init", "session_id": sid, "model": model}))
+        print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill", "input": {
+            "skill": "gbase:branch-pr", "args": "Risk: medium — new script; Verification: verify: x → pass; Deferred: none"}}]}}))
+        print(json.dumps({"type": "assistant", "parent_tool_use_id": "toolu_sub", "message": {"content": [{"type": "tool_use",
+            "name": "Skill", "input": {"skill": "gbase:branch-pr", "args": "Risk: high"}}]}}))  # a subagent's call: not the tier go handed
+        for n, (main, every) in enumerate((((1, 10, 100, 5), (2, 20, 300, 9)), ((0, 4, 50, 1), (0, 10, 80, 3)))):
+            usage = {"input_tokens": main[0], "cache_creation_input_tokens": main[1], "cache_read_input_tokens": main[2],
+                     "output_tokens": main[3]}
+            since = {"opus": {"inputTokens": every[0], "cacheCreationInputTokens": every[1] - 5, "cacheReadInputTokens": every[2] - 30,
+                              "outputTokens": every[3] - 2},
+                     "haiku": {"inputTokens": 0, "cacheCreationInputTokens": 5, "cacheReadInputTokens": 30, "outputTokens": 2}}
+            print(json.dumps({"type": "result", "result": "pr: https://github.com/o/r/pull/3\\nsettle: 수렴 @abc1234\\n" if n else "기다립니다",
+                              "num_turns": 2, "total_cost_usd": cost(0.5, sid), "usage": usage,
+                              **({} if model == "metered-old" else {"model_usage_since_last_result": since})}))
+        print(json.dumps({"type": "result", "subtype": "error_during_execution", "is_error": False, "result": ""}))  # counts nothing
+        sys.exit(0)
+    if model == "longbody":
+        print(json.dumps({"type": "result", "result": "PR 본문 초안: /" + "x" * 5000, "total_cost_usd": 0.01}))
+        sys.exit(0)
+    if model == "bodyrisk":
+        open(os.environ["AGENT_PR_BODY_FILE"], "w").write("제목\\n\\n## Review focus\\n**위험도** high (migrations) · one-way\\n")
     sid = "s-" + model
     print(json.dumps({"type": "system", "subtype": "init", "session_id": sid, "model": model}))
     print(json.dumps({"type": "result", "result": final, "total_cost_usd": cost(0.01, sid)}))
@@ -235,6 +258,56 @@ class GbaseRunTest(unittest.TestCase):
         self.assertEqual(status["status"], "done")
         listed = [json.loads(line) for line in self.run_cli("list")[1]]
         self.assertEqual(listed[0]["run_id"], result["run_id"])
+
+    def test_result_records_duration_tokens_and_the_risk_go_handed_branch_pr(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "metered")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["risk"], "medium")
+        self.assertIsInstance(result["duration_s"], int)
+        self.assertGreaterEqual(result["duration_s"], 0)
+        self.assertEqual(result["tokens"], {"fresh": 32, "cache_read": 380, "output": 12,
+                                            "subagent": {"fresh": 17, "cache_read": 230, "output": 6}})
+        self.assertEqual(result["sessions"]["metered"]["tokens"], result["tokens"])
+
+    def test_an_older_claude_without_per_model_usage_records_main_tokens_and_no_split(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
+                              "--model", "metered-old")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual(result["tokens"], {"fresh": 15, "cache_read": 150, "output": 6})
+
+    def test_risk_falls_back_to_the_pr_body_and_is_null_without_one(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--model", "bodyrisk")
+        self.assertEqual(json.loads(Path(out[-1]).read_text())["risk"], "high")
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--model", "haiku")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertIsNone(result["risk"])
+        self.assertIsNone(result["tokens"], "no event carried usage")
+
+    def test_risk_of_reads_only_a_filled_tier_on_the_risk_line(self):
+        for text, want in (("**위험도** medium (x) · two-way", "medium"), ("- Risk: HIGH", "high"),
+                           ("## Risk\nhigh-level plan", None), ("Risk: low-level", None),
+                           ("**위험도** <low / medium / high> (<path>)", None)):
+            self.assertEqual(gbase_run.risk_of(text), want, text)
+
+    def test_an_unreadable_pr_body_path_still_finishes_the_run(self):
+        _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--model", "longbody")
+        result = json.loads(Path(out[-1]).read_text())
+        self.assertEqual((result["status"], result["risk"]), ("done", None))
+
+    def test_a_resume_adds_its_tokens_and_a_later_risk_wins(self):
+        s = {"results": [], "cost_usd": 1.0, "tokens": {"fresh": 1, "cache_read": 2, "output": 3},
+             "main_tokens": {"fresh": 1, "cache_read": 1, "output": 1}, "risk": "low"}
+        gbase_run.merge_session(s, {"results": [], "cost_usd": 1.5, "tokens": {"fresh": 10, "cache_read": 20, "output": 30},
+                                    "main_tokens": {"fresh": 5, "cache_read": 5, "output": 5}, "risk": "high"}, resumed=True)
+        gbase_run.merge_session(s, {"results": [], "cost_usd": 1.6, "tokens": None, "risk": None, "split": False}, resumed=True)
+        self.assertEqual((s["tokens"], s["risk"]), ({"fresh": 11, "cache_read": 22, "output": 33}, "high"))
+        self.assertEqual(gbase_run.tokens_out(s), {"fresh": 11, "cache_read": 22, "output": 33},
+                         "one session without the split leaves the run's subagent count unknown")
+        self.assertEqual(gbase_run.run_tokens([{"fresh": 1, "cache_read": 1, "output": 1,
+                                                "subagent": {"fresh": 0, "cache_read": 1, "output": 0}},
+                                               None, {"fresh": 2, "cache_read": 2, "output": 2}]),
+                         {"fresh": 3, "cache_read": 3, "output": 3})
 
     def test_settle_reports_local_fixes_without_pushing(self):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "settle", "--model", "settle")

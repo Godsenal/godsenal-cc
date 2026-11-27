@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import fnmatch
+import functools
+import importlib.machinery
 import importlib.util
 import json
 import math
@@ -135,6 +137,56 @@ def session_sum(result, field):
     return sum(values) if values else None
 
 
+TOKEN_KEYS = ("fresh", "cache_read", "output")
+RISKS = ("low", "medium", "high")
+
+
+@functools.cache
+def runner():
+    loader = importlib.machinery.SourceFileLoader("gbase_run", str(HERE / "gbase-run"))
+    module = importlib.util.module_from_spec(importlib.util.spec_from_loader("gbase_run", loader))
+    loader.exec_module(module)
+    return module
+
+
+def main_session_tokens(run_dir, result):
+    t = result.get("tokens")
+    if isinstance(t, dict) and all(isinstance(t.get(k), int) for k in TOKEN_KEYS):
+        sub = t.get("subagent") if isinstance(t.get("subagent"), dict) else {}
+        return {k: t[k] - (sub.get(k) or 0) for k in TOKEN_KEYS}
+    return log_tokens(run_dir)
+
+
+def run_risk(run_dir, result):
+    if result.get("risk") in RISKS:
+        return result["risk"]
+    for body in filter(None, (result.get("pr_body_file"), Path(run_dir) / "pr-body.md")):
+        try:
+            return runner().risk_of(Path(body).read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def stats(runs):
+    done = [(d, r) for d, r in runs if r.get("status") == "done"]
+    mins = [m for m in (minutes(r) for _, r in done) if m is not None]
+    turns = [t for t in (session_sum(r, "turns") for _, r in done) if t is not None]
+    costs = [c for c in (session_sum(r, "cost_usd") for _, r in done) if c is not None]
+    tokens = [t for t in (main_session_tokens(d, r) for d, r in done) if t is not None]
+    return {
+        "n": len(runs),
+        "failed": sum(1 for _, r in runs if r.get("status") == "failed"),
+        "done": len(done),
+        "minutes_p50": median(mins), "minutes_p90": nearest_rank(mins, 90),
+        "turns_p50": median(turns),
+        "cost_p50": median(costs), "cost_p90": nearest_rank(costs, 90),
+        "tokens_p50": {k: median([t[k] for t in tokens]) for k in TOKEN_KEYS} if tokens else None,
+        "gaps_rate": sum(1 for _, r in done if r.get("gaps")) / len(done) if done else None,
+        "unverified_rate": sum(1 for _, r in done if r.get("unverified")) / len(done) if done else None,
+    }
+
+
 def trend(runs_dir):
     by_slot = {}
     for path in sorted(Path(runs_dir).glob("*/result.json")):
@@ -147,22 +199,12 @@ def trend(runs_dir):
         by_slot.setdefault(result.get("slot") or "?", []).append((path.parent, result))
     out = {}
     for slot, runs in sorted(by_slot.items()):
-        done = [(d, r) for d, r in runs if r.get("status") == "done"]
-        mins = [m for m in (minutes(r) for _, r in done) if m is not None]
-        turns = [t for t in (session_sum(r, "turns") for _, r in done) if t is not None]
-        costs = [c for c in (session_sum(r, "cost_usd") for _, r in done) if c is not None]
-        tokens = [t for t in (log_tokens(d) for d, _ in done) if t is not None]
-        out[slot] = {
-            "n": len(runs),
-            "failed": sum(1 for _, r in runs if r.get("status") == "failed"),
-            "done": len(done),
-            "minutes_p50": median(mins), "minutes_p90": nearest_rank(mins, 90),
-            "turns_p50": median(turns),
-            "cost_p50": median(costs), "cost_p90": nearest_rank(costs, 90),
-            "tokens_p50": {k: median([t[k] for t in tokens]) for k in ("fresh", "cache_read", "output")} if tokens else None,
-            "gaps_rate": sum(1 for _, r in done if r.get("gaps")) / len(done) if done else None,
-            "unverified_rate": sum(1 for _, r in done if r.get("unverified")) / len(done) if done else None,
-        }
+        out[slot] = stats(runs)
+        tiers = [(run_risk(d, r), (d, r)) for d, r in runs]
+        known = [t for t, _ in tiers if t]
+        if known:
+            out[slot]["risk_known"] = len(known)
+            out[slot]["by_risk"] = {tier: stats([run for t, run in tiers if t == tier]) for tier in RISKS}
     return out
 
 

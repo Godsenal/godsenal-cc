@@ -85,6 +85,9 @@ PREVIEW = re.compile(r"^preview: (/.+)$", re.M)  # branch-pr's preview file: the
 REPLY_DRAFTS = re.compile(r"^reply drafts: (/.+)$", re.M)
 ASKED = re.compile(r"^(reviewers|labels): (.+)$", re.M)  # branch-pr's review policy under an orchestrator owner: the caller asks for them
 SETTLE = re.compile(r"^settle: .*$", re.M)
+RISK_ARG = re.compile(r"\bRisk:\s*(low|medium|high)\b", re.I)
+RISK_LINE = re.compile(r"^[^\w\n]*(?:위험도|risk)[^\w\n<]*(low|medium|high)(?![\w-])", re.I | re.M)
+TOKEN_KEYS = ("fresh", "cache_read", "output")
 PR_URL = re.compile(r"^pr: <?(https?://[^\s<>`]+)", re.M)  # go/branch-pr's `pr: <url>` line
 MOCKUP = re.compile(r"^mockup( url| shots)?: (.+)$", re.M)
 PLAN = re.compile(r"^plan: (.+)$", re.M)  # gbase:plan's plan file
@@ -592,7 +595,7 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
         cmd += ["--max-budget-usd", str(max_budget)]
     info = {"log_path": str(log_path), "results": [], "session_id": None, "model": model, "cost_usd": None,
             "tool_uses": 0, "turns": 0, "is_error": False, "errors": [], "skills": [], "subagent_skills": [],
-            "end_error": None}
+            "end_error": None, "tokens": None, "main_tokens": None, "risk": None}
     with open(log_path, "a" if resume or append else "w", encoding="utf-8") as log:
         # its own process group, so stopping the run also ends the subagents and shells claude started
         proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -620,6 +623,9 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
                         if block.get("name") == "Skill" and skill:
                             # go, branch-pr and monitor run polish, review, compat-check and unslop in an Agent
                             info["subagent_skills" if event.get("parent_tool_use_id") else "skills"].append(skill)
+                            risk = skill == "gbase:branch-pr" and not event.get("parent_tool_use_id") and RISK_ARG.search(str((block.get("input") or {}).get("args") or ""))
+                            if risk:
+                                info["risk"] = risk.group(1).lower()
             elif event.get("type") == "system" and event.get("subtype") == "init":
                 info["session_id"], info["model"] = event.get("session_id"), event.get("model")
             elif event.get("type") == "result":
@@ -630,6 +636,7 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
                     info["cost_usd"] = event["total_cost_usd"]
                 info["is_error"] = info["is_error"] or bool(event.get("is_error"))
                 info["turns"] += event.get("num_turns") or 0
+                add_tokens(info, event)
                 # what the last turn ended on: a later turn (a background task finishing) can hit a usage limit
                 # after the first one ended fine (runs 20261116-070329-work-e7bca2 and -070417-work-d959d4)
                 info["end_error"] = "\n".join([str(event.get("result") or "")] + [
@@ -639,6 +646,52 @@ def run_claude(prompt, cwd, env, model, log_path, resume=None, append=False, max
                 info["errors"] += [str(event[k]) for k in ("api_error", "error") if event.get(k)]
         info["exit_code"] = proc.wait()
     return info
+
+
+def add_tokens(info, event):
+    def count(fresh, cache_read, output):
+        return {"fresh": fresh, "cache_read": cache_read, "output": output}
+    usage = event.get("usage") if isinstance(event.get("usage"), dict) else None
+    since = event.get("model_usage_since_last_result")
+    main = usage and count((usage.get("input_tokens") or 0) + (usage.get("cache_creation_input_tokens") or 0),
+                           usage.get("cache_read_input_tokens") or 0, usage.get("output_tokens") or 0)
+    if isinstance(since, dict):
+        models = [m for m in since.values() if isinstance(m, dict)]
+        every = count(sum((m.get("inputTokens") or 0) + (m.get("cacheCreationInputTokens") or 0) for m in models),
+                      sum(m.get("cacheReadInputTokens") or 0 for m in models), sum(m.get("outputTokens") or 0 for m in models))
+    elif main is None:
+        return
+    else:
+        every = main
+        info["split"] = False
+    info["tokens"] = sum_tokens(info.get("tokens"), every)
+    info["main_tokens"] = sum_tokens(info.get("main_tokens"), main or count(0, 0, 0))
+
+
+def sum_tokens(a, b):
+    return {k: a[k] + b[k] for k in TOKEN_KEYS} if a and b else a or b
+
+
+def tokens_out(s):
+    total, main = s.get("tokens"), s.get("main_tokens")
+    if not total or s.get("split") is False:
+        return total
+    return {**total, "subagent": {k: max(0, total[k] - main[k]) for k in TOKEN_KEYS}}
+
+
+def run_tokens(per_session):
+    counted = [t for t in per_session if t]
+    if not counted:
+        return None
+    total = {k: sum(t[k] for t in counted) for k in TOKEN_KEYS}
+    if all("subagent" in t for t in counted):
+        total["subagent"] = {k: sum(t["subagent"][k] for t in counted) for k in TOKEN_KEYS}
+    return total
+
+
+def risk_of(text):
+    m = RISK_LINE.search(text or "")
+    return m.group(1).lower() if m else None
 
 
 def leg(info, account, how):
@@ -668,7 +721,11 @@ def merge_session(s, more, resumed):
              cost_usd=total,
              tool_uses=s.get("tool_uses", 0) + more.get("tool_uses", 0), turns=s.get("turns", 0) + more.get("turns", 0),
              exit_code=more.get("exit_code"), session_id=more.get("session_id") or s.get("session_id"),
-             end_error=more.get("end_error"))
+             end_error=more.get("end_error"), tokens=sum_tokens(s.get("tokens"), more.get("tokens")),
+             main_tokens=sum_tokens(s.get("main_tokens"), more.get("main_tokens")),
+             risk=more.get("risk") or s.get("risk"))
+    if more.get("split") is False:
+        s["split"] = False
     if more.get("capped"):
         s["capped"] = more["capped"]
     return None if own is None else total - (before or 0)
@@ -1253,10 +1310,13 @@ def cmd_run(argv):
         own = {m: [*invoked, *s.get("skills", [])] for m, s in sessions.items()}  # per session, for ship_gaps
         skills = list(dict.fromkeys([*invoked, *(k for s in sessions.values() for k in s.get("skills", []))]))
         subagent_skills = list(dict.fromkeys(k for s in sessions.values() for k in s.get("subagent_skills", [])))
+        risk = next((s["risk"] for s in sessions.values() if s.get("risk")), None)
         for s in sessions.values():
+            s["tokens"] = tokens_out(s)
             for k in ("errors", "skills", "subagent_skills", "is_error", "capped", "end_error", "usage_limited",
-                      "cost_base"):
+                      "cost_base", "main_tokens", "split", "risk"):
                 s.pop(k, None)
+        tokens = run_tokens([s["tokens"] for s in sessions.values()])
         results = {m: s.pop("results") for m, s in sessions.items()}
         finals = {m: final_text(texts) for m, texts in results.items()}
         for m, text in finals.items():
@@ -1291,9 +1351,21 @@ def cmd_run(argv):
         warnings = [] if accounts.checked else [
             f"계정 목록 없음({NO_ACCOUNTS}): 계정 전환·preflight 없이 default로 실행함. "
             "`gbase-run doctor`로 확인"]
+        finished = now()
+        duration = int((datetime.strptime(finished, "%Y-%m-%dT%H:%M:%S%z")
+                        - datetime.strptime(result["started_at"], "%Y-%m-%dT%H:%M:%S%z")).total_seconds())
+        pr_body_file = pr_line or (str(pr_draft) if pr_draft.exists() else None)
+        if not risk and pr_body_file:
+            try:
+                risk = risk_of(Path(pr_body_file).read_text(encoding="utf-8", errors="replace"))
+            except (OSError, ValueError):
+                risk = None
         result.update({
             "status": status,
-            "finished_at": now(),
+            "finished_at": finished,
+            "duration_s": duration,
+            "tokens": tokens,
+            "risk": risk,
             "exit_code": exit_code,
             # a --dir folder inside some git tree isn't that repo's run
             "branch": branch,
@@ -1309,7 +1381,7 @@ def cmd_run(argv):
             "decisions": decisions,
             "questions": read_jsonl(run_dir / "questions.jsonl"),
             "ship": next((r["ship"] for r in parsed if r["ship"]), None),
-            "pr_body_file": pr_line or (str(pr_draft) if pr_draft.exists() else None),
+            "pr_body_file": pr_body_file,
             "preview_file": next((r["preview_file"] for r in parsed if r["preview_file"]), None),
             "reply_drafts_file": next((r["reply_drafts_file"] for r in parsed if r["reply_drafts_file"]), None),
             "reviewers": next((r["reviewers"] for r in reversed(parsed) if r.get("reviewers")), []),  # the last session's

@@ -74,6 +74,34 @@ class Runs(unittest.TestCase):
         self.assertIsNone(t["review"]["tokens_p50"])
 
 
+    def test_by_risk_reads_result_json_first_then_the_pr_body(self):
+        common = {"slot": "work", "status": "done", "started_at": "2026-11-01T10:00:00+0900"}
+        self.run_dir("new", {**common, "finished_at": "2026-11-01T10:10:00+0900", "risk": "high",
+                             "tokens": {"fresh": 30, "cache_read": 300, "output": 3,
+                                        "subagent": {"fresh": 10, "cache_read": 100, "output": 1}}},
+                     {"log.jsonl": [result_event(9, 9, 9, 9, 1.0)]})
+        old = self.run_dir("old", {**common, "finished_at": "2026-11-01T10:20:00+0900"},
+                           {"log.jsonl": [result_event(1, 1, 10, 1, 1.0)]})
+        (old / "pr-body.md").write_text("제목\n\n**위험도** low (docs) · two-way\n", encoding="utf-8")
+        elsewhere = self.root / "elsewhere.md"
+        elsewhere.write_text("**위험도** medium (x)\n", encoding="utf-8")
+        self.run_dir("named", {**common, "finished_at": "2026-11-01T10:40:00+0900", "pr_body_file": str(elsewhere)})
+        self.run_dir("unknown", {**common, "finished_at": "2026-11-01T10:30:00+0900",
+                                 "pr_body_file": str(self.root / "gone.md")})
+        self.run_dir("review", {**common, "slot": "review", "finished_at": "2026-11-01T10:01:00+0900"})
+
+        t = bl.trend(self.root)
+        work = t["work"]
+        self.assertEqual((work["n"], work["risk_known"]), (4, 3))
+        self.assertEqual((work["by_risk"]["high"]["n"], work["by_risk"]["high"]["minutes_p50"]), (1, 10.0))
+        self.assertEqual(work["by_risk"]["high"]["tokens_p50"], {"fresh": 20, "cache_read": 200, "output": 2},
+                         "the main session's tokens, as the log counts them for old runs")
+        self.assertEqual((work["by_risk"]["low"]["n"], work["by_risk"]["low"]["tokens_p50"]),
+                         (1, {"fresh": 2, "cache_read": 10, "output": 1}))
+        self.assertEqual(work["by_risk"]["medium"]["n"], 1, "result.json's pr_body_file, as gbase-run reads it")
+        self.assertNotIn("by_risk", t["review"], "a slot with no tier anywhere has no by_risk")
+
+
 class Eval(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()

@@ -49,6 +49,9 @@ Run directory `$GBASE_HOME/runs/<run-id>/` (`GBASE_HOME` defaults to `~/.gbase`)
 | `status` | `running` until the runner finishes, then `done` or `failed`; `status` reports `dead` for a `running` file whose runner process is gone, or whose pid now belongs to a process that started after the run |
 | `pid`, `started_at`, `finished_at`, `run_dir`, `prompt_path`, `log_path` | bookkeeping |
 | `exit_code` | the highest exit code of the claude sessions |
+| `duration_s` | `finished_at` − `started_at` in whole seconds. Absent before 1.66.0 |
+| `risk` | `low`, `medium`, or `high`: the `Risk:` tier in the args of the session's last `gbase:branch-pr` call (what `go` hands it), else the risk line (`**위험도** <tier>`) of the PR body file; `null` with neither. Absent before 1.66.0 |
+| `tokens` | `{fresh, cache_read, output}` over every session, account, resume, and wrap-up (`fresh` is input plus cache creation), summed over the `result` events, each of which counts the tokens since the one before: `model_usage_since_last_result` for every model, subagents included. `subagent` is the same three minus the main session's `usage` when every event carried both; an older claude without the per-model field counts the main session only and has no `subagent`. `null` when no event carried usage; per session in `sessions.<model>.tokens` too. Absent before 1.66.0 |
 | `branch`, `head_sha` | of `cwd` after the run |
 | `base` | `{ref, ahead, behind}`: commits of `cwd`'s `HEAD` after the run not in `ref` and the other way round, or `null` with no base (a `--dir` run, or a detached `HEAD` in a repo without `origin`); before pushing, check `ahead` against the commit count of the `ship:` line |
 | `landed` | orchestrator-owned runs in a repo without `origin`: `{ref, contains_head}`, whether `ref` (the base branch) contains the run's head; `land` sets it to `{ref, contains_head: true, sha, method}`. `null` otherwise |
