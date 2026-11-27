@@ -68,6 +68,7 @@ TRACKER_FREE = [skill("work"), skill("go"), BRANCH_PR, skill("monitor"), PR_BODY
 TRACKER_NAMES = r"\b(jira|acli|atlassian|linear|asana|trello|youtrack)\b"
 PSTACK_SYNC = "scripts/pstack-sync.py"
 PSTACK_DOC = "plugins/base/references/pstack-sync.md"
+REFS_WATCH = "scripts/refs-watch.py"
 PSTACK_ADAPTER = "plugins/base/references/pstack-adapter.md"
 RUNNER_DOC = "plugins/base/references/runner.md"  # the runner's usage and result.json, split out of orchestrator.md
 
@@ -467,6 +468,12 @@ CONTRACTS = [
         ("new_upstream", [PSTACK_SYNC, PSTACK_DOC]),
         ("scripts_changed", [PSTACK_SYNC, PSTACK_DOC]),
         ("references/pstack-adapter.md", [PSTACK_SYNC, PSTACK_DOC]),
+    ]),
+    Contract("refs-watch", "a routine that runs refs-watch --check parses its per-repo fields as the doc names them", [
+        ("new_skills", [REFS_WATCH, PSTACK_DOC]),
+        ("removed_skills", [REFS_WATCH, PSTACK_DOC]),
+        ("changed_skills", [REFS_WATCH, PSTACK_DOC]),
+        ("scripts/refs/lock.json", [REFS_WATCH, PSTACK_DOC]),
     ]),
     Contract("pstack-adapter",
              "the adapter sends every shipping step of a pstack playbook through go, and questions through headless.md", [
