@@ -13,6 +13,7 @@ plugins/app/   → gapp               .claude-plugin/plugin.json, skills/<name>/
 plugins/shorts/ → gshorts           .claude-plugin/plugin.json, skills/<name>/SKILL.md (+ references/)
 scripts/check.py                    repo checks CI runs (.github/workflows/check.yml); tests for its contract check in scripts/test_check.py
 scripts/gbase-run                   headless runner for factory.json slots (claude -p → result.json); tests in scripts/test_gbase_run.py
+scripts/baseline.py                 one baseline.json per version (eval pass rates, read-budget, trend of ~/.gbase/runs) and `diff` of two; results under $GBASE_HOME/baselines/, never committed; tests in scripts/test_baseline.py
 scripts/read-budget.py              characters a PR run loads into its main session, per route; limits in scripts/read-budget.json (check.py enforces); tests in scripts/test_read_budget.py
 scripts/triggers.py                 deterministic trigger check: TF-IDF over the skill listing, prompts in plugins/base/evals/triggers.json (train to tune a description on, held-out test that check.py judges); check.py prints its `triggers: rank1 N/M (P%)` line; tests in scripts/test_triggers.py
 scripts/test_ship_prep.py, test_pr_status.py, test_added_comments.py   tests for the scripts the skills run: skills/branch-pr/scripts/ship-prep, skills/monitor/scripts/pr-status, skills/polish/scripts/added-comments
