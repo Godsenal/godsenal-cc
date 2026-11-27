@@ -29,6 +29,10 @@ def shorts(name):
     return f"plugins/shorts/skills/{name}/SKILL.md"
 
 
+def grader(case, name):
+    return f"plugins/base/evals/{case}/graders/{name}.md"
+
+
 BRANCH_PR = skill("branch-pr")
 # go's branches: the pre-PR review (medium/high), the rest of the verification gate, --draft/--merge, and orchestrator runs
 GO_REVIEW = "plugins/base/skills/go/references/review.md"
@@ -522,6 +526,23 @@ CONTRACTS = [
     ]),
     Contract("review-table", "the runner merges review2 by parsing review's report table", [
         ("# | severity | file:line | finding | action", [skill("review"), RUNNER]),
+    ]),
+    Contract("eval-output-graders",
+             "each grader matches a token its skill prints (branch-pr parses compat-check's verdict, gbase-run review's table and plan's lines); a token renamed in the skill leaves its grader failing silently",
+             [
+        ("⚠️ requires ordered rollout", [skill("compat-check"), grader("cover-compat-check-flags-migration", "ordered-rollout-verdict")]),
+        ("✅ no special deploy ordering needed", [skill("compat-check"), grader("cover-compat-check-flags-migration", "no-safe-verdict")]),
+        ("## rollout / deploy order", [skill("compat-check"), grader("cover-compat-check-flags-migration", "rollout-section")]),
+        ("# | severity | file:line | finding | action", [skill("review")]),
+        (r"severity\s*\|\s*file:line\s*\|\s*finding\s*\|\s*action", [grader("cover-review-reports-table", "table-header")],
+         "the grader holds the header as an escaped regex, so its side of the token is the regex text"),
+        (" refuted, ", [skill("review"), grader("cover-review-reports-table", "tally-line")]),
+        ("reproduce:", [skill("reproduce"), grader("cover-reproduce-leaves-product-code", "report-lines")]),
+        ("plan: ", [skill("plan"), grader("cover-plan-headless-reports-slices", "plan-line")]),
+        ("남은 작업: ", [skill("plan"), grader("cover-plan-headless-reports-slices", "two-slice-lines")]),
+        ("any `결정 필요:` lines last", [skill("plan")]),
+        ("'^결정 필요: '", [grader("cover-plan-headless-reports-slices", "decision-line")],
+         "the skill's report order names the line; the grader anchors it at column 0"),
     ]),
     Contract("pstack-sync",
              "the daily routine parses --check's fields; every followed skill links the adapter the script names, and the lock's used_by names the gbase files to recheck", [
