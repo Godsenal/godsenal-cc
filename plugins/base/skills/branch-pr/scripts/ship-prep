@@ -275,13 +275,18 @@ def review_policy():
     items = listed(text, "reviewers")
     people = [r for item in items for r in item.split()]
     bad = [r for r in people if not re.fullmatch("@?" + REVIEWER, r)]
-    # words of a sentence each look like a login ("CODEOWNERS assigns them"): a list item is one word, or names someone with @ or /
-    bad = bad or [i for i in items if len(i.split()) > 1 and not re.search(r"[@/]", i)]
+    # words of a sentence each look like a login ("CODEOWNERS assigns them", "@alice and @bob"): a list item is one word,
+    # or every word of it names someone with @ or /
+    bad = bad or [i for i in items if len(i.split()) > 1 and not all(re.match(r"@|\S*/", w) for w in i.split())]
     if bad:  # prose ("CODEOWNERS가 배정"), not a list: asking GitHub for it would fail after the push
         policy["bad"] = bad
     elif people:
         policy["reviewers"] = [r.lstrip("@") for r in people]
-    if labels := listed(text, "labels"):
+    labels = listed(text, "labels")
+    prose = [l for l in labels if len(l.split()) > 3]  # a label is a name of a word or three, not "set by the triage bot"
+    if prose:
+        policy["bad_labels"] = prose
+    elif labels:
         policy["labels"] = labels
     if re.search(SIGNOFF_SETTING, text, re.I | re.M):
         policy["signoff"] = True
@@ -327,9 +332,10 @@ def unpushed(base, *flags):
     return [c for c in git("rev-list", "--reverse", *flags, f"{base}..HEAD", "--not", "--remotes").split("\n") if c] if base else []
 
 
-def rewrite_hint(command, first, merges):
+def rewrite_hint(command, first):
     """How to fix the commits from `first` on, or, with a merge among them, why not by a rebase: one would flatten it and
-    write the commits it brought in again, base commits included."""
+    write the commits it brought in again, base commits included. A merge below `first` isn't rewritten, so it doesn't count."""
+    merges = [c for c in git("rev-list", "--merges", f"{first}^..HEAD", check=False).split("\n") if c]
     if merges:
         return (f"a merge commit ({merges[0][:7]}) is among them, so no rebase: redo the branch's own commits on the base without it "
                 "or ask the person (review-policy.md)")
@@ -339,7 +345,6 @@ def rewrite_hint(command, first, merges):
 def commit_problems(policy, base):
     """Error lines for unpushed commits the policy or `commit.gpgsign` wants and they lack."""
     commits, errors = unpushed(base, "--no-merges"), []  # a merge commit needs no trailer: DCO checks skip it
-    merges = unpushed(base, "--merges")
     if policy.get("signoff"):
         # DCO checks the author's own sign-off, not any trailer
         missing = [c for c in commits if not re.search(r"^Signed-off-by: " + re.escape(git("log", "-1", "--format=%an <%ae>", c)) + r"\s*$",
@@ -347,14 +352,17 @@ def commit_problems(policy, base):
         if missing:
             errors.append(f"{policy['file']} says \"commit sign-off: on\" and {len(missing)} commit(s) have no `Signed-off-by:` trailer: "
                           + ", ".join(c[:7] for c in missing[:10])
-                          + " — add it: " + rewrite_hint("git rebase --signoff", missing[0], merges))
+                          + " — add it: " + rewrite_hint("git rebase --signoff", missing[0])
+                          + ("; a commit someone else wrote needs its author's own sign-off, which only they can give: ask them"
+                             if any(git("log", "-1", "--format=%ae", c) != git("log", "-1", "--format=%ce", c) for c in missing) else ""))
     if gpgsign():
         # the header, not %G?: an SSH signature reads as N when no gpg.ssh.allowedSignersFile is set
-        unsigned = [c for c in commits if not re.search(r"^gpgsig(-sha256)? ", git("cat-file", "commit", c), re.M)]
+        # a merge commit too: branch protection that requires signed commits checks every commit the push brings
+        unsigned = [c for c in unpushed(base) if not re.search(r"^gpgsig(-sha256)? ", git("cat-file", "commit", c), re.M)]
         if unsigned:
             errors.append(f"commit.gpgsign is on and {len(unsigned)} commit(s) carry no signature: " + ", ".join(c[:7] for c in unsigned[:10])
                           + " — signing failed or was skipped. Never `--no-gpg-sign`: say what failed, fix the signing setup, then re-sign them: "
-                          + rewrite_hint("git rebase --exec 'git commit --amend --no-edit -S'", unsigned[0], merges))
+                          + rewrite_hint("git rebase --exec 'git commit --amend --no-edit -S'", unsigned[0]))
     return errors
 
 
@@ -520,6 +528,9 @@ def cmd_start(args):
         out.append(line)
     if policy.get("size_bad"):
         out.append(f"note: the `PR size:` line of {conv} holds no number of lines this reads (`PR size: 400 lines`) — no size is checked; "
+                   "say so in the report")
+    if policy.get("bad_labels"):
+        out.append(f"note: the `Labels:` line of {conv} reads as a sentence ({policy['bad_labels'][0]}), not label names — no label is added; "
                    "say so in the report")
     if policy.get("bad"):
         out.append(f"note: the `Reviewers:` line of {conv} is not a list of logins or org/teams ({', '.join(policy['bad'][:5])}) — "
@@ -769,10 +780,12 @@ def cmd_open(args):
         if made.returncode == 0 and json.loads(made.stdout).get("state") == "OPEN":
             create = subprocess.CompletedProcess(base_args, 0, json.loads(made.stdout)["url"], "")
         else:
-            labels = [a for a in asked[asked.index("--label"):]] if "--label" in asked and asked[0] == "--reviewer" else []
-            create = run(base_args + labels, check=False, input="\n".join(lines[2:])) if labels else create
-            if create.returncode:
-                create = run(base_args, check=False, input="\n".join(lines[2:]))
+            # it failed before making the PR: drop one kind at a time, so a missing label doesn't cost the reviewers too
+            parts = [[a for i in range(0, len(asked), 2) if asked[i] == flag for a in asked[i:i + 2]] for flag in ("--reviewer", "--label")]
+            for extra in [p for p in parts if p and p != asked] + [[]]:
+                create = run(base_args + extra, check=False, input="\n".join(lines[2:]))
+                if not create.returncode:
+                    break
     elif asked:
         print("requested: " + " · ".join(f"{k} {', '.join(policy[k])}" for k in ("reviewers", "labels") if policy.get(k)))
     if create.returncode:

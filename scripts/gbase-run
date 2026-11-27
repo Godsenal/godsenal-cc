@@ -1307,8 +1307,8 @@ def cmd_run(argv):
             "pr_body_file": pr_line or (str(pr_draft) if pr_draft.exists() else None),
             "preview_file": next((r["preview_file"] for r in parsed if r["preview_file"]), None),
             "reply_drafts_file": next((r["reply_drafts_file"] for r in parsed if r["reply_drafts_file"]), None),
-            "reviewers": next((r["reviewers"] for r in parsed if r.get("reviewers")), []),
-            "labels": next((r["labels"] for r in parsed if r.get("labels")), []),
+            "reviewers": next((r["reviewers"] for r in reversed(parsed) if r.get("reviewers")), []),  # the last session's
+            "labels": next((r["labels"] for r in reversed(parsed) if r.get("labels")), []),  # the last session's
             "settle": next((r["settle"] for r in parsed if r["settle"]), None),
             "pr_url": pr_url,
             "mockup": next((r["mockup"] for r in parsed if r["mockup"]), None),

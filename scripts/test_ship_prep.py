@@ -644,6 +644,54 @@ class ReviewPolicy(Repo):
         code, out = self.run_prep("check", self.draft(), "--local")
         self.assertEqual(code, 1, out)
 
+    def test_a_refused_label_keeps_the_reviewers(self):
+        self.policy("- Reviewers: @alice\n- Labels: not-made-yet\n")
+        self.commit_change()
+        self.fake_gh('case "$1 $2" in "pr view") exit 1;; "pr create") case "$*" in *--label*) echo "label not found" >&2; exit 1;; '
+                     '*) echo "https://github.com/o/r/pull/9";; esac;; esac')
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertRegex(self.gh_log().splitlines()[-1], r"pr create .* --reviewer alice$")
+
+    def test_a_sentence_on_the_labels_line_adds_no_label(self):
+        self.policy("- Labels: set by the triage bot\n")
+        self.commit_change()
+        _, out = self.run_prep("start")
+        self.assertIn("reads as a sentence (set by the triage bot)", out)
+        self.fake_gh(self.GH)
+        self.run_prep("open", self.draft())
+        self.assertNotIn("--label", self.gh_log())
+
+    def test_an_unsigned_merge_commit_under_gpgsign_is_refused(self):
+        self.git("config", "commit.gpgsign", "true")
+        self.git("config", "gpg.program", "false")
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        self.git("add", "-A")
+        self.git("-c", "commit.gpgsign=false", "commit", "-q", "-m", "feat: a")
+        self.git("push", "-q", "-u", "origin", "feat/x")  # the branch's own commit is already pushed
+        self.git("checkout", "-q", "main")
+        self.write("b.py", "y = 1\n")
+        self.git("add", "-A")
+        self.git("-c", "commit.gpgsign=false", "commit", "-q", "-m", "main: b")
+        self.git("push", "-q", "origin", "main")
+        self.git("checkout", "-q", "feat/x")
+        self.git("-c", "commit.gpgsign=false", "merge", "-q", "--no-edit", "main")
+        code, out = self.run_prep("check", self.draft(), "--local")
+        self.assertEqual(code, 1, out)
+        self.assertIn("1 commit(s) carry no signature", out)
+        self.assertIn("a merge commit", out)
+
+    def test_someone_elses_commit_is_theirs_to_sign_off(self):
+        self.policy("- Commit sign-off: on\n")
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: a", "--author", "o <o@example.invalid>")
+        code, out = self.run_prep("check", self.draft(), "--local")
+        self.assertEqual(code, 1, out)
+        self.assertIn("needs its author's own sign-off", out)
+
     def test_sign_off_is_required_on_unpushed_commits_only(self):
         self.policy("- Commit sign-off: on\n")
         self.branch()

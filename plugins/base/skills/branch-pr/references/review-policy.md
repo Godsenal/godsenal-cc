@@ -18,13 +18,13 @@ The four lines, as the user writes them:
 
 `ship-prep open` passes them to `gh pr create` as `--reviewer` and `--label`; there is no step for you. It prints `requested: …` when GitHub took them. When GitHub refuses one (a login that left, the PR's own author, a label nobody made yet), it keeps or opens the PR without what was refused and prints a `note:`. Put that note in the report. Never retry another way. A draft PR gets its reviewers too. GitHub shows them it is a draft, and asking only later would need a step that nothing runs.
 
-A `Reviewers:` line that isn't a list of logins and `org/team`s (prose like "CODEOWNERS가 배정한다") requests nobody, and `start` says so in a `note:`. CODEOWNERS works as before, on GitHub's side.
+A `Reviewers:` line that isn't a list of logins and `org/team`s (prose like "CODEOWNERS가 배정한다") requests nobody, and `start` says so in a `note:`. A `Labels:` line that reads as a sentence is skipped the same way. CODEOWNERS works as before, on GitHub's side.
 
 **Under `Ship-owner: orchestrator`** ([local-mode.md](local-mode.md)), nothing is opened here. `start --local` prints `reviewers: <a, b>` and `labels: <a, b>` lines. Copy them into the report as they are, next to `ship:`. The caller that opens the PR asks for them.
 
 ## Commit sign-off
 
-With `Commit sign-off: on`, make every commit with `git commit -s`, so it carries the DCO `Signed-off-by:` trailer. `ship-prep check`, `preview`, and `open` refuse a commit that no remote has and that lacks the author's own trailer, and nothing is pushed. A merge commit needs none. Fix it with the `git rebase --signoff <sha>^` the error names, which rewrites only those unpushed commits. With a merge among them the error names no rebase, since one would write the merged-in commits again: redo the branch's own commits without the merge, or ask. A commit that is already on a remote is never rewritten for this: say so in the report. Monitor's fix commits follow the same rule, from the `sign-off:` line `pr-status` prints.
+With `Commit sign-off: on`, make every commit with `git commit -s`, so it carries the DCO `Signed-off-by:` trailer. `ship-prep check`, `preview`, and `open` refuse a commit that no remote has and that lacks the author's own trailer, and nothing is pushed. A merge commit needs none. A commit someone else wrote needs their own sign-off, which only they can give: ask them. Fix the rest with the `git rebase --signoff <sha>^` the error names, which rewrites only those unpushed commits. With a merge among them the error names no rebase, since one would write the merged-in commits again: redo the branch's own commits without the merge, or ask. A commit that is already on a remote is never rewritten for this: say so in the report. Monitor's fix commits follow the same rule, from the `sign-off:` line `pr-status` prints.
 
 ## Signing
 
