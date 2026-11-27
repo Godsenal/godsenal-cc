@@ -70,6 +70,7 @@ PSTACK_SYNC = "scripts/pstack-sync.py"
 PSTACK_DOC = "plugins/base/references/pstack-sync.md"
 REFS_WATCH = "scripts/refs-watch.py"
 PSTACK_ADAPTER = "plugins/base/references/pstack-adapter.md"
+TRIGGERS = "scripts/triggers.py"
 RUNNER_DOC = "plugins/base/references/runner.md"  # the runner's usage and result.json, split out of orchestrator.md
 
 
@@ -509,6 +510,13 @@ CONTRACTS = [
         ("comment-guide", [shorts("content-common"), shorts("threads-voice"), shorts("x-voice"),
                            shorts("instagram-card-news")]),
     ]),
+    Contract("trigger-check",
+             "check.py prints triggers.py's rank1 line on every run so a baseline can read the ratio from its output; a miss is fixed in the description and a floor only goes up", [
+        ("triggers: rank1 {hits}/{total} ({pct}%)", [TRIGGERS]),
+        ("triggers: rank1 n/m (p%)", ["CLAUDE.md", "plugins/base/evals/README.md"]),
+        ("fix its description", [TRIGGERS]),
+        ("only go up", ["plugins/base/evals/triggers.json", TRIGGERS]),
+    ]),
 ]
 
 # a manifest slot's fields; anything else is a typo the orchestrator would silently ignore
@@ -767,6 +775,24 @@ def check_read_budget():
         fail("scripts/read-budget.json", problem)
 
 
+def check_triggers():
+    triggers = load_script(TRIGGERS)
+    cases = load_json(triggers.CASES)
+    if not cases:
+        return
+    try:
+        line, found = triggers.problems(cases, triggers.listing(frontmatter, ROOT))
+    except (KeyError, TypeError, AttributeError) as e:
+        fail(triggers.CASES, f"malformed — missing or wrong-typed field {e}")
+        return
+    except ValueError as e:
+        fail(TRIGGERS, str(e))
+        return
+    for problem in found:
+        fail("plugins/base/evals/triggers.json", problem)
+    print(line)
+
+
 def check_pstack():
     """Followed pstack items are what pstack-sync wrote, and no upstream change to a merged skill is left unmerged."""
     sync = load_script(PSTACK_SYNC)
@@ -807,6 +833,7 @@ def main():
     check_pstack()
     check_playbooks()
     check_read_budget()
+    check_triggers()
     if base:
         check_version_bumps(base, versions)
     if errors:

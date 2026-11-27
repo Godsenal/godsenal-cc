@@ -1,0 +1,173 @@
+{
+  "note": "Prompts people actually type, per skill: positive ones should pick the skill first from the listing, negative ones should not. check.py runs scripts/triggers.py on them. A miss is fixed in the description, never by rewording the prompt. min_rank1 / max_negative_hits record a skill that doesn't pass yet (default: every positive, no negative); they only go up. similar_pairs lists description pairs allowed above max_similarity.",
+  "max_similarity": 0.35,
+  "similar_pairs": [
+    [
+      "store-assets",
+      "store-submit"
+    ],
+    [
+      "threads-voice",
+      "x-voice"
+    ],
+    [
+      "comment-guide",
+      "x-voice"
+    ]
+  ],
+  "skills": {
+    "work": {
+      "min_rank1": 0,
+      "positive": [
+        "Refactor the auth module across these five files and ship it",
+        "Add a new export feature that touches the API and the UI",
+        "이 기능 여러 파일에 걸쳐서 구현해 줘",
+        "Diagnose this CPU profile and find why the app is slow"
+      ],
+      "negative": [
+        "Explain how the payment flow works",
+        "PR 열어 줘"
+      ]
+    },
+    "go": {
+      "min_rank1": 2,
+      "positive": [
+        "The change is done, ship it",
+        "다 됐어, 리뷰하고 PR 올려서 머지까지 가 줘",
+        "Ship this finished change end to end"
+      ],
+      "negative": [
+        "Plan this feature before we write code",
+        "Why does this function retry three times?"
+      ]
+    },
+    "plan": {
+      "positive": [
+        "기획해 줘: 친구랑 일정 공유하는 앱",
+        "Plan this feature before any code, I have an idea",
+        "Grill me on this idea and break it into PR-sized slices",
+        "이거 계획 세워 줘, 너무 커서 PR 하나로는 안 될 것 같아"
+      ],
+      "negative": [
+        "Fix the crash on login",
+        "Open a PR for my changes"
+      ]
+    },
+    "bug-fix": {
+      "min_rank1": 1,
+      "max_negative_hits": 1,
+      "positive": [
+        "Fix this bug: the app crashes when the list is empty",
+        "This test is flaky and randomly fails in CI, fix it",
+        "버그 고쳐 줘: 로그인하면 가끔 빈 화면이 나와"
+      ],
+      "negative": [
+        "Write a failing test that reproduces this report, don't fix it yet",
+        "How does the cache layer work?"
+      ]
+    },
+    "reproduce": {
+      "min_rank1": 1,
+      "positive": [
+        "Write a failing test that reproduces this bug report before anyone fixes it",
+        "재현 먼저 해 줘. 고치지는 말고 실패하는 체크만",
+        "Turn this improvement request into an acceptance check that fails now"
+      ],
+      "negative": [
+        "Fix the null pointer in checkout",
+        "Ship it"
+      ]
+    },
+    "review": {
+      "min_rank1": 2,
+      "positive": [
+        "Review my change and find bugs before I ship",
+        "이 diff 리뷰해서 버그 찾아 줘",
+        "Adversarially review this change for security holes and regressions"
+      ],
+      "negative": [
+        "Clean up and simplify this bloated diff",
+        "What could this change break elsewhere?"
+      ]
+    },
+    "design-taste": {
+      "min_rank1": 5,
+      "positive": [
+        "Build the onboarding screen for the app",
+        "Redesign the empty state of the inbox screen",
+        "이 화면 디자인 좀 손봐 줘",
+        "Review the UI of this settings component",
+        "Change the checkout screen",
+        "Build a new settings screen"
+      ],
+      "negative": [
+        "Fix the data fetch inside this view's handler",
+        "Write the backend API for comments"
+      ]
+    },
+    "setup": {
+      "min_rank1": 2,
+      "positive": [
+        "Set up gbase in this repo",
+        "이 레포에 gbase 쓸 수 있게 준비해 줘",
+        "go couldn't find the project's checks, record the verify commands",
+        "I'm starting at a new company, explore how they track tickets and write the environment file"
+      ],
+      "negative": [
+        "Generate a verify skill that drives the real app",
+        "Open a PR"
+      ]
+    },
+    "how": {
+      "min_rank1": 2,
+      "positive": [
+        "How does the sync engine work?",
+        "이 결제 흐름 어떻게 동작해?",
+        "Walk me through the request lifecycle before I change it",
+        "Where should this new helper live, which module owns it?"
+      ],
+      "negative": [
+        "Why did we pick Postgres over Mongo?",
+        "Fix the failing build"
+      ]
+    },
+    "why": {
+      "min_rank1": 3,
+      "positive": [
+        "Why does this code retry three times?",
+        "왜 이렇게 만들었어? 이 매직 넘버는 언제 왜 생긴 거야",
+        "When and why did this regression start?",
+        "Why did we pick this tradeoff in the cache layer?"
+      ],
+      "negative": [
+        "How does the cache layer work?",
+        "Review this diff"
+      ]
+    },
+    "blast-radius": {
+      "positive": [
+        "What could this change break somewhere else?",
+        "이거 뭐 깨질 수 있어?",
+        "Blast radius of renaming this config key",
+        "I don't trust this small diff yet, what else might break"
+      ],
+      "negative": [
+        "Review this change for bugs",
+        "What is the safe deploy order for this migration?"
+      ]
+    },
+    "compat-check": {
+      "max_negative_hits": 1,
+      "positive": [
+        "What's the safe deploy order for this migration and API change?",
+        "배포 순서 괜찮아? 하위호환 깨지는 거 없어?",
+        "Is this change safe to ship in one deploy?",
+        "Check backward compatibility of this queue schema change"
+      ],
+      "negative": [
+        "What could this change break somewhere else?",
+        "Deploy the app to production"
+      ]
+    }
+  }
+}
