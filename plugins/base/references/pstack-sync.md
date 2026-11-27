@@ -111,3 +111,14 @@ What was decided when `work` took poteto-mode in (gbase 1.56.0, upstream `3fa33b
 ## Without the network
 
 `--source <dir>` reads a local checkout of cursor/plugins instead of fetching; `--sha <commit>` names it. The tests use this.
+
+## Reference watch
+
+`scripts/refs-watch.py` watches the other skill repos gbase is compared against (mattpocock/skills, addyosmani/agent-skills, obra/superpowers, anthropics/skills). `scripts/refs/lock.json` holds each repo's `ref`, the head `sha` last looked at, and its `SKILL.md` paths with their blob shas. It is meant to run in the daily routine next to `pstack-sync.py --check`; no routine runs it yet.
+
+```bash
+python3 scripts/refs-watch.py --check    # one JSON line: {repo: {changed, sha, locked_sha, new_skills, removed_skills, changed_skills}}
+python3 scripts/refs-watch.py --update   # write each repo's current head and SKILL.md list into the lock
+```
+
+`changed` is true when the head moved, so an active repo reports it most days; act on the three lists, which say whether a `SKILL.md` was added, removed, or edited. Only `SKILL.md` files are compared: a head that moved with all three lists empty may still have changed a skill's other files (`references/`, `scripts/`), so look at the commits before running `--update`. It imports nothing: when a list is non-empty, a person (or a `gbase:plan` run) reads those skills, decides what gbase takes, and the PR that does so also runs `--update`. A fetch failure, a missing or unreadable lock, or a tree GitHub lists truncated, prints `{"error": …}` and exits 1, so a partial list is never read as removed skills. A repo is added by adding `{"ref": "<branch>"}` under `repos` and running `--update`.

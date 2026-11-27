@@ -255,6 +255,8 @@ python3 scripts/pstack-sync.py --apply   # regenerate followed items, write merg
 
 A daily routine runs `--check`; when `changed` is true it starts a `work` run here that follows `plugins/base/references/pstack-sync.md` (apply, screen what came in, merge the pending diffs, PR). `scripts/pstack/lock.json` records the upstream commit and, per item, `follow` / `merge` / `skip` / `unusable` with the reason.
 
+`python3 scripts/refs-watch.py --check` (meant for the same routine; not registered yet) compares four other skill repos (mattpocock/skills, addyosmani/agent-skills, obra/superpowers, anthropics/skills) to `scripts/refs/lock.json` and prints, per repo, `changed` and the `SKILL.md` files added, removed, or edited. It imports nothing; `--update` records the current heads after a person has looked.
+
 ### Running gbase from an orchestrator
 
 A program that runs agents with no person attached (e.g. `claude -p` from a daemon) can slot gbase skills into its own steps. The contract is environment variables, files, greppable report lines, and a manifest; with none of the variables set, every skill behaves as it does interactively. Full spec: [`plugins/base/references/orchestrator.md`](plugins/base/references/orchestrator.md).
