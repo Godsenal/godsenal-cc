@@ -765,6 +765,71 @@ class ReviewPolicy(Repo):
         self.assertIn("ask: the change is 2 lines, over the 1 the environment file sets — split it, or open it as one PR?", out)
 
 
+class Approvals(Repo):
+    POLICY = ('version: 1\nrules:\n  - purpose: "A change takes two people."\n    paths: ["**"]\n    verdict: { claude: comments, seats: 2 }\n'
+              '  - purpose: "Docs take one."\n    paths: ["docs/**"]\n    verdict: { claude: approves, seats: 1 }\n')
+
+    def test_no_policy_file_prints_nothing(self):
+        self.commit_change()
+        self.assertNotIn("approvals", self.run_prep("start")[1])
+
+    def on_main(self, path, text):
+        self.write(path, text)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "chore: policy")
+        self.git("push", "-q", "origin", "main")
+
+    def line(self, out):
+        return next(l for l in out.splitlines() if l.startswith("approvals: "))
+
+    def test_the_default_branchs_copy_is_summed_up_in_one_line(self):
+        self.on_main(".claude/approvals.yml", self.POLICY)
+        self.branch()
+        self.write(".claude/approvals.yml", "version: 1\nmode: observe\n" + self.POLICY.split("\n", 1)[1])  # the branch's copy judges nothing
+        _, out = self.run_prep("start")
+        self.assertTrue(self.line(out).startswith('approvals: on origin/main, .claude/approvals.yml (enforce) — the "Claude Approvals" check '
+                                                  "decides who approves this PR; it is the repo's, so no run edits a policy file to get past it. "
+                                                  "This change touches .claude/approvals.yml: it always takes a person"), out)
+
+    def test_observe_only_decides_nothing_and_a_protected_file_takes_no_person(self):
+        self.on_main("app/.claude/approvals.yml", "version: 1\nmode: observe\n" + self.POLICY.split("\n", 1)[1])
+        self.branch()
+        self.write(".gitattributes", "*.png binary\n")
+        _, out = self.run_prep("start")
+        self.assertEqual(self.line(out), 'approvals: on origin/main, app/.claude/approvals.yml (observe) — observe only: the "Claude Approvals" '
+                                         "check decides nothing yet; it is the repo's, so no run edits a policy file to get past it")
+
+    def test_an_enforcing_folder_policy_counts_only_for_changes_under_it(self):
+        self.on_main("app/.claude/approvals.yml", self.POLICY)
+        self.branch()
+        self.write(".gitattributes", "*.png binary\n")
+        self.assertNotIn("always takes a person", self.run_prep("start")[1])
+        self.write("app/x.py", "x = 1\n")
+        self.assertIn("This change touches .gitattributes: it always takes a person", self.run_prep("start")[1])
+
+    def test_a_new_symlink_is_named_before_it_is_committed(self):
+        self.on_main(".claude/approvals.yml", self.POLICY)
+        self.branch()
+        os.symlink("README.md", self.repo / "link.md")
+        self.assertIn("This change touches link.md: it always takes a person", self.run_prep("start")[1])
+
+    def test_moving_a_policy_file_away_or_adding_one_is_named(self):
+        self.on_main(".claude/approvals.yml", self.POLICY)
+        self.branch()
+        self.git("mv", ".claude/approvals.yml", "docs-old-approvals.yml")
+        self.git("commit", "-q", "-m", "chore: move")
+        self.assertIn("This change touches .claude/approvals.yml: it always takes a person", self.run_prep("start")[1])
+        self.git("checkout", "-q", "main")
+        self.git("checkout", "-q", "-b", "feat/new")
+        self.git("rm", "-q", ".claude/approvals.yml")
+        self.git("commit", "-q", "-m", "chore: drop")
+        self.git("push", "-q", "origin", "HEAD:main")
+        self.write("lib/.claude/approvals.yml", self.POLICY)
+        line = self.line(self.run_prep("start")[1])
+        self.assertIn("none on origin/main, and this change adds one — it decides nothing until it is merged", line)
+        self.assertIn("This change touches lib/.claude/approvals.yml: it gets a real check that one person", line)
+
+
 class Preview(Repo):
     """The stop before the PR: the environment file's `before the PR: preview` line, or a preview recorded on request."""
     CREATED = 'case "$1 $2" in "pr view") exit 1;; "pr create") echo "https://github.com/o/r/pull/9";; esac'
