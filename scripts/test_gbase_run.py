@@ -614,6 +614,12 @@ class GbaseRunTest(unittest.TestCase):
         unshipped = lambda text: gbase_run.unshipped("work", "agent", [text], result["cwd"], result["base"]["ref"])
         self.assertEqual((unshipped(ship), unshipped(ship + "\npreview: /g/preview-feat-x.md")), ("pr:", None))
 
+    def test_the_review_policy_lines_become_the_reviewers_and_labels_the_caller_asks_for(self):
+        r = gbase_run.report("ship: local feat/x @abc1234 — 1 commits, not pushed\nreviewers: alice, acme/backend\nlabels: needs-review, area: api\n")
+        self.assertEqual((r["reviewers"], r["labels"]), (["alice", "acme/backend"], ["needs-review", "area: api"]))
+        r = gbase_run.report("review policy: reviewers alice — from /e.md\nrequested reviewers: bob\n")
+        self.assertEqual((r.get("reviewers"), r.get("labels")), (None, None))
+
     def test_a_run_that_holds_reply_drafts_is_not_resumed_to_push_them(self):
         _, out = self.run_cli("--repo", str(self.repo), "--slot", "work", "--task", "T", "--ship-owner", "agent",
                               "--model", "held", "--worktree", "hr")

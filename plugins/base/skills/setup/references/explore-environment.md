@@ -13,6 +13,7 @@ Read-only. Ask nothing that one of these answers.
 | instruction files, PR template, `CONTRIBUTING`, commitlint config, git hooks, a branch or title check in CI | rules the repo already enforces. They come before the environment file ([conventions.md](../../../references/conventions.md)), so the draft doesn't repeat them |
 | the last 20 merged PRs (title, head branch, body), `git log --format=%s -30`, remote branch names | the formats that agree, a ticket key pattern (`ABC-123`, `#123`, `Closes #123`), tracker links in PR bodies |
 | the session's tools: MCP servers and their tool names, issue-tracker CLIs on `PATH` (`command -v gh glab acli` and whatever the history's links point to) | how a ticket can be read from here |
+| `CODEOWNERS` (root, `.github/`, `docs/`), the last 20 merged PRs' `reviewRequests`, `labels`, and commit trailers (`gh pr list --state merged --limit 20 --json reviewRequests,labels`, `git log -30 --format=%B \| grep -c '^Signed-off-by:'`), the merged PRs' sizes (`additions`, `deletions`) | who reviews and which labels every PR gets, whether commits carry a DCO sign-off, and how large PRs here run: the `review-policy.md` lines below |
 | `docs/adr`, `docs/rfcs`, `docs/specs`, wiki links in the instruction files and PR bodies | where the team keeps specs and decisions |
 
 Then decide where tasks come from:
@@ -33,6 +34,7 @@ Fill environment.md's format with what was found.
 - `## Write-back` is `off` for every kind unless the user turns one on in the preview. A write method is recorded only for a kind that is `on` or `ask`, marked `(not run)`.
 - Put no token, cookie, or password in the file. Name the environment variable or the login command.
 - `## Shipping` and its lines (`before the PR: preview`, `review replies: draft`) are written only when the user picks them in step 3. Nothing in a repo shows whether its owner wants to read a change before the team sees it, or to write their own replies to reviewers, so neither is ever inferred.
+- **Review policy** ([review-policy.md](../../branch-pr/references/review-policy.md)): propose `Reviewers:` only for people or a team asked on most of the 20 PRs and not already CODEOWNERS (GitHub asks those itself), `Labels:` only for a label on most of them, and `Commit sign-off: on` only when most commits carry the trailer or a DCO check runs in CI. They go into the draft unasked, as the formats do, with the count as evidence. `PR size:` is never inferred from the history, since a size the team merged is not a limit it set: propose it in the preview only when `CONTRIBUTING` or a CI check states one.
 - The tracker is described the way the user would say it. gbase carries no template for any tracker, so a section is prose plus the commands that ran here.
 
 ## 3. Preview and ask once

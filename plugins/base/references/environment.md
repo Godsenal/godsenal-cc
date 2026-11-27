@@ -35,7 +35,7 @@ gbase names no tracker. A skill says a verb ("fetch the ticket") and the file sa
 ```
 
 - The block above is one user's file, shown as an example. It is not a template: a file holds only what was found and run in its own environment.
-- `## Conventions` holds the values of conventions.md's table.
+- `## Conventions` holds the values of conventions.md's table. Three of its lines, and one line under `## Shipping`, apply to every PR opened here: `Reviewers: @alice, acme/backend`, `Labels: needs-review`, `Commit sign-off: on`, and `PR size: <N> lines`. `ship-prep` reads them and prints a `review policy:` line that sends `branch-pr` to [review-policy.md](../skills/branch-pr/references/review-policy.md). A file without them reads nothing more.
 - `## Tickets` and `## When a skill says` are prose and commands. A method can be a CLI line, an MCP tool by its full name, a URL to open, or a folder of markdown files.
 - `## Write-back` lists each kind of write as `on`, `ask`, or `off`. A kind the file doesn't list is `off`.
 - `## Shipping` holds two lines, each on its own. The first is `before the PR: preview`. With it, `ship-prep` stops `branch-pr` before the push: the change is committed and drafted locally, the user reads a preview, and the PR opens when they say so ([preview.md](../skills/branch-pr/references/preview.md)). Without the line, or with any other value, the PR opens as it always has. Words in the request that ask for the PR or the merge win over the line. A file that is set but can't be read (moved, or not UTF-8) holds the PR back too, since the line may be in it. It decides whether a PR opens yet; draft or ready is conventions.md's own row.

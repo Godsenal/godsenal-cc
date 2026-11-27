@@ -502,6 +502,221 @@ class Open(Repo):
         self.assertNotIn("pr create", self.gh_log())
 
 
+class ReviewPolicy(Repo):
+    GH = 'case "$1 $2" in "pr view") exit 1;; "pr create") echo "https://github.com/o/r/pull/9";; esac'
+
+    def policy(self, lines):
+        env = self.tmp / "env.md"
+        env.write_text("# Environment: acme\n\n## Conventions\n- Branch: `feat/<slug>`\n" + lines, encoding="utf-8")
+        self.git("config", "gbase.conventions", str(env))
+        return env
+
+    def test_no_policy_line_prints_nothing_and_asks_gh_for_nothing_more(self):
+        for i, text in enumerate((None, "- Commit: conventional\n", "- Reviewers: none\n- Labels: -\n- PR size: 0 lines\n- Commit sign-off: off\n")):
+            with self.subTest(text=text):
+                if text:
+                    self.policy(text)
+                self.git("checkout", "-q", "main")
+                self.branch(f"feat/p{i}")
+                self.commit_change(message=f"feat: {text!r}")
+                _, out = self.run_prep("start", "--local")
+                for word in ("review policy", "reviewers:", "labels:", "size:", "sign", "review-policy.md"):
+                    self.assertNotIn(word, out)
+                self.fake_gh(self.GH)
+                code, out = self.run_prep("open", self.draft())
+                self.assertEqual(code, 0, out)
+                self.assertRegex(self.gh_log().splitlines()[-1], r"^pr create --title 제목 한 줄 --body-file -$")
+                self.assertNotIn("requested:", out)
+                (self.tmp / "gh.log").unlink()
+
+    def test_reviewers_and_labels_go_to_pr_create(self):
+        self.policy("- Reviewers: @alice, acme/backend (CODEOWNERS 외)\n- Labels: `needs-review`, area: api\n")
+        self.commit_change()
+        _, out = self.run_prep("start")
+        self.assertIn("review policy: reviewers alice, acme/backend · labels needs-review, area: api — from ", out)
+        self.assertIn("review-policy.md before the first commit", out)
+        self.assertNotIn("\nreviewers:", out)
+        self.fake_gh(self.GH)
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertIn("--reviewer alice --reviewer acme/backend --label needs-review --label area: api", self.gh_log())
+        self.assertIn("requested: reviewers alice, acme/backend · labels needs-review, area: api", out)
+
+    def test_local_mode_reports_them_for_the_caller(self):
+        self.policy("- Reviewers: @alice\n- Labels: needs-review\n")
+        self.commit_change()
+        _, out = self.run_prep("start", "--local")
+        self.assertIn("\nreviewers: alice\nlabels: needs-review\n", out)
+
+    def test_prose_on_the_reviewers_line_requests_nobody(self):
+        self.policy("- Reviewers: CODEOWNERS가 배정한다\n- Labels: bug\n")
+        self.commit_change()
+        _, out = self.run_prep("start")
+        self.assertIn("is not a list of logins or org/teams (CODEOWNERS가, 배정한다) — no reviewer is requested", out)
+        self.assertIn("review policy: labels bug —", out)
+        self.fake_gh(self.GH)
+        self.run_prep("open", self.draft())
+        self.assertNotIn("--reviewer", self.gh_log())
+
+    def test_a_refused_reviewer_still_opens_the_pr_and_says_so(self):
+        self.policy("- Reviewers: @gone\n")
+        self.commit_change()
+        self.fake_gh('case "$1 $2" in "pr view") exit 1;; "pr create") case "$*" in *--reviewer*) echo "could not resolve user gone" >&2; exit 1;; '
+                     '*) echo "https://github.com/o/r/pull/9";; esac;; esac')
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertIn("note: GitHub refused the reviewers or labels of", out)
+        self.assertIn("could not resolve user gone", out)
+        self.assertIn("\npr: https://github.com/o/r/pull/9\n", out)
+
+    def test_a_reviewer_refused_after_the_pr_was_made_keeps_that_pr(self):
+        self.policy("- Reviewers: @me-the-author\n- Labels: bug\n")
+        self.commit_change()
+        made = self.tmp / "made"
+        self.fake_gh(f'case "$1 $2" in "pr view") [ -f "{made}" ] && echo \'{{"url":"https://github.com/o/r/pull/9","state":"OPEN"}}\' || exit 1;; '
+                     f'"pr create") touch "{made}"; echo "https://github.com/o/r/pull/9"; echo "pull request update failed: author" >&2; exit 1;; esac')
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertIn("pull request update failed", out)
+        self.assertIn("\npr: https://github.com/o/r/pull/9\n", out)
+        self.assertEqual(self.gh_log().count("pr create"), 1)
+
+    def test_a_refused_reviewer_keeps_the_labels(self):
+        self.policy("- Reviewers: @gone\n- Labels: bug\n")
+        self.commit_change()
+        self.fake_gh('case "$1 $2" in "pr view") exit 1;; "pr create") case "$*" in *--reviewer*) echo "no user gone" >&2; exit 1;; '
+                     '*) echo "https://github.com/o/r/pull/9";; esac;; esac')
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertRegex(self.gh_log().splitlines()[-1], r"pr create .* --label bug$")
+
+    def test_an_english_sentence_on_the_reviewers_line_is_prose(self):
+        self.policy("- Reviewers: CODEOWNERS assigns them\n")
+        self.commit_change()
+        _, out = self.run_prep("start")
+        self.assertIn("is not a list of logins or org/teams", out)
+        self.assertNotIn("review policy:", out)
+
+    def test_a_size_in_korean_reads_and_an_unreadable_one_is_a_note(self):
+        self.branch()
+        self.write("a.py", "x = 1\ny = 2\n")
+        self.policy("## Shipping\n- PR size: 1줄 — ask\n")
+        code, out = self.run_prep("start")
+        self.assertEqual(code, 2, out)
+        self.assertIn("ask: the change is 2 lines, over the 1", out)
+        self.policy("## Shipping\n- PR size: about four hundred\n")
+        _, out = self.run_prep("start")
+        self.assertIn("the `PR size:` line of", out)
+        self.assertIn("no size is checked", out)
+
+    def test_a_local_check_refuses_a_commit_without_its_sign_off(self):
+        self.policy("- Commit sign-off: on\n")
+        self.commit_change()
+        code, out = self.run_prep("check", self.draft(), "--local")
+        self.assertEqual(code, 1, out)
+        self.assertIn("have no `Signed-off-by:` trailer", out)
+        self.git("commit", "-q", "--amend", "--no-edit", "-s")
+        code, out = self.run_prep("check", self.draft(), "--local")
+        self.assertEqual(code, 0, out)
+
+    def test_a_merge_in_the_range_is_not_rebased_and_needs_no_trailer(self):
+        self.policy("- Commit sign-off: on\n")
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: a")
+        self.git("checkout", "-q", "main")
+        self.write("b.py", "y = 1\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "main: b")
+        self.git("push", "-q", "origin", "main")
+        self.git("checkout", "-q", "feat/x")
+        self.git("merge", "-q", "--no-edit", "main")
+        code, out = self.run_prep("check", self.draft(), "--local")
+        self.assertEqual(code, 1, out)
+        self.assertIn("1 commit(s) have no", out)
+        self.assertIn("a merge commit", out)
+        self.assertNotIn("git rebase --signoff", out)
+
+    def test_a_trailer_of_someone_else_is_not_the_authors_sign_off(self):
+        self.policy("- Commit sign-off: on\n")
+        self.commit_change(message="feat: a\n\nSigned-off-by: other <o@example.invalid>")
+        code, out = self.run_prep("check", self.draft(), "--local")
+        self.assertEqual(code, 1, out)
+
+    def test_sign_off_is_required_on_unpushed_commits_only(self):
+        self.policy("- Commit sign-off: on\n")
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: pushed earlier")
+        self.git("push", "-q", "-u", "origin", "feat/x")
+        _, out = self.run_prep("start")
+        self.assertIn("sign-off on", out)
+        self.write("a.py", "x = 2\n")
+        self.git("commit", "-q", "-am", "feat: b")
+        self.fake_gh(self.GH)
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 1, out)
+        self.assertIn("1 commit(s) have no `Signed-off-by:` trailer", out)
+        self.assertIn("git rebase --signoff", out)
+        self.assertIn("nothing was pushed", out)
+        self.assertNotIn("pr create", self.gh_log())
+        self.git("commit", "-q", "--amend", "--no-edit", "-s")
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 0, out)
+        self.assertIn("Signed-off-by: t <t@example.invalid>", self.git("log", "-1", "--format=%B"))
+
+    def test_an_unsigned_commit_under_gpgsign_stops_and_is_never_bypassed(self):
+        self.git("config", "commit.gpgsign", "true")
+        self.git("config", "gpg.program", "false")
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        self.git("add", "-A")
+        sign = subprocess.run(["git", "commit", "-q", "-m", "feat: a"], cwd=self.repo, env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(sign.returncode, 0)
+        self.git("-c", "commit.gpgsign=false", "commit", "-q", "-m", "feat: a")
+        _, out = self.run_prep("start")
+        self.assertIn("signing: commit.gpgsign is on — a commit that fails to sign stops the run; never `--no-gpg-sign`", out)
+        self.fake_gh(self.GH)
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 1, out)
+        self.assertIn("error: commit.gpgsign is on and 1 commit(s) carry no signature", out)
+        self.assertIn("Never `--no-gpg-sign`", out)
+        self.assertNotIn("pr create", self.gh_log())
+
+    def test_over_pr_size_needs_the_split_as_item_one(self):
+        self.policy("## Shipping\n- PR size: 50 lines\n")
+        self.branch()
+        self.write("a.py", "".join(f"x{i} = {i}\n" for i in range(120)))
+        _, out = self.run_prep("start")
+        self.assertIn("review policy: PR size 50 lines —", out)
+        self.assertIn("size: 120 lines, over the 50 of PR size", out)
+        self.assertNotIn("ask:", out)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: big")
+        self.fake_gh(self.GH)
+        code, out = self.run_prep("open", self.draft())
+        self.assertEqual(code, 1, out)
+        self.assertIn("the change is 120 lines, over the 50 of PR size — Review focus item 1", out)
+        split = "> [!IMPORTANT]\n> **사람이 볼 곳 1건**\n> 1. **나눌 수 있다** 상수와 사용처를 두 PR로 (크기)\n>    120줄"
+        code, out = self.run_prep("open", self.draft(BODY.replace(NOTE, split)))
+        self.assertEqual(code, 0, out)
+
+    def test_under_pr_size_needs_nothing_and_ask_asks_only_when_over(self):
+        self.policy("## Shipping\n- PR size: 500 lines, ask\n")
+        self.branch()
+        self.write("a.py", "x = 1\n")
+        code, out = self.run_prep("start")
+        self.assertNotIn("size:", out.replace("PR size", ""))
+        self.assertEqual(code, 0, out)
+        self.policy("## Shipping\n- **PR size**: `1` line, ask\n")
+        self.write("a.py", "x = 1\ny = 2\n")
+        code, out = self.run_prep("start")
+        self.assertEqual(code, 2, out)
+        self.assertIn("ask: the change is 2 lines, over the 1 the environment file sets — split it, or open it as one PR?", out)
+
+
 class Preview(Repo):
     """The stop before the PR: the environment file's `before the PR: preview` line, or a preview recorded on request."""
     CREATED = 'case "$1 $2" in "pr view") exit 1;; "pr create") echo "https://github.com/o/r/pull/9";; esac'

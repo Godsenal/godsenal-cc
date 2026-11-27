@@ -889,6 +889,18 @@ class HeldRepliesOnDisk(RepoCase):
         (self.tmp / "env.md").write_text(text)
         self.git("config", "gbase.conventions", str(self.tmp / "env.md"))
 
+    def test_sign_off_and_gpgsign_tell_monitor_how_to_commit_its_fixes_and_nothing_without_them(self):
+        code, out = self.status("--start")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("sign", out)
+        self.set_environment("# Environment: acme\n\n## Conventions\n- Commit sign-off: off\n")
+        self.assertNotIn("sign", self.status()[1])
+        self.set_environment("# Environment: acme\n\n## Conventions\n- **Commit sign-off**: on (DCO)\n")
+        self.git("config", "commit.gpgsign", "true")
+        lines = self.status()[1].splitlines()
+        self.assertEqual(lines[1], f'sign-off: on — {self.tmp / "env.md"} says "commit sign-off: on": make every fix commit with `git commit -s`')
+        self.assertEqual(lines[2], "signing: commit.gpgsign is on — a fix commit that fails to sign is reported, never made with `--no-gpg-sign`")
+
     def test_without_the_setting_nothing_about_drafts_is_printed(self):
         code, out = self.status("--start")
         self.assertEqual(code, 0, out)

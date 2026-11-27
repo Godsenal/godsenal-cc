@@ -53,6 +53,7 @@ LINK_HOSTS = re.compile(
     r"appdistribution\.firebase\.(?:dev|google\.com)|chromatic\.com|play\.google\.com/apps/(?:internaltest|testing))[^\s)\]>\"'|]*", re.I)
 
 REPLIES_SETTING = r"^[\s>*_-]*`?review replies[`*_]*\s*[:：][\s`*_]*draft\b"
+SIGNOFF_SETTING = r"^[\s>*_-]*`?commit sign[- ]?off[`*_]*\s*[:：][\s`*_]*on\b"  # ship-prep reads the same line
 HELD_DOC = "references/held-replies.md"
 VERDICTS = {"fixed": "고침", "declined": "거절", "answered": "답변", "undecided": "질문", "out-of-scope": "범위 밖"}
 
@@ -273,6 +274,16 @@ def replies_mode(flag, conv, text):
     if conv and re.search(REPLIES_SETTING, text, re.I | re.M):
         return "draft", f'{conv} says "review replies: draft"'
     return "post", ""
+
+
+def commit_rules(conv, text):
+    """Lines on how monitor's fix commits are made: the environment file's `commit sign-off: on`, and `commit.gpgsign`."""
+    lines = []
+    if text and re.search(SIGNOFF_SETTING, text, re.I | re.M):
+        lines.append(f'sign-off: on — {conv} says "commit sign-off: on": make every fix commit with `git commit -s`')
+    if sh(["git", "config", "--type=bool", "--get", "commit.gpgsign"], check=False) == "true":
+        lines.append("signing: commit.gpgsign is on — a fix commit that fails to sign is reported, never made with `--no-gpg-sign`")
+    return lines
 
 
 def draft_key(item):
@@ -891,17 +902,19 @@ def main(argv):
     if asked or "--start" in args:
         with locked(path):  # before the first poll: every process of the watch reads the request from the file
             write_state(path, state)
-    flag, replies, why = None, "post", ""
+    flag, replies, why, rules = None, "post", "", []
     drafts_path, drafts_title = replies_file(host, owner, repo, number), f"PR #{number} 답글 초안 ({owner}/{repo})"
 
     def poll():
-        nonlocal flag, replies, why
+        nonlocal flag, replies, why, rules
         # read again on every poll: a `watch` that started earlier must follow a request made since, not write its own copy over it
         flag = load_state(path).get("replies")
         state.pop("replies", None)
         if flag:
             state["replies"] = flag
-        replies, why = replies_mode(flag, *environment())
+        conv, text = environment()
+        replies, why = replies_mode(flag, conv, text)
+        rules = commit_rules(conv, text)
         polls = state.get("polls", [])
         snap = fetch(owner, repo, number, me, polls)
         for _ in range(3):  # mergeability is computed lazily: the first query after a push often says UNKNOWN
@@ -927,6 +940,7 @@ def main(argv):
                             "before handling a comment")
         elif flag == "post":
             lines.insert(1, "replies: post — --post-replies, whatever the environment file says")
+        lines[1:1] = rules
         if any(i.get("held") for i in snap["items"]):
             lines.insert(len(lines) - len(verdict["next"]), f"reply drafts: {drafts_path.with_suffix('.md')}")
         if want_merge and snap["state"] == "OPEN":

@@ -82,6 +82,7 @@ SHIP = re.compile(r"^ship: .*$", re.M)
 PR_BODY = re.compile(r"^PR 본문 초안: (.+)$", re.M)
 PREVIEW = re.compile(r"^preview: (/.+)$", re.M)  # branch-pr's preview file: the run stopped before the PR for a person to read it
 REPLY_DRAFTS = re.compile(r"^reply drafts: (/.+)$", re.M)
+ASKED = re.compile(r"^(reviewers|labels): (.+)$", re.M)  # branch-pr's review policy under an orchestrator owner: the caller asks for them
 SETTLE = re.compile(r"^settle: .*$", re.M)
 PR_URL = re.compile(r"^pr: <?(https?://[^\s<>`]+)", re.M)  # go/branch-pr's `pr: <url>` line
 MOCKUP = re.compile(r"^mockup( url| shots)?: (.+)$", re.M)
@@ -479,6 +480,7 @@ def report(text):
         "pr_body_line": pr[-1].strip() if pr else None,
         "preview_file": (PREVIEW.findall(text) or [""])[-1].strip() or None,
         "reply_drafts_file": (REPLY_DRAFTS.findall(text) or [""])[-1].strip() or None,
+        **{kind: [v.strip() for v in value.split(",") if v.strip()] for kind, value in ASKED.findall(text)},
         "settle": (SETTLE.findall(text) or [None])[-1],
         "pr_url": (PR_URL.findall(text) or [""])[-1].rstrip(".,;)") or None,
         "mockup": mockup(text),
@@ -1305,6 +1307,8 @@ def cmd_run(argv):
             "pr_body_file": pr_line or (str(pr_draft) if pr_draft.exists() else None),
             "preview_file": next((r["preview_file"] for r in parsed if r["preview_file"]), None),
             "reply_drafts_file": next((r["reply_drafts_file"] for r in parsed if r["reply_drafts_file"]), None),
+            "reviewers": next((r["reviewers"] for r in parsed if r.get("reviewers")), []),
+            "labels": next((r["labels"] for r in parsed if r.get("labels")), []),
             "settle": next((r["settle"] for r in parsed if r["settle"]), None),
             "pr_url": pr_url,
             "mockup": next((r["mockup"] for r in parsed if r["mockup"]), None),
