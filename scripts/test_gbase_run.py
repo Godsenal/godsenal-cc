@@ -445,6 +445,14 @@ class GbaseRunTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             gbase_run.plugin_dirs("content", "/nope:content-common")
 
+    def test_review_rows_read_the_built_in_labels(self):
+        table = ("| # | severity | file:line | finding | action |\n|---|---|---|---|---|\n"
+                 "| 1 | **important** | `src/page.mjs:4` | drops the last item | auto-fixed |\n"
+                 "| 2 | nit | `src/page.mjs:3` | no page check | needs decision |\n"
+                 "| 3 | blocker | `src/page.mjs:9` | unknown label | noted |\n")
+        self.assertEqual([(r["severity"], r["location"]) for r in gbase_run.review_rows(table)],
+                         [("medium", "src/page.mjs:4"), ("low", "src/page.mjs:3")])
+
     def test_stop_ends_the_session_process_group(self):
         runner = subprocess.Popen([sys.executable, str(RUNNER), "--repo", str(self.repo), "--slot", "ship", "--model", "hang"],
                                   env=self.env, stdout=subprocess.DEVNULL)

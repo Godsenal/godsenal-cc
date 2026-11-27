@@ -85,7 +85,7 @@ If the PR merges before a fix lands, don't push to the merged branch — report 
 
 ## Report
 
-Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / pre-existing / noted)`, then `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
+Severity-ordered table `# | severity | file:line | finding | action (auto-fixed / needs decision / pre-existing / noted)`, its header in English as written, since `gbase-run` parses it and drops a row it can't read. `severity` must be `critical`, `high`, `medium`, or `low`: the built-in's `important` is `high` or `critical` when it fits Stage 2's high/critical (data loss, security, corruption, crash on a common path), else `medium`, and `nit` is `low`. A raw label left in is read only by `gbase-run`'s fallback for an older review (`"important": "medium"`, `"nit": "low"`), which ranks every `important` as medium. Then the tally line `review: F found, R refuted, S survived — A auto-fixed, K for you`. Optionally one line on the sharpest refuted candidate.
 
 ## Safety
 

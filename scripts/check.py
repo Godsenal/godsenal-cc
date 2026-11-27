@@ -524,8 +524,10 @@ CONTRACTS = [
     Contract("review2-report-only", "review2 runs review twice on one tree; report only keeps the two sessions from editing", [
         ("report only", [skill("review"), FACTORY]),
     ]),
-    Contract("review-table", "the runner merges review2 by parsing review's report table", [
+    Contract("review-table", "the runner merges review2 by parsing review's report table, and drops a row whose severity it can't read", [
         ("# | severity | file:line | finding | action", [skill("review"), RUNNER]),
+        ('"important": "medium"', [skill("review"), RUNNER], "the built-in code-review's labels, mapped the same way on both sides"),
+        ('"nit": "low"', [skill("review"), RUNNER], "the built-in code-review's labels, mapped the same way on both sides"),
     ]),
     Contract("eval-output-graders",
              "each grader matches a token its skill prints (branch-pr parses compat-check's verdict, gbase-run review's table and plan's lines); a token renamed in the skill leaves its grader failing silently",

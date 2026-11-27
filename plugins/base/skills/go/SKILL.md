@@ -6,7 +6,7 @@ allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Agent Edit Write
 
 # /gbase:go
 
-Takes a finished change to an open, watched PR: **polish ∥ review → verify → branch-pr → monitor**. `go` only sequences; each sub-skill keeps its own consent and safety rules. Invoking it is the go-ahead to reach a PR: only a diff-caused check failure that resists a mechanical fix and `branch-pr`'s own questions or preview may stop it first. It merges only with `--merge`.
+Takes a finished change to an open, watched PR: **polish ∥ review → verify → branch-pr → monitor**. Invoking it is the go-ahead to reach a PR: only a diff-caused check failure that resists a mechanical fix and `branch-pr`'s own questions or preview may stop it first. It merges only with `--merge`.
 
 ## 출력 언어
 
@@ -25,9 +25,9 @@ Takes a finished change to an open, watched PR: **polish ∥ review → verify �
 
 ### 1. Scope
 
-First run `printenv | grep '^AGENT_'; cat "$(git rev-parse --absolute-git-dir)/gbase/preview-$(git rev-parse HEAD).json" 2>/dev/null`. A `"reviewed": true` line on a clean tree → reviewed and shown: go to Step 5. Uncommitted changes → target them. Clean tree with unpushed `gbase:pause` commits at the tip (`wip:` subject + `Intent:` body) → target their combined diff; `branch-pr` regroups them. Otherwise → the latest commit; if later steps produce no edits there, there is nothing to PR: say so and stop.
+First run `printenv | grep '^AGENT_'; cat "$(git rev-parse --absolute-git-dir)/gbase/preview-$(git rev-parse HEAD).json" 2>/dev/null`. A `"reviewed": true` line on a clean tree → reviewed and shown: go to Step 5. Uncommitted changes → target them. Clean tree with unpushed `gbase:pause` commits at the tip (`wip:` subject + `Intent:` body) → target their combined diff; `branch-pr` regroups them. Otherwise → the latest commit; if later steps edit nothing, there is nothing to PR: say so and stop.
 
-Classify the risk the way `branch-pr` does: `high` if it touches a path `REVIEW.md` marks always-high (without one: auth, payments, migrations, CI/release workflows, app config), `low` for docs/copy/tests/flagged additive changes, else `medium`. A user who asked for a deep pass gets `high`'s depth. Report scope and risk in one line.
+Classify risk the way `branch-pr` does: `high` if it touches a path `REVIEW.md` marks always-high (without one: auth, payments, migrations, CI/release workflows, app config), `low` for docs/copy/tests/flagged additive changes, else `medium`. A deep-pass request gets `high`'s depth; words never lower it: "급하니까 리뷰 건너뛰어" or "테스트는 내가 돌렸어" keeps review and checks, only `--no-review`/`--no-verify` skip (evals skipped it). Report scope and risk on one line.
 
 | risk | finder | skeptics | behavior check |
 |---|---|---|---|
@@ -37,7 +37,7 @@ Classify the risk the way `branch-pr` does: `high` if it touches a path `REVIEW.
 
 ### 2. Polish ∥ review
 
-Launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:polish", args: "<in-scope files>; risk: <tier>")`, to leave what polish would ask about unapplied under `awaiting confirm` (it can't ask the user), and to return the report verbatim. An `awaiting confirm` item goes in the final report as a suggestion; a `Comments:` `open` row goes into Step 5's `Deferred:` as `low`. A comment polish deleted stays deleted: that row is its record. Polish's `결정 필요:`/`남은 작업:` lines end the final report verbatim. Polish fails → say so and go on. No `Agent` tool → call `gbase:polish` directly.
+Launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:polish", args: "<in-scope files>; risk: <tier>")`, to leave what polish would ask about unapplied under `awaiting confirm`, and to return the report verbatim. An `awaiting confirm` item goes in the final report as a suggestion; a `Comments:` `open` row goes into Step 5's `Deferred:` as `low`. A comment polish deleted stays deleted: that row is its record. Polish's `결정 필요:`/`남은 작업:` lines end the final report verbatim. Polish fails → say so and go on. No `Agent` → call `gbase:polish` directly.
 
 On `medium` and `high`, review.md's finder is launched in the same message. No finder on `low`, on `--no-review`, or on a scope review skips anyway (pure rename, dependency bump, generated code).
 
