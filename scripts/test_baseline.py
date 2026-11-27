@@ -185,6 +185,20 @@ class Eval(unittest.TestCase):
         self.assertTrue(all(isinstance(v, int) for v in rb.values()))
 
 
+class BenchKey(unittest.TestCase):
+    def test_bench_json_lands_under_bench_and_diffs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bench.json"
+            path.write_text(json.dumps({"tasks": {"low": {"runs": 2, "passed": 2, "pass": True, "seconds": 70,
+                                                          "seconds_range": 8, "cost_usd": 0.7, "tokens": None}},
+                                        "runs": [], "spent_usd": 1.4, "skipped": []}), encoding="utf-8")
+            b = bl.build("1.0.0", None, None, str(path))
+        self.assertEqual((b["bench"]["low"]["seconds"], b["bench"]["spent_usd"]), (70, 1.4))
+        faster = {**b, "bench": {**b["bench"], "low": {**b["bench"]["low"], "seconds": 56}}}
+        rows = {key: (x, y, rate) for key, x, y, _, rate in bl.diff(b, faster)}
+        self.assertEqual(rows["bench.low.seconds"], (70, 56, -20.0))
+
+
 class Diff(unittest.TestCase):
     OLD = {"version": "1.0.0", "date": "2026-11-01", "eval": {"passed": 20, "total": 31, "speed": None},
            "read_budget": {"low": 1000}, "trend": {"work": {"cost_p50": 4.0, "turns_p50": None}}}
