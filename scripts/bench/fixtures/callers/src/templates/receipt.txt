@@ -1,0 +1,2 @@
+영수증
+합계 {money:total}

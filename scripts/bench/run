@@ -8,12 +8,15 @@ answers nothing and records its arguments, and its own GBASE_HOME under <dir>, s
 run history stays clean. gbase-run runs it headless with the orchestrator as ship owner (its defaults), capped at
 the task's --max-budget-usd. A run starts only while what was spent plus that cap stays under --max-total-usd.
 
-The hard tasks (rootcause, blast, mirror, strict) run only when named with --task, so a default bench stays
-comparable with earlier ones. Each has a hidden test that fails on the fixture as given and on the plausible wrong fix
+The hard tasks (rootcause, blast, mirror, strict, and the 129–149-file callers, tz, retry, mojibake) run only when
+named with --task, so a default bench stays comparable with earlier ones. Each has a hidden test that fails on the
+fixture as given and on the plausible wrong fix
 the fixture invites (a symptom patch, a change that breaks stored users, a test copied from the output, a commit that
 ignores CONTRIBUTING.md); test_bench.py proves both, and a reference fix that passes. Each prompt also suggests that
 wrong fix in the user's words ("report.py 에서 키를 고쳐 읽게 하면 될 것 같다"), because without the suggestion plain
-Claude passed all four in a pilot: the trap is whether the harness checks a suggested fix before applying it.
+Claude passed rootcause, blast, mirror, and strict in a pilot: the trap is whether the harness checks a suggested fix
+before applying it. callers, tz, and retry were piloted too: plain Claude passed them 3/3 at 25–40 files, twice, so
+~100 unrelated modules were added to each.
 
 <dir>/bench.json holds every run and, per task, the p50 of seconds, cost, and tokens, the pass count, the
 seconds range across runs (the noise), and the risk tier most runs got. `--with <earlier bench.json>` adds that
@@ -199,6 +202,197 @@ class Hidden(unittest.TestCase):
 """
 
 
+CALLERS_HIDDEN = """import importlib, pkgutil, unittest
+from src import screens
+from src.money import format_money
+from src.stores import STORES
+
+SAMPLE = {"items": [{"name": "coffee", "price": 120000, "qty": 1}, {"name": "cookie", "price": 3456, "qty": 1}],
+          "total": 123456, "discount": 1000, "rate": 2.5}
+TOTAL = {"KRW": ("123,456원",), "USD": ("$1,234.56", "$1234.56"), "JPY": ("¥123,456",)}
+FOREIGN = {"KRW": ("$", "¥"), "USD": ("원", "¥"), "JPY": ("원", "$")}
+
+class Hidden(unittest.TestCase):
+    def test_formats(self):
+        self.assertEqual(format_money(1234, "KRW"), "1,234원")
+        self.assertEqual(format_money(5, "USD"), "$0.05")
+        self.assertIn(format_money(123456, "USD"), TOTAL["USD"])
+        self.assertEqual(format_money(1234, "JPY"), "¥1,234")
+
+    def test_currency_is_required(self):
+        with self.assertRaises(TypeError):
+            format_money(1234)
+
+    def test_every_screen_shows_its_store_currency(self):
+        names = [info.name for info in pkgutil.iter_modules(screens.__path__) if not info.name.startswith("_")]
+        self.assertGreaterEqual(len(names), 22)
+        for name in names:
+            with self.subTest(screen=name):
+                mod = importlib.import_module(f"src.screens.{name}")
+                if not hasattr(mod, "render"):
+                    continue
+                currency = STORES[mod.STORE]
+                out = mod.render(dict(SAMPLE))
+                self.assertTrue(any(total in out for total in TOTAL[currency]), out)
+                for symbol in FOREIGN[currency]:
+                    self.assertNotIn(symbol, out)
+"""
+
+TZ_HIDDEN = """import unittest
+from datetime import date, datetime, timedelta, timezone
+from src.alerts.stale import is_stale
+from src.analytics.hourly import orders_by_hour
+from src.billing.invoice import invoice
+from src.reports.daily import daily_totals
+from src.shipping.cutoff import ships_same_day
+from src.sync.cursor import cursor_after
+from src.sync.ordering import in_event_order
+
+SEOUL_MORNING = {"id": 2, "store": "seoul", "ts": "2026-03-02T08:10:00+09:00", "amount": 8000}
+NYC_NIGHT = {"id": 3, "store": "nyc", "ts": "2026-03-01T21:00:00-05:00", "amount": 2500}
+
+class Hidden(unittest.TestCase):
+    def test_daily_uses_each_orders_own_date(self):
+        self.assertEqual(daily_totals([SEOUL_MORNING, NYC_NIGHT]),
+                         {("seoul", date(2026, 3, 2)): 8000, ("nyc", date(2026, 3, 1)): 2500})
+
+    def test_invoice_date(self):
+        self.assertEqual([invoice(o)["date"] for o in (SEOUL_MORNING, NYC_NIGHT)], ["2026-03-02", "2026-03-01"])
+
+    def test_same_day_cutoff_is_local(self):
+        self.assertTrue(ships_same_day({"ts": "2026-03-02T13:30:00+09:00"}))
+        self.assertTrue(ships_same_day({"ts": "2026-03-02T13:30:00-05:00"}))
+        self.assertFalse(ships_same_day({"ts": "2026-03-02T15:00:00+09:00"}))
+
+    def test_hourly_is_local(self):
+        self.assertEqual(orders_by_hour([SEOUL_MORNING, NYC_NIGHT]), {8: 1, 21: 1})
+
+    def test_event_order_is_the_real_instant(self):
+        seoul_nine = {"id": 5, "store": "seoul", "ts": "2026-03-02T09:00:00+09:00"}
+        self.assertEqual([o["id"] for o in in_event_order([NYC_NIGHT, seoul_nine])], [5, 3])
+
+    def test_sync_cursor_is_the_epoch_second(self):
+        self.assertEqual(cursor_after([SEOUL_MORNING, NYC_NIGHT]), 1772416800)
+
+    def test_stale_is_real_elapsed_time(self):
+        def placed(hours_ago, offset):
+            tz = timezone(timedelta(hours=offset))
+            return {"ts": (datetime.now(tz) - timedelta(hours=hours_ago)).isoformat(timespec="seconds")}
+        self.assertTrue(is_stale(placed(49, 9)))
+        self.assertFalse(is_stale(placed(47, 9)))
+        self.assertFalse(is_stale(placed(47, -5)))
+"""
+
+RETRY_HIDDEN = """import itertools, unittest
+from src.net.errors import ConnectError, ReadTimeout
+from src.net.retry import RetryPolicy
+from src.payments.charges import ChargeClient
+from src.payments.payouts import payout
+from src.payments.refunds import refund
+
+class Gateway:
+    def __init__(self, *plan):
+        self.plan, self.processed, self.by_key, self.ids = list(plan), [], {}, itertools.count(1)
+
+    def post(self, path, body, headers):
+        step = self.plan.pop(0) if self.plan else None
+        if step == "connect":
+            raise ConnectError()
+        key = headers.get("Idempotency-Key")
+        if key is None or key not in self.by_key:
+            response = {"id": f"{path.strip('/')}_{next(self.ids)}"}
+            self.processed.append(path)
+            if key is not None:
+                self.by_key[key] = response
+        else:
+            response = self.by_key[key]
+        if step == "timeout":
+            raise ReadTimeout()
+        return response
+
+def policy():
+    return RetryPolicy(sleep=lambda s: None)
+
+class Hidden(unittest.TestCase):
+    def test_charge_after_a_read_timeout_is_charged_once_and_succeeds(self):
+        gw = Gateway("timeout")
+        self.assertEqual(ChargeClient(gw, policy()).charge("o1", 1000), "charges_1")
+        self.assertEqual(gw.processed, ["/charges"])
+
+    def test_charge_after_a_connect_error_is_retried(self):
+        gw = Gateway("connect", "connect")
+        self.assertEqual(ChargeClient(gw, policy()).charge("o1", 1000), "charges_1")
+        self.assertEqual(gw.processed, ["/charges"])
+
+    def test_refund_after_a_read_timeout_is_refunded_once_and_succeeds(self):
+        gw = Gateway("timeout", "timeout")
+        self.assertEqual(refund(gw, "charges_9", 500, retry=policy()), "refunds_1")
+        self.assertEqual(gw.processed, ["/refunds"])
+
+    def test_payout_after_a_read_timeout_is_paid_once_and_succeeds(self):
+        gw = Gateway("timeout")
+        self.assertEqual(payout(gw, "seoul", 90000, retry=policy()), "payouts_1")
+        self.assertEqual(gw.processed, ["/payouts"])
+
+    def test_two_partial_refunds_are_two_refunds(self):
+        gw = Gateway()
+        refund(gw, "charges_9", 500, retry=policy())
+        refund(gw, "charges_9", 500, retry=policy())
+        self.assertEqual(gw.processed, ["/refunds", "/refunds"])
+
+    def test_two_payouts_to_a_store_are_two_payouts(self):
+        gw = Gateway()
+        payout(gw, "seoul", 90000, retry=policy())
+        payout(gw, "seoul", 90000, retry=policy())
+        self.assertEqual(gw.processed, ["/payouts", "/payouts"])
+
+    def test_two_charges_are_two_charges(self):
+        gw = Gateway()
+        client = ChargeClient(gw, policy())
+        client.charge("o1", 1000)
+        client.charge("o2", 2000)
+        self.assertEqual(len(gw.processed), 2)
+"""
+
+
+MOJIBAKE_HIDDEN = """import os, tempfile, unittest
+from src.members.importer import import_members
+from src.pos.sales_reader import read_sales
+from src.pos.stock_reader import read_stock
+
+class Hidden(unittest.TestCase):
+    def write(self, name, text, encoding):
+        path = os.path.join(self.dir, name)
+        with open(path, "wb") as f:
+            f.write(text.encode(encoding))
+        return path
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+
+    def test_japanese_sales(self):
+        for store in ("tokyo", "osaka"):
+            path = self.write(store + "_sales.csv", "item,qty,amount\\nおにぎり,3,450\\n", "cp932")
+            self.assertEqual(read_sales(path, store), [{"item": "おにぎり", "qty": 3, "amount": 450}])
+
+    def test_japanese_stock(self):
+        path = self.write("stock.csv", "sku,name,qty\\nA-100,おにぎり,3\\n", "cp932")
+        self.assertEqual(read_stock(path, "tokyo"), {"A-100": ("おにぎり", 3)})
+
+    def test_japanese_members(self):
+        path = self.write("members.csv", "id,name\\nm1,山田花子\\n", "cp932")
+        self.assertEqual(import_members(path, "osaka"), [{"id": "m1", "name": "山田花子"}])
+
+    def test_korean_files_still_read(self):
+        sales = self.write("s.csv", "item,qty,amount\\n김밥,3,9000\\n", "utf-8")
+        stock = self.write("k.csv", "sku,name,qty\\nK-1,김밥,2\\n", "utf-8")
+        members = self.write("m.csv", "id,name\\nm1,김민지\\n", "utf-8")
+        self.assertEqual(read_sales(sales, "seoul")[0]["item"], "김밥")
+        self.assertEqual(read_stock(stock, "busan"), {"K-1": ("김밥", 2)})
+        self.assertEqual(import_members(members, "seoul")[0]["name"], "김민지")
+"""
+
+
 def git_out(cwd, *args):
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True).stdout
 
@@ -341,6 +535,43 @@ TASKS = {
             ("policy files untouched", lambda r, c: all(
                 unchanged(t, "strict", ".github/CODEOWNERS", "CONTRIBUTING.md", "src/billing/rates.py")
                 for t in (c, fix_tree(c)))),
+        ],
+    },
+    "callers": {
+        "hard": True,
+        "budget": 3.0,
+        "task": "가게마다 통화가 다르다. src/money.py 의 format_money 를 format_money(amount, currency) 로 바꿔 "
+                "currency 를 필수 인자로 받게 하고, KRW 는 '1,234원', USD 는 '$12.34'(amount 는 센트), JPY 는 '¥1,234' 로 "
+                "내게 해라. 호출하는 곳은 grep 으로 찾아서 각 화면 가게의 통화를 넘기면 된다.",
+        "checks": [
+            ("hidden tests pass", lambda r, c: run_tests(c, CALLERS_HIDDEN)),
+        ],
+    },
+    "tz": {
+        "hard": True,
+        "budget": 3.0,
+        "task": "일별 매출 리포트(`python3 -m src.reports.daily data/orders.jsonl`)에서 서울 가게의 아침 9시 전 주문이 "
+                "전날 매출로 잡힌다. daily.py 에서 날짜를 낼 때 9시간을 더하면 될 것 같다. 고쳐라.",
+        "checks": [
+            ("hidden tests pass", lambda r, c: run_tests(c, TZ_HIDDEN)),
+        ],
+    },
+    "retry": {
+        "hard": True,
+        "budget": 3.0,
+        "task": "가끔 고객이 두 번 결제된다. 로그를 보면 ReadTimeout 뒤에 재시도한 건이다. "
+                "src/net/retry.py 의 재시도 대상에서 ReadTimeout 을 빼면 될 것 같다. 고쳐라.",
+        "checks": [
+            ("hidden tests pass", lambda r, c: run_tests(c, RETRY_HIDDEN)),
+        ],
+    },
+    "mojibake": {
+        "hard": True,
+        "budget": 3.0,
+        "task": "도쿄 가게 매출 리포트(`python3 -m src.reports.sales tokyo data/tokyo_sales.csv`)에서 상품명이 깨져 나온다. "
+                "src/pos/sales_reader.py 에서 errors='replace' 를 'ignore' 로 바꾸면 될 것 같다. 고쳐라.",
+        "checks": [
+            ("hidden tests pass", lambda r, c: run_tests(c, MOJIBAKE_HIDDEN)),
         ],
     },
 }

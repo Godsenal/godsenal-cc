@@ -2,6 +2,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import tempfile
 import textwrap
@@ -270,6 +271,105 @@ class HardTasks(unittest.TestCase):
                          rate_changed_then_main)
         self.assertEqual(set(self.grade("strict", right_then_main_with_a_backup_ref).values()), {True})
         self.assertFalse(self.grade("strict", code)["commits follow CONTRIBUTING"], "no commit at all fails")
+
+    def test_callers_grep_misses_the_template_engine(self):
+        money = ('CURRENCIES = {"KRW": ("", "원", 0), "USD": ("$", "", 2), "JPY": ("¥", "", 0)}\n\n\n'
+                 "def format_money(amount, currency):\n"
+                 "    prefix, suffix, digits = CURRENCIES[currency]\n"
+                 "    value = amount / 10 ** digits if digits else amount\n"
+                 '    return f"{prefix}{value:,.{digits}f}{suffix}"\n\n\n'
+                 'def format_pct(value):\n    return f"{value:.1f}%"\n')
+
+        def grep_fix(repo):
+            (repo / "src/money.py").write_text(money, encoding="utf-8")
+            edit(repo, "src/format_registry.py", "def format_cell(kind, value):\n    return FORMATTERS[kind](value)",
+                 "def format_cell(kind, value, currency):\n"
+                 '    return money.format_money(value, currency) if kind == "money" else FORMATTERS[kind](value)')
+            for path in (repo / "src/screens").glob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                if "STORE" not in text:
+                    continue
+                text = re.sub(r"\b(format_money|fmt)\(([^)]*)\)", r"\1(\2, currency_of(STORE))", text)
+                text = text.replace("map(format_money, amounts)",
+                                    "(format_money(a, currency_of(STORE)) for a in amounts)")
+                text = text.replace("format_cell(kind, order[key])", "format_cell(kind, order[key], currency_of(STORE))")
+                path.write_text("from src.stores import currency_of\n" + text, encoding="utf-8")
+
+        def right(repo):
+            grep_fix(repo)
+            edit(repo, "src/template.py", "def render_template(name, **values):",
+                 "def render_template(name, currency, **values):")
+            edit(repo, "src/template.py", '        return getattr(money, "format_" + kind)(values[key])',
+                 '        if kind == "money":\n            return money.format_money(values[key], currency)\n'
+                 '        return getattr(money, "format_" + kind)(values[key])')
+            for path in (repo / "src/screens").glob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                path.write_text(re.sub(r'render_template\("([\w.]+)"', r'render_template("\1", currency_of(STORE)', text),
+                                encoding="utf-8")
+        self.assert_trap("callers", right, grep_fix)
+
+    def test_tz_hours_added_in_the_report_or_a_local_clock_fail(self):
+        utc_naive = "datetime.fromisoformat(text).astimezone(timezone.utc).replace(tzinfo=None)"
+
+        def nine_hours(repo):
+            edit(repo, "src/reports/daily.py", "from src.core.dates import order_date",
+                 "from datetime import timedelta\n\nfrom src.core.timeparse import parse_ts")
+            edit(repo, "src/reports/daily.py", "order_date(order)", '(parse_ts(order["ts"]) + timedelta(hours=9)).date()')
+
+        def local_naive(repo):
+            edit(repo, "src/core/timeparse.py", utc_naive, "datetime.fromisoformat(text).replace(tzinfo=None)")
+
+        def aware(repo):
+            edit(repo, "src/core/timeparse.py", utc_naive, "datetime.fromisoformat(text)")
+            edit(repo, "src/core/timeparse.py", "return datetime.utcnow()", "return datetime.now(timezone.utc)")
+
+        def right(repo):
+            aware(repo)
+            edit(repo, "src/core/timeparse.py", "int((dt - datetime(1970, 1, 1)).total_seconds())", "int(dt.timestamp())")
+        self.assert_trap("tz", right, nine_hours, local_naive, aware)
+
+    def test_retry_dropping_timeouts_or_fixing_only_charges_fails(self):
+        def no_timeout_retry(repo):
+            edit(repo, "src/net/retry.py", "retry_on=(ConnectError, ReadTimeout)", "retry_on=(ConnectError,)")
+
+        def charges_only(repo):
+            edit(repo, "src/payments/charges.py",
+                 '        response = self.retry.run(lambda: self.transport.post("/charges", body, self._headers()))',
+                 "        headers = self._headers()\n"
+                 '        response = self.retry.run(lambda: self.transport.post("/charges", body, headers))')
+
+        def charges_and_refunds(repo):
+            charges_only(repo)
+            edit(repo, "src/payments/refunds.py",
+                 '    def send():\n        headers = {**auth_header(), "Idempotency-Key": str(uuid.uuid4())}\n',
+                 '    headers = {**auth_header(), "Idempotency-Key": str(uuid.uuid4())}\n\n    def send():\n')
+
+        def right(repo):
+            charges_and_refunds(repo)
+            edit(repo, "src/payments/payouts.py", '    return (retry or RetryPolicy()).run(lambda: transport.post("/payouts", body, signed_headers()))["id"]',
+                 '    headers = signed_headers()\n    return (retry or RetryPolicy()).run(lambda: transport.post("/payouts", body, headers))["id"]')
+        def fixed_keys(repo):
+            charges_only(repo)
+            edit(repo, "src/payments/refunds.py", '"Idempotency-Key": str(uuid.uuid4())', '"Idempotency-Key": f"refund-{charge_id}"')
+            edit(repo, "src/payments/payouts.py", "signed_headers()", '{**signed_headers(), "Idempotency-Key": f"payout-{store}"}')
+        self.assert_trap("retry", right, no_timeout_retry, charges_only, charges_and_refunds, fixed_keys)
+
+    def test_mojibake_fixing_only_the_sales_reader_fails(self):
+        table = 'ENCODING = {"tokyo": "cp932", "osaka": "cp932"}\n\n\n'
+
+        def sales_only(repo):
+            edit(repo, "src/pos/sales_reader.py", "import io\n", "import io\n\n" + table)
+            edit(repo, "src/pos/sales_reader.py", 'decode("utf-8", errors="replace")', 'decode(ENCODING.get(store, "utf-8"))')
+
+        def right(repo):
+            sales_only(repo)
+            edit(repo, "src/pos/stock_reader.py", "import csv\n", "import csv\n\n" + table)
+            edit(repo, "src/pos/stock_reader.py", 'encoding="utf-8"', 'encoding=ENCODING.get(store, "utf-8")')
+            edit(repo, "src/members/importer.py", "from pathlib import Path\n", "from pathlib import Path\n\n" + table)
+            edit(repo, "src/members/importer.py", "read_text()", 'read_text(encoding=ENCODING.get(store, "utf-8"))')
+        def ignore(repo):
+            edit(repo, "src/pos/sales_reader.py", 'errors="replace"', 'errors="ignore"')
+        self.assert_trap("mojibake", right, sales_only, ignore)
 
     def test_hard_tasks_run_only_when_named(self):
         ran = []
