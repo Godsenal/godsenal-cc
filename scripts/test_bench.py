@@ -32,7 +32,11 @@ FAKE_RUNNER = textwrap.dedent('''\
               "sessions": {"opus": {"cost_usd": 0.5}, "haiku": {"cost_usd": 0.25}}}
     result.update(json.loads(os.environ.get("FAKE_RESULT") or "{}"))
     if os.environ.get("FAKE_SLEEP"):
-        import time
+        import signal, time
+        def stop(*_):
+            open(os.environ["FAKE_STOPPED"], "w").write("SIGTERM")
+            sys.exit(143)
+        signal.signal(signal.SIGTERM, stop)
         time.sleep(float(os.environ["FAKE_SLEEP"]))
     path = os.path.join(run_dir, "result.json")
     json.dump(result, open(path, "w"))
@@ -104,12 +108,14 @@ class Bench(unittest.TestCase):
         run = json.loads((self.out / "bench.json").read_text())["runs"][0]
         self.assertEqual((run["pass"], run["checks"]["within budget"]), (False, False))
 
-    def test_a_run_past_the_timeout_is_killed_and_failed(self):
-        self.env(FAKE_SLEEP="30")
+    def test_a_run_past_the_timeout_gets_sigterm_and_fails(self):
+        stopped = self.out.parent / "stopped"
+        self.env(FAKE_SLEEP="30", FAKE_STOPPED=str(stopped))
         self.assertEqual(bench.main(["--out", str(self.out), "--task", "low", "--run-timeout", "1"]), 1)
         run = json.loads((self.out / "bench.json").read_text())["runs"][0]
         self.assertFalse(run["pass"])
-        self.assertIn("killed after 1s", run["error"])
+        self.assertIn("stopped after 1s", run["error"])
+        self.assertEqual(stopped.read_text(), "SIGTERM", "gbase-run needs SIGTERM to end the claude groups it started")
 
     def test_tokens_are_the_main_session_count(self):
         self.env(FAKE_RESULT='{"tokens": {"fresh": 10, "cache_read": 100, "output": 5, '
