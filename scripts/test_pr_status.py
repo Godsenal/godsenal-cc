@@ -405,16 +405,16 @@ class ApprovalRequired(unittest.TestCase):
         self.assertEqual(ps.merge_gate(s, decide(s))[1], ["review required (0 approvals so far; waiting on: no reviewer requested)"])
 
     def test_blocked_below_the_required_count_waits_too_though_the_decision_is_empty(self):
-        s = snap(checks=[run()], mergeStateStatus="BLOCKED", reviews=[review(USER, "APPROVED")], required=lambda base: 2)
+        s = snap(checks=[run()], mergeStateStatus="BLOCKED", reviews=[review(USER, "APPROVED", assoc="MEMBER")], required=lambda base: 2)
         self.assertEqual(decide(s)["settle"], "settle: 사람 필요 @aaaaaaa — 승인 1/2 (승인 대기: 요청된 리뷰어 없음)")
 
     def test_blocked_with_enough_approvals_falls_back_to_merge_state(self):
-        s = snap(checks=[run()], mergeStateStatus="BLOCKED", reviews=[review(USER, "APPROVED")], required=lambda base: 1)
+        s = snap(checks=[run()], mergeStateStatus="BLOCKED", reviews=[review(USER, "APPROVED", assoc="MEMBER")], required=lambda base: 1)
         self.assertEqual(decide(s)["settle"], "settle: 수렴 @aaaaaaa")
         self.assertEqual(ps.merge_gate(s, decide(s))[1], ["merge state BLOCKED"])
 
     def test_approved_pr_needs_no_one(self):
-        s = snap(checks=[run()], reviewDecision="APPROVED", reviews=[review(USER, "APPROVED")])
+        s = snap(checks=[run()], reviewDecision="APPROVED", reviews=[review(USER, "APPROVED", assoc="MEMBER")])
         self.assertEqual(decide(s)["settle"], "settle: 수렴 @aaaaaaa")
         self.assertEqual(s["approvals"], 1)
 
@@ -435,7 +435,8 @@ class ApprovalRequired(unittest.TestCase):
         cases = [({"protection": {"required_approving_review_count": 2}}, 2),
                  ({"protection": ps.GhError("HTTP 403"), "rules/": [{"type": "pull_request", "parameters": {"required_approving_review_count": 1}},
                                                                  {"type": "deletion"}]}, 1),
-                 ({"protection": ps.GhError("HTTP 403"), "rules/": []}, None)]
+                 ({"protection": ps.GhError("HTTP 403"), "rules/": []}, None),
+                 ({"protection": {"required_approving_review_count": 1}, "rules/": [{"type": "pull_request", "parameters": {"required_approving_review_count": 2}}]}, 2)]
         real = ps.sh
         try:
             for answers, want in cases:
@@ -445,6 +446,42 @@ class ApprovalRequired(unittest.TestCase):
         finally:
             ps.sh = real
             ps.REQUIRED_APPROVALS.clear()
+
+    def test_fetch_reads_a_partial_error_body_and_turns_a_broken_one_into_a_gh_error(self):
+        def body(pr):
+            d = data(checks=[run()])
+            d["repository"]["pullRequest"].update(pr)
+            return json.dumps({"data": d, "errors": [{"message": "FORBIDDEN: team"}]})
+
+        def fake(text):
+            def sh(cmd, check=True, body_on_error=False):
+                if cmd[:3] != ["gh", "api", "graphql"]:
+                    raise ps.GhError("HTTP 404")
+                if not body_on_error:  # gh exits 1 on a partial error: only a caller that asks gets the body
+                    raise ps.GhError("FORBIDDEN: team")
+                return text
+            return sh
+        real = ps.sh
+        try:
+            ps.sh = fake(body({}))
+            self.assertEqual(ps.fetch("o", "r", 7, ME)["head"], HEAD)
+            for broken in ({"reviewThreads": None}, {}):
+                ps.sh = fake(body(broken) if broken else json.dumps({"message": "Bad credentials"}))
+                with self.assertRaises(ps.GhError):
+                    ps.fetch("o", "r", 7, ME)
+        finally:
+            ps.sh = real
+
+    def test_reviewed_but_mergeable_for_this_viewer_waits_on_no_one(self):
+        s = snap(checks=[run()], reviewDecision="REVIEW_REQUIRED", mergeStateStatus="CLEAN", requests=[self.ALICE], required=lambda base: 1)
+        self.assertEqual(decide(s)["settle"], "settle: 수렴 @aaaaaaa")
+        self.assertEqual(ps.merge_gate(s, decide(s)), (True, []))
+
+    def test_an_outsiders_or_a_bots_approval_does_not_count(self):
+        s = snap(checks=[run()], mergeStateStatus="BLOCKED", required=lambda base: 1,
+                 reviews=[review(USER, "APPROVED", assoc="CONTRIBUTOR"), review(BOT, "APPROVED", assoc="NONE", rid=21)])
+        self.assertEqual(s["approvals"], 0)
+        self.assertEqual(decide(s)["settle"], "settle: 사람 필요 @aaaaaaa — 승인 0/1 (승인 대기: 요청된 리뷰어 없음)")
 
     def test_a_graphql_body_with_partial_errors_is_still_read(self):
         script = Path(tempfile.mkdtemp()) / "gh"

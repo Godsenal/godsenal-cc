@@ -248,7 +248,8 @@ def normalize(data, me, annotations=lambda check_id: (), polls=(), required=lamb
             "head_is_mine": login(((commit.get("author") or {}).get("user"))) == me,
             "checks": checks, "items": items, "expected": sorted(expected), "activity": activity,
             "concluded_apps": sorted(concluded_apps), "links": links, "reviewers": reviewers,
-            "approvals": sum(1 for who, r in latest_review.items() if r["state"] == "APPROVED" and who != me),
+            "approvals": sum(1 for who, r in latest_review.items() if r["state"] == "APPROVED" and who != me and not is_bot(r["author"])
+                             and r.get("authorAssociation") in TRUSTED_ASSOCIATIONS),  # an outsider's approval satisfies no rule
             "required_approvals": required(pr["baseRefName"]) if pr.get("reviewDecision") == "REVIEW_REQUIRED" or pr["mergeStateStatus"] == "BLOCKED" else None,
             "my_comments": [c["body"] or "" for c in comments if login(c["author"]) == me]}
 
@@ -289,7 +290,8 @@ def mark_held(items, drafts):
 
 def approval_wait(snap):
     need, given = snap["required_approvals"], snap["approvals"]
-    if snap["draft"] or (snap["review_decision"] != "REVIEW_REQUIRED" and not (snap["merge_state"] == "BLOCKED" and need and given < need)):
+    # only while GitHub blocks the merge: REVIEW_REQUIRED with CLEAN is a viewer who may bypass the review
+    if snap["draft"] or (snap["merge_state"] != "BLOCKED") or (snap["review_decision"] != "REVIEW_REQUIRED" and not (need and given < need)):
         return None
     return {"need": need, "given": given, "who": snap["reviewers"]}
 
@@ -563,7 +565,12 @@ def fetch(owner, repo, number, me, polls=()):
             except (GhError, ValueError):
                 return []
         return ANNOTATIONS[check_id]
-    return normalize(raw["data"], me, annotations, polls, lambda base: required_approvals(owner, repo, base))
+    try:
+        return normalize(raw["data"], me, annotations, polls, lambda base: required_approvals(owner, repo, base))
+    except (TypeError, KeyError, AttributeError):
+        if not raw.get("errors"):
+            raise
+        raise GhError(raw["errors"][0].get("message", "graphql error"))  # a partial error nulled a field the snapshot needs
 
 
 def required_approvals(owner, repo, base):
