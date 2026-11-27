@@ -27,8 +27,8 @@ BOT = {"login": "review-bot", "__typename": "Bot"}
 MINE = {"login": ME, "__typename": "User"}
 
 
-def run(name="check", status="COMPLETED", conclusion="SUCCESS", required=False, app="github-actions", check_id=1):
-    return {"__typename": "CheckRun", "name": name, "status": status, "conclusion": conclusion, "startedAt": T0, "databaseId": check_id,
+def run(name="check", status="COMPLETED", conclusion="SUCCESS", required=False, app="github-actions", check_id=1, title=None):
+    return {"__typename": "CheckRun", "name": name, "status": status, "conclusion": conclusion, "startedAt": T0, "databaseId": check_id, "title": title,
             "detailsUrl": f"https://github.com/o/r/actions/runs/1/job/{check_id}", "isRequired": required, "checkSuite": {"app": {"slug": app}}}
 
 
@@ -490,6 +490,59 @@ class ApprovalRequired(unittest.TestCase):
         self.assertEqual(json.loads(ps.sh([str(script)], body_on_error=True))["data"], {"x": 1})
         with self.assertRaises(ps.GhError):
             ps.sh([str(script)])
+
+
+class ClaudeApprovalsCheck(unittest.TestCase):
+    WAITING = "Waiting on human review (1 more approval)"
+
+    def gate(self, title=WAITING, conclusion="FAILURE", status="COMPLETED", app="claude", name="Claude Approvals", **kw):
+        kw.setdefault("mergeStateStatus", "BLOCKED")
+        return snap(checks=[run(), run(name=name, status=status, conclusion=conclusion, app=app, title=title, required=True, check_id=2)], **kw)
+
+    def test_a_red_check_waiting_on_people_is_an_approval_wait_not_ci(self):
+        v = decide(self.gate(requests=[{"requestedReviewer": USER, "asCodeOwner": True}]))
+        self.assertTrue(v["settled"])
+        self.assertEqual(v["settle"], f"settle: 사람 필요 @aaaaaaa — 승인 0개 (승인 대기: alice (CODEOWNERS); Claude Approvals: {self.WAITING})")
+        self.assertEqual(len(v["next"]), 1, v["next"])
+        self.assertTrue(v["next"][0].startswith("approval — "), v["next"])
+
+    def test_it_waits_even_when_github_itself_asks_for_no_review(self):
+        s = self.gate(mergeStateStatus="UNSTABLE")
+        v = decide(s)
+        self.assertEqual(v["settle"], f"settle: 사람 필요 @aaaaaaa — 승인 0개 (승인 대기: 요청된 리뷰어 없음; Claude Approvals: {self.WAITING})")
+        self.assertFalse(any(n.startswith("ci") for n in v["next"]), v["next"])
+
+    def test_merge_gate_still_refuses_it(self):
+        for state in ("BLOCKED", "UNSTABLE"):
+            s = self.gate(mergeStateStatus=state)
+            self.assertEqual(ps.merge_gate(s, decide(s)),
+                             (False, [f"review required (0 approvals so far; waiting on: no reviewer requested; Claude Approvals: {self.WAITING})"]))
+
+    def test_another_red_title_is_a_persons_call_not_ci_and_not_an_approval(self):
+        s = self.gate(title="Policy file cannot be used")
+        v = decide(s)
+        self.assertEqual(v["settle"], "settle: 사람 필요 @aaaaaaa — Claude Approvals: Policy file cannot be used")
+        self.assertEqual(len(v["next"]), 1, v["next"])
+        self.assertTrue(v["next"][0].startswith("policy — "), v["next"])
+        self.assertEqual(ps.merge_gate(s, v)[1], ["Claude Approvals is red: Policy file cannot be used"])
+        self.assertIn("  red: Claude Approvals (required) — Policy file cannot be used; a person's call, not a CI failure · "
+                      "https://github.com/o/r/actions/runs/1/job/2", ps.render(s, v))
+
+    def test_a_drafts_stale_red_check_holds_nothing_so_draft_still_flips(self):
+        v = decide(self.gate(title="Code Review timed out", isDraft=True))
+        self.assertEqual((v["settle"], v["next"]), ("settle: 수렴 @aaaaaaa", ["settled — nothing open on this head"]))
+
+    def test_a_workflow_job_or_another_check_by_a_similar_name_is_still_ci(self):
+        for name, app in (("Claude Approvals", "github-actions"), ("Claude Approvals", None), ("Claude Approvals Config", "claude"),
+                          ("Claude Code Review", "claude")):
+            v = decide(self.gate(name=name, app=app, mergeStateStatus="UNSTABLE"))
+            self.assertTrue(v["next"][0].startswith(f"ci — {name};"), (name, v["next"]))
+
+    def test_running_or_observe_mode_is_not_a_wait_on_people(self):
+        v = decide(self.gate(status="IN_PROGRESS", conclusion=None, title="Waiting for classifiers"))
+        self.assertTrue(v["next"][-1].startswith("wait"), v["next"])
+        s = self.gate(conclusion="NEUTRAL", title="(observe mode) Would wait on human review", mergeStateStatus="CLEAN")
+        self.assertEqual(decide(s)["settle"], "settle: 수렴 @aaaaaaa")
 
 
 class LinksAndRender(unittest.TestCase):

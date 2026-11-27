@@ -17,7 +17,7 @@ Read when monitor was invoked with `--until-settled` (the only mode run under `A
 End with exactly one line, the script's `settle:` line ([meaning](../../../references/orchestrator.md#settle)):
 
 - `settle: 수렴 @<sha>`, or `settle: 미확정 @<sha> — 안 옴: …` after `give up` or `limit` — as printed.
-- `settle: 사람 필요 @<sha> — …` — printed for a failed check, an open comment, a conflict, or an approval still due (`승인 대기: <reviewers>`). It's the verdict only for what you couldn't fix or answer; fix what you can, push, and wait on the new head first.
+- `settle: 사람 필요 @<sha> — …` — for a failed check, an open comment, a conflict, or an approval still due (`승인 대기: <reviewers>`, plus `; Claude Approvals: <title>` for that red check). Only for what you can't fix: fix, push, and wait on the new head first.
 
 ## What it never does
 
