@@ -1,6 +1,6 @@
 ---
 name: how
-description: "Explains how a part of the codebase works — subsystem architecture, runtime flow, where things live — at the level a senior engineer needs to start working in it, citing real files and functions. Also answers placement and ownership questions ('where should this live', 'which module owns this', 'is this the right layer'). Use for 'how does X work', a walkthrough before changing something, or onboarding onto an area. For why it was built that way, use gbase:why."
+description: "Explains how a part of the codebase works — subsystem architecture, runtime flow, where things live — at the level a senior engineer needs to start working in it, citing real files and functions. Also answers placement and ownership questions ('where should this live', 'which module owns this', 'is this the right layer'). Use for 'how does X work', walking through a flow or lifecycle before changing it, or onboarding onto an area ('어떻게 동작해?', '흐름 설명해 줘', '이건 어느 모듈 소관이야?'). For why it was built that way, use gbase:why."
 allowed-tools: Read Glob Grep Bash Agent
 ---
 

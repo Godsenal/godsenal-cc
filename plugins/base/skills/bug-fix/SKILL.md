@@ -1,6 +1,6 @@
 ---
 name: bug-fix
-description: "Fixes a bug at its root cause, not where it surfaced — reproduces it first (via gbase:reproduce), narrows the cause by ruling out hypotheses with runtime evidence, asks whether the triggering state is legitimate before adding any guard, fixes every instance of the pattern, and verifies on the same surface it failed on. Use when asked to fix a bug, when a test or CI fails for a reason that isn't mechanical, or when something 'randomly' breaks or is flaky. When only asked why something broke, it stops at the diagnosis."
+description: "Fixes a bug at its root cause, not where it surfaced — reproduces it first (via gbase:reproduce), narrows the cause by ruling out hypotheses with runtime evidence, asks whether the triggering state is legitimate before adding any guard, fixes every instance of the pattern, and verifies on the same surface it failed on. Use when asked to fix a bug or a crash, when a test or CI fails for a reason that isn't mechanical, or when something 'randomly' breaks or is flaky ('버그 고쳐 줘', '가끔 앱이 죽어', '테스트가 이유 없이 실패해'). When only asked why something broke, it stops at the diagnosis."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent Skill
 ---
 
