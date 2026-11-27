@@ -83,6 +83,11 @@
       "note": "a change to what a user sees",
       "limit": null,
       "reads": ["plugins/base/skills/design-taste/SKILL.md"]
+    },
+    "deltas": {
+      "note": "one of go's parallel stages changed something the other never read (stage-delta's next: names the file); a run where neither did reads nothing more",
+      "limit": null,
+      "reads": ["plugins/base/skills/go/references/deltas.md"]
     }
   }
 }

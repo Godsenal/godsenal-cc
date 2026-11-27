@@ -1,0 +1,277 @@
+#!/usr/bin/env python3
+"""What one of go's parallel stages changed after the other one looked: polish edits the finder never read,
+and review fixes polish never saw.
+
+  stage-delta mark <low|medium|high> [--no-review]
+                       before the finder and polish start: snapshot the working tree (untracked files included),
+                       and say whether a finder is owed (medium and high; low only under AGENT_HEADLESS=1)
+  stage-delta polish   after polish returns: what polish changed since the mark; moves the mark to now
+  stage-delta review   after review's fixes: what review changed since polish returned
+
+The snapshot is a tree object written through a temporary index: the real index, the stash, and the
+working tree are left as they were. The mark is kept in `<git dir>/gbase/stage-mark` with the finder it
+owes, so neither has to be carried between calls.
+
+  mark    `finder: … — owed` and `next: launch polish and the finder in one message`,
+          or `finder: none — …` and `next: launch polish`
+  polish  `next: review the polish delta` (a line that is not a comment changed),
+          `next: wait for the finder` (owed, no code changed), or `next: nothing to review`
+  review  `next: comment pass on review's fixes` (a fix added a comment), or `next: nothing to polish`
+
+When git can't produce the diff it exits 1 with `next: read the diff yourself — …`: the same decision,
+made by reading.
+"""
+import importlib.machinery
+import importlib.util
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+DOCS = {"md", "mdx", "markdown", "txt", "rst", "adoc"}
+DELTAS = Path(__file__).resolve().parents[1] / "references" / "deltas.md"
+REVIEW = Path(__file__).resolve().parents[1] / "references" / "review.md"
+RISKS = ("low", "medium", "high")
+
+
+def load_added_comments():
+    path = Path(__file__).resolve().parents[2] / "polish" / "scripts" / "added-comments"
+    loader = importlib.machinery.SourceFileLoader("added_comments", str(path))
+    spec = importlib.util.spec_from_loader("added_comments", loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+AC = load_added_comments()
+
+
+def git(*args, env=None):
+    return subprocess.run(["git", "-c", "core.quotePath=false", *args], capture_output=True, text=True,
+                          errors="replace", check=True, env=env).stdout
+
+
+def snapshot():
+    """A tree of the working tree as `git add -A` would stage it, written without touching the real index."""
+    index = Path(git("rev-parse", "--git-path", "index").rstrip("\n")).absolute()  # relative to cwd, not the top
+    with tempfile.TemporaryDirectory() as tmp:
+        temp_index = Path(tmp) / "index"
+        if index.exists():
+            shutil.copy2(index, temp_index)  # keep its mtime: a newer one hides a same-size edit made in the same second (racy git)
+        env = {**os.environ, "GIT_INDEX_FILE": str(temp_index)}
+        git("add", "-A", "--", ":/", env=env)
+        return git("write-tree", env=env).strip()
+
+
+def lines(diff):
+    """(hunk, path, '+' or '-', new-or-old line number, text) for every changed line of a -U0 diff between two trees."""
+    path, old_no, new_no, hunk = None, 0, 0, 0
+    old_left = new_left = 0
+    for raw in diff.splitlines():
+        if old_left <= 0 and new_left <= 0:
+            if raw.startswith("+++ "):
+                target = raw[4:].split("\t")[0]
+                if target != "/dev/null":
+                    path = re.sub(r"^b/", "", target)
+            elif raw.startswith("--- "):
+                source = raw[4:].split("\t")[0]
+                path = None if source == "/dev/null" else re.sub(r"^a/", "", source)
+            elif raw.startswith("@@"):
+                match = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", raw)
+                if match:
+                    hunk += 1
+                    old_no, old_left = int(match.group(1)), int(match.group(2) or 1)
+                    new_no, new_left = int(match.group(3)), int(match.group(4) or 1)
+            continue
+        if raw.startswith("\\"):
+            continue
+        if raw.startswith("+"):
+            yield hunk, path, "+", new_no, raw[1:]
+            new_no, new_left = new_no + 1, new_left - 1
+        elif raw.startswith("-"):
+            yield hunk, path, "-", old_no, raw[1:]
+            old_no, old_left = old_no + 1, old_left - 1
+
+
+def comment_only(text, kinds, inside):
+    """The line is a comment and nothing else: taking the comment out leaves no code. Markers are the file's own
+    (`--i;` in C and `#define` are code), and a line that only starts with a comment (`/* a */ f(2);`) is code."""
+    text = text.strip()
+    unknown = "unknown" in kinds
+    if inside or text.startswith("*/"):  # inside a block comment: only what follows its close can be code
+        return "*/" not in text or not text.split("*/", 1)[1].strip()
+    for opener, closer, kind in (("/*", "*/", "block"), ("<!--", "-->", "markup")):
+        if text.startswith(opener) and (kind in kinds or unknown):
+            rest = text[len(opener):]
+            return closer not in rest or not rest.split(closer, 1)[1].strip()
+    if text.startswith("//") and ("slash" in kinds or unknown):
+        return True
+    if text[:3] in ('"""', "'''") and "docstring" in kinds:  # only the literal: `"""a""".format(x)` is code
+        rest = text[3:]
+        return text[:3] not in rest or not rest.split(text[:3], 1)[1].strip()
+    if text.startswith("--") and "dash" in kinds:
+        return True
+    if "hash" in kinds:
+        return bool(re.match(r"#(?!!)", text))
+    return unknown and bool(re.match(r"#(?!!)(\s|$)", text))
+
+
+def unlined(diff):
+    """Files whose change has no line to read: binary content or a mode change."""
+    found, path = [], None
+    for raw in diff.splitlines():
+        if raw.startswith("diff --git "):
+            rest = raw[len("diff --git "):]
+            path = rest[2:2 + (len(rest) - 5) // 2]  # `a/<path> b/<path>`: --no-renames makes both halves one path
+        elif path and raw.startswith(("Binary files ", "old mode ")):
+            found.append(path)
+            path = None
+    return found
+
+
+def code_lines(diff):
+    """{file: [line numbers]} of changed lines that hold code: not blank, not prose, and not only a comment.
+
+    A code line with a trailing comment is code: missing a polish edit costs an unreviewed change, so the
+    doubt goes to review (added-comments errs the other way, where a wrong guess costs one idle pass)."""
+    found, in_block = {}, {}
+    for hunk, path, sign, number, text in lines(diff):
+        if not path:
+            continue
+        kinds = AC.families(path)  # requirements.txt and CMakeLists.txt are `.txt` files that hold code
+        if kinds is None and Path(path).suffix.lower()[1:] in DOCS:
+            continue
+        key = (hunk, sign)  # a block comment never runs across hunks: -U0 shows no line between them
+        if kinds is None:  # data (JSON, lockfiles): every non-blank change counts
+            only = False
+        else:
+            inside = in_block.get(key, False)
+            _, in_block[key] = AC.has_comment(text, kinds, inside)
+            only = comment_only(text, kinds, inside)
+        if text.strip() and not only:
+            found.setdefault(path, []).append(f"{sign}{number}")
+    for path in unlined(diff):
+        found.setdefault(path, []).append("binary or mode change")
+    return found
+
+
+def mark_file():
+    return Path(git("rev-parse", "--absolute-git-dir").rstrip("\n")) / "gbase" / "stage-mark"
+
+
+def set_mark(tree, finder):
+    path = mark_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{tree}\nfinder: {finder or 'none'}\n")
+
+
+def read_mark():
+    """(tree, the finder the mark owes, or None)."""
+    path = mark_file()
+    if not path.exists():
+        raise OSError("no mark: run `stage-delta mark <risk>` before the finder and polish start")
+    tree, *rest = path.read_text().split("\n")
+    finder = next((line[len("finder: "):] for line in rest if line.startswith("finder: ")), "none")
+    return tree.strip(), None if finder == "none" else finder
+
+
+def owed_finder(risk, no_review):
+    """The finder a run owes: medium and high always; low only headless or orchestrator-owned (such a run often
+    ends before any monitor self-review, and under an orchestrator there is none); none when review is skipped."""
+    if no_review:
+        return None
+    if risk in ("medium", "high"):
+        return f"code-review {risk}"
+    unattended = os.environ.get("AGENT_HEADLESS") == "1" or os.environ.get("AGENT_SHIP_OWNER") == "orchestrator"
+    return "code-review low" if unattended else None
+
+
+def delta():
+    """What changed since the mark: (now, the -U0 diff, files changed, the `diff:` line)."""
+    mark, finder = read_mark()
+    now = snapshot()
+    diff = git("diff", "--no-color", "--no-ext-diff", "--no-renames", "--no-relative", "--src-prefix=a/",
+               "--dst-prefix=b/", "-U0", mark, now)  # the parsers read `a/` and `b/`, whatever diff.noprefix says
+    files = sum(line.startswith("diff --git ") for line in diff.splitlines())
+    return now, finder, diff, files, f"diff: git diff --no-relative {mark} {now}"
+
+
+def rows(found):
+    return [f"{path}: {', '.join(map(str, nums))}" for path, nums in sorted(found.items())]
+
+
+def plural(n, word):
+    return f"{n} {word}{'s' if n != 1 else ''}"
+
+
+def mark(risk, no_review=False):
+    mark_file().unlink(missing_ok=True)  # a mark this call fails to write must not leave an earlier run's behind
+    tree = snapshot()
+    finder = owed_finder(risk, no_review)
+    set_mark(tree, finder)
+    if finder:
+        return [f"mark: {tree}", f"finder: {finder} — owed",
+                f"next: launch polish and the finder in one message: the finder's Agent is in {REVIEW}, which Steps 2–3 follow; "
+                f"its later calls are `{Path(__file__).resolve()} polish|review`"]
+    why = "review skipped (--no-review, or a scope review skips)" if no_review else "low risk; monitor's self-review covers it"
+    return [f"mark: {tree}", f"finder: none — {why}", "next: launch polish"]
+
+
+def polish():
+    now, finder, diff, files, diff_line = delta()
+    set_mark(now, finder)  # review's fixes start here
+    head = [f"mark: {now}"]
+    found = code_lines(diff) if files else {}
+    if found:  # review.md, the only caller, runs this when a finder ran
+        return [*head, *rows(found), f"polish delta: code in {plural(len(found), 'file')}", diff_line,
+                f"next: review the polish delta — Step 3's review agent runs, also with no findings, and takes the rows above as candidates; read {DELTAS}"]
+    summary = (f"polish delta: comments or prose only, in {plural(files, 'file')}" if files else "polish delta: none")
+    tail = [diff_line] if files else []
+    if finder:
+        return [*head, summary, *tail, f"next: wait for the finder ({finder}), then Step 3 of {REVIEW}"]
+    return [*head, summary, *tail, "next: nothing to review"]
+
+
+def review():
+    now, _, diff, files, diff_line = delta()
+    if not files:
+        return ["review delta: none", "next: nothing to polish"]
+    hits = AC.scan(diff)
+    total = sum(len(v) for v in hits.values())
+    if not total:
+        return [f"review delta: {plural(files, 'file')}, no comment on an added line", diff_line, "next: nothing to polish"]
+    return [*rows(hits),
+            f"review delta: {plural(files, 'file')}, {plural(total, 'comment')} on added lines", diff_line,
+            f"next: comment pass on review's fixes — polish's comment pass, risk: low, on the rows above; read {DELTAS}"]
+
+
+COMMANDS = {
+    "mark": (mark, f"take each stage's changes from its report; the finder is owed on medium, high, and headless low, by {REVIEW}"),
+    "polish": (polish, "a polish edit to a line that is not a comment → review it; none → nothing to review"),
+    "review": (review, "a comment a review fix added → comment pass on it; none → nothing to polish"),
+}
+
+
+def main(argv):
+    if argv[:1] == ["mark"] and len(argv) in (2, 3) and argv[1] in RISKS and argv[2:] in ([], ["--no-review"]):
+        args = (argv[1], argv[2:] == ["--no-review"])
+    elif len(argv) == 1 and argv[0] in ("polish", "review"):
+        args = ()
+    else:
+        print(__doc__.strip())
+        return 0 if argv and argv[0] in ("-h", "--help") else 2
+    run, by_hand = COMMANDS[argv[0]]
+    try:
+        print("\n".join(run(*args)))
+    except (subprocess.CalledProcessError, OSError) as error:
+        print(f"stage-delta: {(getattr(error, 'stderr', '') or str(error)).strip()}", file=sys.stderr)
+        print(f"next: read the diff yourself — {by_hand}")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

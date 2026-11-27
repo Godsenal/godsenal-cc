@@ -17,7 +17,7 @@ Takes a finished change to an open, watched PR: **polish ∥ review → verify �
 | When | Read first |
 |---|---|
 | Step 1's check prints an `AGENT_` variable | [orchestrated.md](references/orchestrated.md). Under `AGENT_HEADLESS=1` nothing is asked ([headless.md](../../references/headless.md)). |
-| Risk `medium` or `high` | [review.md](references/review.md) before Step 2, [verify.md](references/verify.md) at Step 4; on `high` also [high.md](references/high.md) |
+| Risk `medium` or `high` | [verify.md](references/verify.md) at Step 4; on `high` also [high.md](references/high.md) |
 | A check fails, or the repo has no verify block | [verify.md](references/verify.md) |
 | `--draft`, `--merge`, `--preview`, `--hold-replies`, `--post-replies`, or a finding review deferred | [draft-merge.md](references/draft-merge.md), before Step 5 |
 
@@ -31,19 +31,17 @@ Classify risk the way `branch-pr` does: `high` if it touches a path `REVIEW.md` 
 
 | risk | finder | skeptics | behavior check |
 |---|---|---|---|
-| `low` | skip: monitor's self-review covers it during the CI wait | — | skip |
+| `low` | skip (headless: `code-review low`) | — | skip |
 | `medium` | `code-review medium` | `one skeptic for low/medium` | required |
 | `high` | `code-review high` | all findings | required |
 
 ### 2. Polish ∥ review
 
-Launch an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:polish", args: "<in-scope files>; risk: <tier>")`, to leave what polish would ask about unapplied under `awaiting confirm`, and to return the report verbatim. An `awaiting confirm` item goes in the final report as a suggestion; a `Comments:` `open` row goes into Step 5's `Deferred:` as `low`. A comment polish deleted stays deleted: that row is its record. Polish's `결정 필요:`/`남은 작업:` lines end the final report verbatim. Polish fails → say so and go on. No `Agent` → call `gbase:polish` directly.
-
-On `medium` and `high`, review.md's finder is launched in the same message. No finder on `low`, on `--no-review`, or on a scope review skips anyway (pure rename, dependency bump, generated code).
+First, in a call of its own, run `"${CLAUDE_SKILL_DIR}/scripts/stage-delta" mark <risk>` (add `--no-review` when given or for a pure rename, dependency bump, or generated code) and launch what its `next:` names, in one message. Polish: an `Agent` (`general-purpose`, `run_in_background: false`) told to run `Skill(skill: "gbase:polish", args: "<in-scope files>; risk: <tier>")`, to leave what polish would ask about unapplied under `awaiting confirm`, and to return the report verbatim. An `awaiting confirm` item goes in the final report as a suggestion; a `Comments:` `open` row goes into Step 5's `Deferred:` as `low`. A comment polish deleted stays deleted: that row is its record. Polish's `결정 필요:`/`남은 작업:` lines end the final report verbatim. Polish fails → say so and go on. No `Agent` → call `gbase:polish` directly.
 
 ### 3. Apply review findings
 
-Only when a finder ran, by review.md. Its table doesn't end the turn: go on to Step 4.
+Only when a finder ran, by [review.md](references/review.md). Its table doesn't end the turn: go on to Step 4.
 
 ### 4. Verification gate
 
@@ -65,4 +63,4 @@ Skill(skill: "gbase:branch-pr", args: "Risk: <tier — reason>; Verification: <S
 Skill(skill: "gbase:monitor", args: "--no-review")
 ```
 
-Drop `--no-review` when the pre-PR review didn't run (the `low` row, a finder that failed or never returned) or polish's `Comments:` line has a `fixed` row.
+Drop `--no-review` when the pre-PR review didn't run (the `low` row, a finder that failed or never returned) or a polish `fixed` row that no review agent read.

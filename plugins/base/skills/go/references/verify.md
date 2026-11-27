@@ -25,9 +25,9 @@ Required on `medium` and `high` when the diff changes what a user or caller obse
 - **Required means evidence or a reason.** An unreachable precondition (no simulator, no test account, no such run) is `behavior: skip — <reason>`. The PR still opens, but a skip is unverified, not a pass: it goes to `branch-pr` as written, where it becomes a `(확인)` item, and into the evidence file as `open`. A diff-caused failure goes through the fix-twice-then-ask rule above.
 - **Say what it ran on.** When a check ran on a chosen input (a fixture, sample files, a simulator) and the bug report or real use has a different kind (resolution, format, metadata, device), name both: 1024px messenger copies passed while the phone's full-size originals still failed, and the report never said the inputs differed.
 
-## Code the comment pass wrote
+## Code polish wrote
 
-A `fixed` row under polish's `Comments:` line means polish replaced a workaround with its root-cause fix after the finder had read the diff. Treat it like a review fix: re-run the behavior check for a feature whose files it touched. Step 6 drops `--no-review` for it, so monitor's self-review reads that code.
+A `fixed` row under polish's `Comments:` line, or `stage-delta polish` printing `next: review the polish delta`, means polish changed code after the route's behavior check. Treat it like a review fix: re-run the behavior check for a feature whose files it touched. Step 6 keeps `--no-review` only when Step 3's review agent took it as candidates ([deltas.md](deltas.md)).
 
 ## Report
 

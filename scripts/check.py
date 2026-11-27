@@ -41,6 +41,8 @@ GO_HIGH = "plugins/base/skills/go/references/high.md"  # read on `high` only: th
 REVIEW_PROVEN = "plugins/base/skills/review/references/proven.md"
 GO_DRAFT_MERGE = "plugins/base/skills/go/references/draft-merge.md"
 GO_ORCH = "plugins/base/skills/go/references/orchestrated.md"
+GO_DELTAS = "plugins/base/skills/go/references/deltas.md"  # read when stage-delta finds one stage's edits the other never saw
+STAGE_DELTA = "plugins/base/skills/go/scripts/stage-delta"
 WORK_PLAYBOOKS = "plugins/base/skills/work/references/playbooks.md"
 PLAYBOOK_DIR = "plugins/base/skills/poteto-mode/playbooks"
 # the parts of branch-pr and monitor that only some runs read; a token lives where that branch is written
@@ -456,6 +458,27 @@ CONTRACTS = [
         ("comments: skip —", [ADDED_COMMENTS, skill("polish")]),
         ("don't encode", [POLISH_COMMENTS]),
         ('"skills/polish/references/comments.md"', ["scripts/pstack/lock.json"]),
+    ]),
+    Contract("go-stage-deltas",
+             "polish and the finder run in parallel: stage-delta snapshots the tree, and its next: lines send polish's code edits to review and review's new comments to polish's comment pass", [
+        ("stage-delta\" mark <risk>", [skill("go")], "every go run takes the mark in Step 2, so the script, not a reference, says whether a finder is owed"),
+        ("stage-delta mark", [GO_REVIEW, GO_ORCH, STAGE_DELTA]),
+        ("— owed", [GO_REVIEW, STAGE_DELTA]),
+        ("agent_headless", [STAGE_DELTA], "headless low owes a finder: bench runs skipped it 4 of 6 times when only orchestrated.md asked"),
+        ("next: wait for the finder", [STAGE_DELTA]),
+        ("stage-delta polish", [GO_REVIEW, GO_VERIFY, STAGE_DELTA]),
+        ("stage-delta review", [GO_REVIEW, STAGE_DELTA]),
+        ("next: review the polish delta", [STAGE_DELTA, GO_DELTAS, GO_VERIFY]),
+        ("next: comment pass on review's fixes", [STAGE_DELTA, GO_DELTAS]),
+        ("next: nothing to review", [STAGE_DELTA]),
+        ("next: nothing to polish", [STAGE_DELTA]),
+        ("next: read the diff yourself", [STAGE_DELTA]),
+        ('"references" / "deltas.md"', [STAGE_DELTA], "the next: line names deltas.md by its absolute path"),
+        ("[deltas.md](deltas.md)", [GO_REVIEW, GO_VERIFY]),
+        ('"polish" / "scripts" / "added-comments"', [STAGE_DELTA],
+         "stage-delta loads polish's comment detection by path, so a change to added-comments' families/has_comment/scan reaches it"),
+        ("../../polish/references/comments.md", [GO_DELTAS]),
+        ("risk: low", [GO_DELTAS], "a pass over review's fixes deletes only, so it leaves no code a reviewer has to read again"),
     ]),
     Contract("premise-after-two-fixes",
              "a check still failing after two fixes: verify.md, monitor's ci row, and pr-status's ci line all point at premise.md, which writes the premise, makes one observation, and stops with no third fix", [
