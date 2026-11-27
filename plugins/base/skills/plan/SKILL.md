@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "Turns an idea or a vague request into a plan a work run can build without guessing: checks the premise, settles the decisions only the user can make (asked in rounds with a recommended answer each, so one 'ㄱㄱ' accepts them), looks facts up itself, and ends with PR-sized slices that each carry their own check. Read-only: writes one plan file, no code. Use when the user says 기획, 계획 세워, 설계해 줘, plan this, grill me, or brings an idea, a feature with open product choices, or a task too big for one PR; also on /gbase:plan <idea>. Not for a task that already names the change and how to check it: that goes to gbase:work."
+description: "Turns an idea or a vague request into a plan a work run can build without guessing: checks the premise, settles the decisions only the user can make (in rounds, each with a recommended answer), and ends with PR-sized slices that each carry their own check. Read-only, no code. Use when the user says 기획, 계획 세워, 설계해 줘, plan this, grill me, or brings an idea, a feature with open product choices, or a task too big for one PR. Not for a task that already names the change and how to check it: that is gbase:work."
 allowed-tools: Read Glob Grep Bash Write Agent AskUserQuestion Skill
 ---
 

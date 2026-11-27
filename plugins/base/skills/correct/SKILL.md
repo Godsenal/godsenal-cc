@@ -1,6 +1,6 @@
 ---
 name: correct
-description: "Finds the mistakes agents keep repeating in this repo and makes each one impossible: architecture first, then types, then a lint/CI check whose error names the fix, then a test, then a verify-skill journey the agent drives on the real app, with REVIEW.md text last. Proves each check fails on a real past mistake. With --session it runs as a retrospective on one coding session instead — where the agent searched too long, lacked information, or made a checkable mistake. Use when the same correction keeps coming back, after a session that was harder than it should have been (\"retro\", \"회고\"), or on /gbase:correct."
+description: "Makes a mistake agents keep repeating in this repo impossible, by structure, types, a lint or CI check, a test, or a verify journey before any REVIEW.md text, each proven to fail on a real past mistake; --session runs a retrospective on one session. Use when the same correction keeps coming back, after a session that was harder than it should have been ('retro', '회고'), or on /gbase:correct."
 allowed-tools: Bash Read Write Edit Glob Grep AskUserQuestion Agent
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: polish
-description: "Polishes the current diff in two behavior-preserving passes — a three-lens cleanup (AI cruft & dead code, reuse & duplication, clarity & efficiency) run by parallel sub-agents, then a structural pass that collapses needless helpers and abstractions — after a comment pass that audits every comment the diff added (pstack's no-comments) when it added any; on a medium- or high-risk change that pass may replace a workaround with its root-cause fix. Use after writing a non-trivial change, when a diff feels bloated, or when asked to polish / clean up / deslop / simplify. Also the polish step inside gbase:go and gbase:monitor. Unlike the built-in simplify, it is aggressive on reusing existing code but conservative on new abstractions, never auto-applies edits outside the diff, and reverts its own failed edits without touching the user's uncommitted work."
+description: "Polishes the current diff without changing behavior: deletes needless comments the diff added, then removes AI cruft, dead code, duplication, and needless abstractions, never editing outside it. Use after writing a non-trivial change, when a change feels bloated, or when asked to polish, clean up, deslop, or simplify; also a step of gbase:go and gbase:monitor."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent
 ---
 

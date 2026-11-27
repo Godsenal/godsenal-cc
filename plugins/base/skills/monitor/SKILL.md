@@ -1,6 +1,6 @@
 ---
 name: monitor
-description: "Watches a PR until it merges or closes — auto-fixes clear CI failures, applies clearly-requested review changes, resolves safe merge conflicts, replies on every review comment it handles (or only drafts it, by the user's environment file), surfaces testable app/preview links, and asks about anything ambiguous. On a PR that wasn't already reviewed it also runs one local adversarial self-review (gbase:review). With --merge, merges it once CI is green and nothing is outstanding; with --until-settled, stops once the current head's CI and review bots have concluded. Use when the user wants a PR babysat to merge; also the tail of gbase:go."
+description: "Watches a PR until it merges or closes: fixes clear CI failures and clearly requested review changes, resolves safe merge conflicts, replies on the comments it handles, asks about the rest; --merge merges once green, --until-settled stops when CI and review bots conclude. Use when the user wants a PR babysat to merge; also the tail of gbase:go."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Skill Agent Monitor
 ---
 

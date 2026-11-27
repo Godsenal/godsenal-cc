@@ -1,6 +1,6 @@
 ---
 name: go
-description: "Ships a finished change end to end — reviews and polishes it in parallel, applies verified review fixes, runs the project's fast checks, opens the PR via gbase:branch-pr, and watches it to merge via gbase:monitor. Use when the user says a change is done and wants it shipped ('다 됐어, PR 올려 줘'), or runs /gbase:go."
+description: "Ships a finished change end to end: reviews and polishes it in parallel, applies verified review fixes, runs the project's fast checks, opens the PR via gbase:branch-pr, and watches it to merge via gbase:monitor. Use when the user says a change is done and wants it shipped ('다 됐어, PR 올려 줘'), or runs /gbase:go."
 allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Agent Edit Write
 ---
 

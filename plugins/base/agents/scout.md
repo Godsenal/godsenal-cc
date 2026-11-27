@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Read-only gbase scout on Sonnet. Use PROACTIVELY when answering means reading more than a few files, or a log, CI output, diff, or transcript would flood the main thread — it sweeps them and returns the conclusion with path:line evidence, not the dump. Has no edit tools and is told to change nothing.
+description: "Read-only gbase scout on Sonnet. Use PROACTIVELY when answering means reading more than a few files, or a log, CI output, diff, or transcript would flood the main thread; returns the conclusion with path:line evidence and changes nothing."
 model: sonnet
 disallowedTools: Edit, Write, NotebookEdit
 ---

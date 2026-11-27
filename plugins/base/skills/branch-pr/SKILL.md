@@ -1,6 +1,6 @@
 ---
 name: branch-pr
-description: "Takes the current changes to an open pull request without step-by-step confirmation: unwraps pause commits, backs up the tree, picks the branch and groups logical commits by the repo's conventions, writes a PR body whose Review focus section says what a person must judge, pushes, and opens the PR. Use when the user asks to open a PR or to commit and push the current work as one, or runs /gbase:branch-pr; also the PR step of gbase:go."
+description: "Takes the current changes to an open pull request: branch, logical commits by the repo's conventions, a PR body whose Review focus says what a person must judge, push. Use when the user asks to open a PR or to commit and push the work as one, or runs /gbase:branch-pr; also the PR step of gbase:go."
 allowed-tools: Bash Read Glob Grep AskUserQuestion Skill Agent
 ---
 

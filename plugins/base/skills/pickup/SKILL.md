@@ -1,6 +1,6 @@
 ---
 name: pickup
-description: "Resumes or takes over in-flight work — from a gbase:pause wip commit, a prior Claude Code session's transcript, another agent's pushed branch, or an open PR — by reading the trail as authoritative instead of redoing it, naming the resume point, and verifying inherited claims on the real artifact before continuing. Use for 'pick up where we left off', 'continue the work on X', 'take over this branch', or 'what was I doing'."
+description: "Resumes or takes over in-flight work (a gbase:pause commit, an earlier session's transcript, another agent's branch, an open PR) from its trail, checking inherited claims first. Use for 'pick up where we left off', 'continue the work on X', 'take over this branch', or 'what was I doing'."
 allowed-tools: Bash Read Glob Grep Agent
 ---
 

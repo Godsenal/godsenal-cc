@@ -1,15 +1,6 @@
 ---
 name: jev
-description: >-
-  Puts TypeSafe's Jev (a System One decision model: Choice, Score, Noul, Box answers with
-  calibrated probabilities, about $0.04 per million input tokens, no text generation) into the
-  user's bots and apps where a cheap, typed judgment beats a regex, a keyword list, or an LLM
-  prompt that returns JSON — classification, routing, filtering, quality gates, dedupe,
-  self-checks, picking the best candidate or substring. Holds the bot-by-bot use-case map, the
-  `jev` CLI for shell and headless runs, the key and data rules, and how to wire one in. Use when
-  building or changing a bot or app step that classifies, routes, scores, filters, checks, or
-  picks; when asked about Jev, TypeSafe, or "where could Jev help"; or before adding an LLM call
-  whose output is one of a fixed set of answers.
+description: "Puts TypeSafe's Jev, a cheap typed decision model, into bots and apps where a typed judgment beats a regex, a keyword list, or an LLM prompt that returns JSON (classify, route, score, filter, pick). Use when building such a step, when asked about Jev or TypeSafe, or before adding an LLM call whose answer is one of a fixed set."
 ---
 
 # Jev (TypeSafe System One)

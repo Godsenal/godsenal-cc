@@ -1,13 +1,6 @@
 ---
 name: ego-profile
-description: >-
-  ego-browser에서 **다른 계정/프로필로** 작업해야 할 때 쓴다. task space는 기본 프로필로 열리므로
-  회사↔개인 계정이 갈린 서비스(PostHog, GitHub, Google, AWS 등)에서 "권한이 없다 / 조직이 안 보인다 /
-  프로젝트가 목록에 없다"가 나온다. 이때 로그아웃·재로그인으로 헤매지 말고 여기 적힌
-  `listProfiles()` + `newTaskSpace(name, profileId)` 를 쓴다. "다른 계정으로", "회사 계정 말고",
-  "프로필 바꿔서", "계정 전환" 같은 말이 나오거나, ego에서 예상과 다른 계정으로 붙었을 때 쓴다.
-  헤드리스 런(gbase-run, 봇)에서 task space를 만들거나 사람에게 넘길 때의 수명 규칙(이름에 run id,
-  끝날 때 닫기, 넘긴 space 번호를 `결정 필요:` 줄에)도 여기 있다.
+description: "ego-browser에서 다른 계정·프로필로 작업할 때(\"권한이 없다\", \"조직이 안 보인다\", \"다른 계정으로\", \"계정 전환\"), 헤드리스 런이 task space를 만들거나 사람에게 넘길 때 쓴다."
 ---
 
 # ego-browser 계정/프로필 전환

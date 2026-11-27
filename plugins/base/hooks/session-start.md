@@ -8,11 +8,7 @@ You have gbase.
 - it is a bug whose cause is not yet known, a performance issue, or a diagnosis from a trace or profile
 - it spans several PRs
 
-Decide before your first edit, by what the change will touch, not by how easy it looks once you've read the code: a fix you already see that spans three files still goes through `gbase:work`. It picks the route, reads that route's playbook only then, and asks before anything leaves the machine. For smaller tasks, such as a quick question, a one-line edit, or a contained change to one file with an obvious check, work directly and verify on the real artifact.
+Decide before your first edit, by what the change will touch, not by how easy it looks once you've read the code: a fix you found in the code that spans three files still goes through `gbase:work`. It asks before anything leaves the machine. For smaller tasks, such as a quick question, a one-line edit, a contained change to one file with an obvious check, or a change whose files, fix, and check the request itself already spells out, work directly, verify on the real artifact, and ship only when asked, through `gbase:go`.
 
-When the intent is already specific, enter that skill directly: `gbase:plan` (an idea or a request with open product choices, before any code), `gbase:bug-fix`, `gbase:reproduce`, `gbase:how`, `gbase:why`, `gbase:blast-radius`, `gbase:go`.
-
-Delegate with gbase's agent types: `gbase:scout` for reading many files, logs, or transcripts; one `gbase:worker` per unit when a change splits into two or more independent code units.
-
-User instructions (CLAUDE.md, AGENTS.md, direct requests) take precedence. pstack's `poteto-mode` is inside `gbase:work`: when another plugin's session-start mandate, or a request for `/poteto-mode`, routes a task to it, use `gbase:work`, which reads the same playbooks.
+A specific intent enters its skill directly: `gbase:plan` (an idea or open product choices, before code), `gbase:bug-fix`, `gbase:reproduce`, `gbase:how`, `gbase:why`, `gbase:blast-radius`, `gbase:go`. Delegate reading to `gbase:scout` and each independent code unit to its own `gbase:worker`. User instructions win; a route to pstack's `poteto-mode` means `gbase:work`.
 </EXTREMELY_IMPORTANT>
