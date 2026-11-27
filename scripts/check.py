@@ -243,6 +243,19 @@ CONTRACTS = [
         ("review-policy-adds-reviewers", ["plugins/base/evals/README.md"]),
         ("review-policy-off-reads-nothing", ["plugins/base/evals/README.md"]),
     ]),
+    Contract("strict-review",
+             "ship-prep names the repo's Claude Approvals policy files in one line and setup reads them with branch protection to draft the "
+             "review-policy lines; both only read them", [
+        ('f"approvals: {', [SHIP_PREP]),
+        ("APPROVALS_FILE", [SHIP_PREP]),
+        ("edits a policy file to get past it", [SHIP_PREP]),
+        (".claude/approvals.yml", [SETUP_ENV]),
+        ("required_linear_history", [SETUP_ENV]),
+        ("required_signatures", [SETUP_ENV]),
+        ("strict review:", [SETUP_ENV, "plugins/base/evals/README.md"]),
+        ("Never edit a policy file", [SETUP_ENV]),
+        ("setup-environment-strict-review", ["plugins/base/evals/README.md"]),
+    ]),
     Contract("held-replies",
              "where the user posts their own replies to reviewers, pr-status finds the setting, tells monitor to post nothing, and remembers "
              "which comments already have a draft; monitor drafts and asks, and the runner takes unpushed comment fixes for the run's end", [

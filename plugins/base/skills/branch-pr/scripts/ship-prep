@@ -52,6 +52,9 @@ SECRET_PATTERNS = (
     ("assigned secret", r"(?i)(api[_-]?key|secret|token|passwd|password|private[_-]?key|access[_-]?key)[A-Za-z0-9_]*[\"']?\s*[:=]\s*"
                         r"([\"'][A-Za-z0-9_\-/+=.]{12,}[\"']|(?=[A-Za-z0-9_\-/+=.]*\d)[A-Za-z0-9_\-/+=]{20,}(\s|$))"),
 )
+APPROVALS_FILE = r"(^|/)\.claude/approvals\.yml$"
+# the files Claude Approvals always gives a person under an enforce policy (the claude-approvals skill)
+APPROVALS_ALWAYS_PERSON = APPROVALS_FILE + r"|(^|/)\.claude/classifiers/|(^|/)\.git(attributes|modules)$|^REVIEW\.md$"
 CONVENTION_FILES = r"(^|/)contributing\.md$|pull_request_template|commitlint|^\.husky/"
 MAX_FOCUS_ITEMS = 5
 # what a passing run did not show: a required behavior check that couldn't reach its surface, a check that ran on another kind of input
@@ -308,6 +311,43 @@ def policy_line(policy):
     return f"review policy: {' · '.join(parts)} — from {policy['file']}; read {POLICY_DOC} before the first commit" if parts else None
 
 
+def approvals_line(base, entries):
+    """What the repo's Claude Approvals policy files ask of this PR, in one line; None when neither the base nor the change has one.
+    Read from the base: GitHub judges a PR by the default branch's copy, not the branch's."""
+    ref = base or "HEAD"
+    files = [f for f in git("ls-tree", "-r", "--name-only", ref, check=False).split("\n") if re.search(APPROVALS_FILE, f)]
+    # every path the change touches, a rename's old name too (moving a policy file away deletes it)
+    changed = {p for p in git("diff", "--name-only", "--no-renames", ref, check=False).split("\n") if p} | {p for c, p in entries if c == "??"}
+    special = {p for p in changed if re.search(APPROVALS_ALWAYS_PERSON, p)}
+    special |= {line.split("\t", 1)[1] for line in git("ls-files", "-s", check=False).split("\n")
+                if line[:6] in ("120000", "160000") and line.split("\t", 1)[-1] in changed}  # a symlink or a submodule
+    special |= {p for c, p in entries if c == "??" and os.path.islink(p)}  # one not yet in the index
+    if not files and not special & {p for p in changed if re.search(APPROVALS_FILE, p)}:
+        return None
+    enforcing, parts = [], []
+    for f in files:
+        shown = run(["git", "show", f"{ref}:{f}"], check=False)
+        if shown.returncode:
+            parts.append(f"{f} (can't be read)")
+            continue
+        observe = re.search(r"^mode\s*:\s*[\"']?observe", shown.stdout, re.M)
+        parts.append(f"{f} ({'observe' if observe else 'enforce'})")
+        if not observe:
+            enforcing.append(f[:-len(".claude/approvals.yml")])  # the folder it decides for: "" is the whole repo
+    if enforcing:
+        what = f"on {ref}, {', '.join(parts)} — the \"Claude Approvals\" check decides who approves this PR"
+    elif parts:
+        what = f"on {ref}, {', '.join(parts)} — observe only: the \"Claude Approvals\" check decides nothing yet"
+    else:
+        what = f"none on {ref}, and this change adds one — it decides nothing until it is merged"
+    note = ""
+    if special and any(p.startswith(d) for d in enforcing for p in changed):
+        note = f". This change touches {', '.join(sorted(special)[:5])}: it always takes a person, so say so in Review focus"
+    elif policy := sorted(p for p in special if re.search(APPROVALS_FILE + r"|(^|/)\.claude/classifiers/", p)):
+        note = f". This change touches {', '.join(policy[:5])}: it gets a real check that one person, its author too, can pass; say so in Review focus"
+    return f"approvals: {what}; it is the repo's, so no run edits a policy file to get past it{note}"
+
+
 def gpgsign():
     return git("config", "--type=bool", "--get", "commit.gpgsign", check=False) == "true"
 
@@ -543,6 +583,8 @@ def cmd_start(args):
             out.append(f"size: {size} lines, over the {policy['size']} of PR size — the draft's Review focus item 1 proposes the split (review-policy.md)")
             if policy["size_ask"]:
                 ask.append(f"ask: the change is {size} lines, over the {policy['size']} the environment file sets — split it, or open it as one PR?")
+    if line := approvals_line(base, entries):
+        out.append(line)
     if gpgsign():
         out.append("signing: commit.gpgsign is on — a commit that fails to sign stops the run; never `--no-gpg-sign`")
     out.append(compat_line(paths, base or "<base>"))
