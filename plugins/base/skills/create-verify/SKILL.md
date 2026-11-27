@@ -1,6 +1,6 @@
 ---
 name: create-verify
-description: "Generates a project-local verification skill (.claude/skills/verify-<app>/) that drives the real app the way a user does — web, mobile simulator, CLI, or API — and captures evidence, plus a per-feature map; proves the generated skill by running it once before handing it over. With --maintain, audits an existing verify skill against the current code and live app and fixes drift. Use when a repo has no scripted way to prove behavior, when gbase:setup offers it, or on /gbase:create-verify."
+description: "Generates a project-local verification skill (.claude/skills/verify-<app>/) that drives the real app (web, mobile simulator, CLI, or API) and proves it by running it once; --maintain fixes drift. Use when a repo has no scripted way to prove behavior, when gbase:setup offers it, or on /gbase:create-verify."
 allowed-tools: Bash Read Write Edit Glob Grep AskUserQuestion Agent
 ---
 

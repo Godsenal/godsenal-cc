@@ -218,7 +218,7 @@
       "hash": "5560728040edb99c",
       "out": "a1dc1ead2e9aa6b3",
       "used_by": [
-        "skills/work/SKILL.md"
+        "skills/work/references/principles.md"
       ]
     },
     "principle-foundational-thinking": {
@@ -236,7 +236,7 @@
       "hash": "802250bbc2f37414",
       "out": "eaac0e88753623ac",
       "used_by": [
-        "skills/work/SKILL.md"
+        "skills/work/references/principles.md"
       ]
     },
     "principle-make-operations-idempotent": {
@@ -297,7 +297,7 @@
       "hash": "d4899866bf51f2c6",
       "out": "4160d771f87ded0d",
       "used_by": [
-        "skills/work/SKILL.md"
+        "skills/work/references/principles.md"
       ]
     },
     "principle-test-behavior-not-implementation": {

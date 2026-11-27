@@ -1,6 +1,6 @@
 ---
 name: compat-check
-description: "Scans a code change for backward-compatibility hazards and gives the safe deploy/script order. Reads a diff (uncommitted, a commit range, or a PR) and flags migrations, API/contract changes, queue/event schema changes, new required env/secrets, feature flags, and backfill scripts — then emits an ordered rollout runbook. Read-only: never edits code, runs scripts, or deploys. Use when asked about deploy order, rollout order, backward/forward compatibility, '배포 순서', '하위호환', migration ordering, or 'is this change safe to ship in one deploy'. Auto-invoked by gbase:branch-pr / gbase:go to add a Rollout section to the PR body."
+description: "Scans a diff for backward-compatibility hazards (migrations, API or event schema changes, new env or secrets, feature flags, backfill scripts) and gives the safe deploy order as a rollout runbook. Read-only. Use when asked about deploy order, rollout order, backward compatibility, '배포 순서', '하위호환', migration ordering, or whether a change is safe to ship in one deploy; the PR step of gbase:go (gbase:branch-pr) runs it for the Rollout section."
 allowed-tools: Bash Read Glob Grep AskUserQuestion
 ---
 

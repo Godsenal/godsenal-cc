@@ -130,7 +130,7 @@
       ]
     },
     "review": {
-      "min_rank1": 1,
+      "min_rank1": 0,
       "negative": [
         "Clean up and simplify this bloated diff",
         "What could this change break elsewhere?"
@@ -142,11 +142,12 @@
         "Look over my diff for bugs before the PR",
         "코드 리뷰해 줘",
         "이 변경에 보안 문제나 회귀 없는지 봐 줘",
-        "Find defects in the current change"
+        "Find defects in the current change",
+        "Audit this patch for edge cases I missed"
       ],
       "test": [
         "Can you check my changes for problems before I open a PR?",
-        "Audit this patch for edge cases I missed",
+        "Look over this diff for anything that could break in production",
         "내 변경 사항 검토해 줘",
         "PR 올리기 전에 이 코드 문제 없는지 봐 줘"
       ]
@@ -189,13 +190,14 @@
         "Prepare this repository for the gbase ship loop",
         "새 회사 레포인데 gbase 세팅해 줘",
         "이 프로젝트 검증 명령을 CLAUDE.md에 기록해 줘",
-        "Add a formatter hook and a REVIEW.md for this repo"
+        "Add a formatter hook and a REVIEW.md for this repo",
+        "이 레포에 포매터 훅이랑 REVIEW.md 넣어 줘"
       ],
       "test": [
         "Configure this project so gbase knows its test and lint commands",
         "We just joined a new client, set up the environment file for their tracker",
         "gbase 처음 쓰는 레포야, 설정해 줘",
-        "이 레포에 포매터 훅이랑 REVIEW.md 넣어 줘"
+        "새 회사 레포인데 gbase 쓸 수 있게 검증 명령부터 잡아 줘"
       ]
     },
     "how": {
@@ -222,7 +224,7 @@
       ]
     },
     "why": {
-      "min_rank1": 3,
+      "min_rank1": 2,
       "negative": [
         "How does the cache layer work?",
         "Review this diff"
@@ -235,10 +237,11 @@
         "What's the reason behind this timeout value?",
         "이 코드 왜 이렇게 짰는지 알아봐 줘",
         "이 회귀가 언제부터 생겼는지 찾아 줘",
-        "Why was this defensive check added?"
+        "Why was this defensive check added?",
+        "What was the rationale for using a queue here instead of a direct call?"
       ],
       "test": [
-        "What was the rationale for using a queue here instead of a direct call?",
+        "Why is this retry limit set to five? Find where that came from",
         "Dig into the history of this weird workaround",
         "이 설정값 왜 이걸로 정했는지 찾아 줘",
         "이 코드가 원래 이렇게 된 이유가 뭐야?"
