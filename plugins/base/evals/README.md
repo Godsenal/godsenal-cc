@@ -36,6 +36,8 @@ Checks that `gbase:work` loads `gbase:design-taste` when it should and skips it 
 | `replies-draft-still-fixes-ci` | the draft repo again, with a check the diff broke and one review comment: the CI fix reaches `origin`, the comment's fix does not, and no reply is posted |
 | `replies-draft-not-redone` | a later watch of the first case, with the typo fix already committed and both drafts on record: no edit, no commit, no push, no post, and the report says the two drafts are waiting |
 
+`triggers.json` is not a case: `scripts/check.py` runs it on every PR with no model (`scripts/triggers.py`, TF-IDF over every invocable skill's name and description). Each skill lists prompts that should pick it first from the listing and prompts that should not; check.py prints `triggers: rank1 N/M (P%)` and fails when a skill falls below its `min_rank1` floor, a negative prompt picks it beyond `max_negative_hits`, or two descriptions are more alike than `max_similarity` (pairs in `similar_pairs` excepted). A floor records today's value for a skill that doesn't pass yet; fix the description to raise it, never reword the prompt. `python3 scripts/triggers.py` shows every miss with its top three, `--pairs` the most similar descriptions.
+
 Run from `plugins/base` (8 cases at 3 runs each took about 13 minutes and $6; there are 31 now):
 
 ```bash
