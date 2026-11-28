@@ -108,7 +108,7 @@
       ]
     },
     "reproduce": {
-      "min_rank1": 2,
+      "min_rank1": 3,
       "negative": [
         "Fix the null pointer in checkout",
         "Ship it"
@@ -201,7 +201,7 @@
       ]
     },
     "how": {
-      "min_rank1": 1,
+      "min_rank1": 2,
       "negative": [
         "Why did we pick Postgres over Mongo?",
         "Fix the failing build"

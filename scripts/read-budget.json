@@ -31,8 +31,8 @@
   },
   "extras": {
     "session-start": {
-      "note": "what every session pays before its first word, and again on every later turn as cache reads: the session hook's text and the listed name (gbase:<name>) and description of each gbase skill, agent, and command the model sees (a skill with disable-model-invocation is not listed). 15,836 characters in gbase 1.75.1, 6,036 tokens over no plugin at turn 1 (claude -p, isolated config); 1.77.0 cut it to 11,420 characters; 1.78.1 cut the hook to its routing sentences (10,708): with the hook empty the plugin still solved 9/9 bench tasks, so the accuracy comes from the listing, not the hook",
-      "limit": 10710,
+      "note": "what every session pays before its first word, and again on every later turn as cache reads: the session hook's text and the listed name (gbase:<name>) and description of each gbase skill, agent, and command the model sees (a skill with disable-model-invocation is not listed). 15,836 characters in gbase 1.75.1, 6,036 tokens over no plugin at turn 1 (claude -p, isolated config); 1.77.0 cut it to 11,420 characters; 1.78.1 cut the hook to its routing sentences (10,708): with the hook empty the plugin still solved 9/9 bench tasks, so the accuracy comes from the listing, not the hook; 1.78.2 cut the listing descriptions (9,546), keeping the sentences that say how to fix (root cause, reproduce first, every instance) and adding that output the issue didn't ask about stays as it was",
+      "limit": 9550,
       "reads": ["plugins/base/hooks/session-start.md"],
       "listing": ["plugins/base/skills/*/SKILL.md", "plugins/base/agents/*.md", "plugins/base/commands/*.md"]
     },

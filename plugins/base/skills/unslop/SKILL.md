@@ -1,6 +1,6 @@
 ---
 name: unslop
-description: "Rewrites prose to remove AI writing tells (filler, hedging, AI vocabulary, em dashes, chatbot phrases, Korean 번역투), keeping meaning and tone. Use on PR titles and bodies, commit messages, docs, release notes, or a reply before it goes out, or when asked to unslop or de-AI writing."
+description: "Rewrites prose to remove AI writing tells (filler, hedging, AI vocabulary, em dashes, Korean 번역투), keeping meaning and tone. Use on PR titles and bodies, commit messages, docs, or a reply before it goes out, or when asked to unslop."
 ---
 
 # Unslop

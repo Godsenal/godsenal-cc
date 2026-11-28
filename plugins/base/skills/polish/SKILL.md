@@ -1,6 +1,6 @@
 ---
 name: polish
-description: "Polishes the current diff without changing behavior: deletes needless comments the diff added, then removes AI cruft, dead code, duplication, and needless abstractions, never editing outside it. Use after writing a non-trivial change, when a change feels bloated, or when asked to polish, clean up, deslop, or simplify; also a step of gbase:go and gbase:monitor."
+description: "Polishes the current diff without changing behavior: deletes needless comments it added, then AI cruft, dead code, duplication, and needless abstractions, never editing outside it. Use after a non-trivial change or when asked to polish, clean up, deslop, or simplify; also a step of gbase:go and gbase:monitor."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent
 ---
 

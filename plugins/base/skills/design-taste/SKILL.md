@@ -1,6 +1,6 @@
 ---
 name: design-taste
-description: "Holds the user's own UI/UX taste from their design feedback: layout and defaults lead the action instead of a caption that explains the UI, interactive onboarding, no feature nobody asked for, empty and loading states that earn every element, platform details (safe area, keyboard, small screens) as part of done. Use whenever building, changing, or reviewing any app or web screen, component, onboarding, empty/loading/completion state, on-screen copy, icon, or App Store screenshot, and on design feedback ('화면 디자인 손봐 줘', 'UI 다듬어 줘', '온보딩 만들어 줘'). Not when the task hands over a design to match (a Figma file or link, a mockup the user picked)."
+description: "Holds the user's own UI/UX taste: layout and defaults lead the action instead of an explaining caption, interactive onboarding, no unrequested feature, empty and loading states that earn every element, platform details (safe area, keyboard, small screens) as part of done. Use when building, changing, or reviewing any app or web screen, component, onboarding, on-screen copy, icon, or App Store screenshot, and on design feedback ('화면 디자인 손봐 줘', 'UI 다듬어 줘'). Not when handed a design to match (a Figma file, a picked mockup)."
 ---
 
 # design-taste

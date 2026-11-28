@@ -1,6 +1,6 @@
 ---
 name: bug-fix
-description: "Fixes a bug at its root cause, not where it surfaced: reproduces it first (gbase:reproduce), rules out hypotheses with runtime evidence, fixes every instance of the pattern, and verifies on the surface it failed on. Use when asked to fix a bug or a crash, when a test or CI fails for a reason that isn't mechanical, or when something 'randomly' breaks or is flaky ('버그 고쳐 줘', '가끔 앱이 죽어', '테스트가 이유 없이 실패해'). Asked only why it broke, it stops at the diagnosis."
+description: "Fixes a bug at its root cause, not where it surfaced: reproduces it first (gbase:reproduce), rules out hypotheses with runtime evidence, fixes every instance of the pattern, keeps every output and default the issue didn't ask to change as it was, and verifies on the surface it failed on. Use when asked to fix a bug or a crash, when a test or CI fails for a reason that isn't mechanical, or when something 'randomly' breaks or is flaky ('버그 고쳐 줘', '가끔 앱이 죽어', '테스트가 이유 없이 실패해'). Asked only why it broke, it stops at the diagnosis."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent Skill
 ---
 
@@ -25,7 +25,7 @@ A change that "might help" is a hypothesis, not a fix — it doesn't ship. When 
 1. **Reproduce through `gbase:reproduce`, before the first edit**, even when the bug looks obvious and a one-line `node -e` would show it: `Skill(skill: "gbase:reproduce", args: "<the bug>")`. Its report (the command, the failing lines quoted, the expected result, the input) is what step 5 re-runs and what the evidence file and the PR's Evidence carry; three eval runs that reproduced inline fixed the bug but left none of it. If it won't reproduce, tighten conditions or instrument until it fires; ask the user only with a specific reason the surface can't be reached.
 2. **Narrow the cause** by ruling hypotheses out with runtime evidence (the actual error, the actual state), until the answer is a wrong decision in the code, not a consequence of an earlier one. If the user only asked *why* it broke, stop here and report the diagnosis — don't change code unasked.
 3. **Is the triggering state legitimate?** If the system may be in that state, the code that broke on it is the root cause, and handling the state there is the fix. If the state should never exist, a check where it broke hides the bug — find what produced it. Guards, retries, swallowed errors, clamped values, raised timeouts, and discarded state are the usual ways to hide one.
-4. **Fix the pattern**, not the instance: find every place with the same fault and fix them together. A workaround that needs a paragraph-long comment means the code is wrong.
+4. **Fix the pattern**, not the instance: find every place with the same fault and fix them together. Every output, format, and default the report didn't ask to change stays as it was: two SWE-bench runs failed the hidden test by restyling or extending output the issue never mentioned. A workaround that needs a paragraph-long comment means the code is wrong.
 5. **Verify on the same surface.** The original reproduction now passes; inconclusive or a different surface is not a pass. Unit tests show branch behavior, not that the bug is gone.
 6. **Add the always-on signal** if the deciding fact took a deep dig — the cheap check or log line that would have shown it at first look.
 
