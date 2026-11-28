@@ -1,6 +1,6 @@
 ---
 name: correct
-description: "Makes a mistake agents keep repeating in this repo impossible, by structure, types, a lint or CI check, a test, or a verify journey before any REVIEW.md text, each proven to fail on a real past mistake; --session runs a retrospective on one session. Use when the same correction keeps coming back, after a session that was harder than it should have been ('retro', '회고'), or on /gbase:correct."
+description: "Makes a mistake agents keep repeating in this repo impossible (structure, types, a lint or CI check, a test) before any REVIEW.md text, each proven on a real past mistake; --session runs a retrospective. Use when the same correction keeps coming back or after a hard session ('retro', '회고')."
 allowed-tools: Bash Read Write Edit Glob Grep AskUserQuestion Agent
 ---
 

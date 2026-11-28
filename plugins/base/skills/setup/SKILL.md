@@ -1,6 +1,6 @@
 ---
 name: setup
-description: "Sets up gbase in a repo and the environment it belongs to: records the project's verify commands in CLAUDE.md or AGENTS.md after running each, seeds REVIEW.md, adds a formatter hook, offers a verification skill, and drafts the user's environment file (issue tracker and how a ticket is read, branch/commit/PR format, write-backs). Writes only after a preview. Use when starting gbase in a repo or at a new company or client, when gbase:go couldn't find the project's checks, when tasks come from tickets, or on /gbase:setup ('gbase 세팅해 줘', '이 레포 준비해 줘')."
+description: "Sets up gbase in a repo and its environment: records the project's verify commands in CLAUDE.md or AGENTS.md after running each, seeds REVIEW.md, adds a formatter hook, offers a verification skill, and drafts the user's environment file (issue tracker, how a ticket is read, branch/commit/PR format, write-backs). Writes after a preview. Use when starting gbase in a repo or at a new company or client, when gbase:go couldn't find the project's checks, or when tasks come from tickets ('gbase 세팅해 줘', '이 레포 준비해 줘')."
 allowed-tools: Bash Read Write Edit Glob Grep AskUserQuestion Skill
 ---
 

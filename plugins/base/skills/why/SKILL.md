@@ -1,6 +1,6 @@
 ---
 name: why
-description: "Investigates why code is the way it is (design rationale, a tradeoff, why one option was picked instead of another, a regression's origin, a magic number, defensive code) from git blame, PR history, and every connected evidence source, keeping what the record says apart from what is inferred. Use for 'why does X work this way', 'why did we pick Y', 'when and why did this start', or before changing code whose intent is unclear ('왜 이렇게 만들었어?', '이 값은 언제 왜 생겼어?'). For how it works, gbase:how."
+description: "Investigates why code is the way it is (a design rationale or tradeoff, a regression's origin, a magic number, defensive code) from git blame, PR history, and other evidence, keeping what the record says apart from inference. Use for 'why does X work this way', 'when and why did this start', or before changing code whose intent is unclear ('왜 이렇게 만들었어?', '이 값은 언제 왜 생겼어?'). For how it works, gbase:how."
 allowed-tools: Read Glob Grep Bash Agent
 ---
 

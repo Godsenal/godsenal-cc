@@ -1,6 +1,6 @@
 ---
 name: reproduce
-description: "Turns a bug report or an improvement request into an executable check that fails right now (a test, script, HTTP request, CLI run, verify journey, or a measurement of the requested criterion) and returns the command and its failing output. Never changes product code. Use before fixing or building, when a bug needs a reproduction or a request needs an acceptance check, or on /gbase:reproduce ('재현해 줘', '고치지 말고 실패하는 테스트만 먼저'). gbase:bug-fix starts with it."
+description: "Turns a bug report or an improvement request into an executable check that fails right now (a test, script, HTTP request, CLI run, verify journey, or a measurement of the requested criterion) and returns the command and its failing output. Never changes product code. Use before fixing or building, when a bug needs a reproduction or a request an acceptance check ('재현해 줘', '고치지 말고 실패하는 테스트만 먼저'). gbase:bug-fix starts with it."
 allowed-tools: Bash Read Write Glob Grep AskUserQuestion Skill
 ---
 

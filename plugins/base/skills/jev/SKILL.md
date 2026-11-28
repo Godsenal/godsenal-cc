@@ -1,6 +1,6 @@
 ---
 name: jev
-description: "Puts TypeSafe's Jev, a cheap typed decision model, into bots and apps where a typed judgment beats a regex, a keyword list, or an LLM prompt that returns JSON (classify, route, score, filter, pick). Use when building such a step, when asked about Jev or TypeSafe, or before adding an LLM call whose answer is one of a fixed set."
+description: "Puts TypeSafe's Jev, a cheap typed decision model, where a typed judgment beats a regex, a keyword list, or an LLM prompt that returns JSON (classify, route, score, filter, pick). Use when building such a step or asked about Jev or TypeSafe."
 ---
 
 # Jev (TypeSafe System One)

@@ -1,6 +1,6 @@
 ---
 name: work
-description: "The default way to carry out a task in gbase: picks one route and works it. Use before starting a feature, refactor, or fix that touches more than one file or changes a signature other files call, involves a design or architecture choice, is a bug of unknown cause, a slow app or other performance issue, or a diagnosis from a trace or profile, or spans several PRs ('여러 파일에 걸쳐 구현해 줘', '리팩터링해 줘', '느린 이유 진단해 줘'); also on /gbase:work <task>. Not for a quick question, a one-line edit, a contained change to one file, or a change whose files, fix, and check the request already spells out. A finished change continues into gbase:go, asked first unless the user asked to ship it."
+description: "The default way to carry out a task in gbase: picks one route and works it. Use before a feature, refactor, or fix that touches more than one file or changes a signature other files call, a design or architecture choice, a bug of unknown cause, a performance issue, a diagnosis from a trace or profile, or work that spans several PRs ('여러 파일에 걸쳐 구현해 줘', '리팩터링해 줘', '느린 이유 진단해 줘'). Not for a quick question, a one-line edit, a contained one-file change, or a change the request already spells out. A finished change continues into gbase:go, asked first unless the user asked to ship it."
 allowed-tools: Bash Read Edit Write Glob Grep AskUserQuestion Agent Skill
 ---
 

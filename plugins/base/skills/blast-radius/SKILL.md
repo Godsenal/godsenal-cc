@@ -1,6 +1,6 @@
 ---
 name: blast-radius
-description: "Finds what a change could break somewhere else before it ships — beyond the diff, where grep stops — and proves the one fact it's safe because of by running real code instead of writing it up. Use for 'blast radius of X', 'what could this break', '이거 뭐 깨질 수 있어', or a small diff you don't trust yet."
+description: "Finds what a change could break elsewhere, beyond the diff where grep stops, and proves the one fact it's safe because of by running real code. Use for 'blast radius of X', 'what could this break', '이거 뭐 깨질 수 있어', or a small diff you don't trust yet."
 allowed-tools: Bash Read Write Glob Grep Agent
 ---
 
